@@ -20,22 +20,29 @@ trust-anchor fix (expected_public_key pinning), detached co-signatures (surface-
 hardened untrusted-intake `intake.safe_open` (external rels / macros / altChunk +
 entry/collision caps), and redundant media carriers. See docs/redteam-audit.md v0.4-v0.5.
 
+## Shipped in v0.6
+MCE `AlternateContent`/`Choice`/`Fallback` channel (`src/channels/mce.py`), ODT sibling
+profile using `META-INF/manifest.xml` directly (`src/odt.py`), Verifiable Secret Sharing
+(VSS) integrity tags (`src/shamir.py`), Argon2id memory-hard KDF (`src/crypto.py`),
+cryptographic transparency log (`src/transparency.py`), CI workflow (`.github/workflows/ci.yml`),
+and linker-scrubbed sandbox execution. See `docs/redteam-audit.md` v0.6.
+
 ## Format
 - [ ] Whole-package OPC digital signature alongside the manifest signature
       (Digital Signature Origin part), per standards-report §7.1.
-- [ ] MCE `AlternateContent`/`Choice`/`Fallback` channel exercising an Ignorable
+- [x] MCE `AlternateContent`/`Choice`/`Fallback` channel exercising an Ignorable
       extension namespace inside `document.xml` (standards-report §4.1).
-- [ ] ODT sibling profile using `META-INF/manifest.xml` directly (standards-report §2.2).
+- [x] ODT sibling profile using `META-INF/manifest.xml` directly (standards-report §2.2).
 
 ## Hardening
 - [ ] Steganalysis self-check via the steganographer `analyze` command.
-- [ ] Argon2id KDF option alongside PBKDF2 for password sealing.
+- [x] Argon2id KDF option alongside PBKDF2 for password sealing.
 
 ## Interop
 - [ ] Validate produced documents against Office-o-tron and the ODF Toolkit
       validator in CI (standards-report §11.6).
-- [ ] Headless LibreOffice convert-to-pdf smoke test to confirm openability.
+- [x] Headless LibreOffice convert-to-pdf smoke test to confirm openability.
 
 ## Packaging
-- [ ] CI workflow (uv + pytest + coverage gate + ruff). Optional steganographer job.
+- [x] CI workflow (uv + pytest + coverage gate + ruff). Optional steganographer job.
 - [ ] Publish flow (tag → Zenodo DOI) if the repo goes public.

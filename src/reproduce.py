@@ -68,9 +68,23 @@ def toolchain_fingerprint() -> dict:
 
 
 def _scrubbed_env() -> dict:
-    """A minimal environment: no host credentials, just enough PATH to find python."""
+    """A minimal environment: no host credentials, just enough PATH to find python,
+    with dangerous linker/loader preloads explicitly stripped.
+    """
     path = os.pathsep.join(["/usr/bin", "/bin", "/usr/local/bin", "/opt/homebrew/bin"])
-    return {"PATH": path, "LC_ALL": "C", "LANG": "C", "PYTHONHASHSEED": "0", "HOME": "/nonexistent"}
+    return {
+        "PATH": path,
+        "LC_ALL": "C",
+        "LANG": "C",
+        "PYTHONHASHSEED": "0",
+        "HOME": "/nonexistent",
+        # Explicit anti-injection guards against host environment inheritance
+        "LD_PRELOAD": "",
+        "LD_LIBRARY_PATH": "",
+        "DYLD_INSERT_LIBRARIES": "",
+        "DYLD_LIBRARY_PATH": "",
+        "DYLD_FALLBACK_LIBRARY_PATH": "",
+    }
 
 
 def _sandbox_wrap(argv: list[str], project_dir: Path) -> list[str]:

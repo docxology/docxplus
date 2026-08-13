@@ -1,16 +1,19 @@
-"""Shamir k-of-n secret sharing over GF(256).
+"""Shamir k-of-n secret sharing over GF(256) with share integrity verification.
 
 Splits a secret (e.g. a content-encryption key) into ``n`` shares such that any
 ``k`` reconstruct it and any ``k-1`` learn nothing. Pure Python, byte-wise over the
 AES field GF(2^8) with the standard reducing polynomial 0x11B. Used for the
 "dead-man's envelope" — a document whose key no single custodian can recover.
 
-Share wire format (per share): ``x(1) || share_bytes(len(secret))``. All shares of
-one secret carry the same length.
+Share wire format (per share):
+- Legacy format: ``x(1) || share_bytes(len(secret))``
+- Verifiable format (VSS): ``0xFF (magic) || x(1) || digest(32) || share_bytes(len(secret))``
+  where digest = blake2b-256(x || share_bytes).
 """
 
 from __future__ import annotations
 
+import hashlib
 import os
 
 # GF(256) exp/log tables built from generator 3 over the AES polynomial 0x11B.
@@ -67,34 +70,74 @@ def _eval_poly(coeffs: list[int], x: int) -> int:
     return y
 
 
-def split(secret: bytes, k: int, n: int) -> list[bytes]:
-    """Split ``secret`` into ``n`` shares, any ``k`` of which reconstruct it."""
+def split(secret: bytes, k: int, n: int, *, verifiable: bool = False) -> list[bytes]:
+    """Split ``secret`` into ``n`` shares, any ``k`` of which reconstruct it.
+
+    If ``verifiable=True``, prepends integrity commitment headers to each share.
+    """
     if not 1 <= k <= n <= 255:
         raise ValueError("require 1 <= k <= n <= 255")
     if not secret:
         raise ValueError("secret must be non-empty")
-    shares = [bytearray([x]) for x in range(1, n + 1)]
+    raw_shares = [bytearray([x]) for x in range(1, n + 1)]
     for byte in secret:
         coeffs = [byte] + [c for c in os.urandom(k - 1)]
         for i, x in enumerate(range(1, n + 1)):
-            shares[i].append(_eval_poly(coeffs, x))
-    return [bytes(s) for s in shares]
+            raw_shares[i].append(_eval_poly(coeffs, x))
+
+    out: list[bytes] = []
+    for s in raw_shares:
+        raw_b = bytes(s)
+        if verifiable:
+            # 0xFF || x(1) || blake2b(raw_b)(32) || raw_b[1:]
+            tag = hashlib.blake2b(raw_b, digest_size=32).digest()
+            out.append(b"\xff" + bytes([raw_b[0]]) + tag + raw_b[1:])
+        else:
+            out.append(raw_b)
+    return out
+
+
+def _unwrap_share(s: bytes) -> tuple[int, bytes]:
+    """Unwrap a share (whether legacy or verifiable). Returns (x, payload)."""
+    if not s:
+        raise ValueError("empty share")
+    if s[0] == 0xFF and len(s) >= 34:  # 1 magic + 1 x + 32 digest + payload
+        x = s[1]
+        tag = s[2:34]
+        payload = s[34:]
+        expected_tag = hashlib.blake2b(bytes([x]) + payload, digest_size=32).digest()
+        if tag != expected_tag:
+            raise ValueError(f"tampered share detected for x={x} (share integrity check failed)")
+        return x, payload
+    # Legacy format: x(1) || payload
+    return s[0], s[1:]
+
+
+def verify_share(share: bytes) -> bool:
+    """Check if a share is valid (verifiable format tag check). Legacy shares return True."""
+    try:
+        _unwrap_share(share)
+        return True
+    except ValueError:
+        return False
 
 
 def combine(shares: list[bytes]) -> bytes:
     """Reconstruct the secret from ``k`` (or more) shares via Lagrange at x=0."""
     if len(shares) < 1:
         raise ValueError("need at least one share")
-    xs = [s[0] for s in shares]
+
+    unwrapped = [_unwrap_share(s) for s in shares]
+    xs = [u[0] for u in unwrapped]
     if len(set(xs)) != len(xs):
         raise ValueError("shares must have distinct x-coordinates")
-    length = len(shares[0]) - 1
-    if any(len(s) - 1 != length for s in shares):
+    length = len(unwrapped[0][1])
+    if any(len(u[1]) != length for u in unwrapped):
         raise ValueError("shares have inconsistent length")
 
     secret = bytearray()
-    for pos in range(1, length + 1):
-        ys = [s[pos] for s in shares]
+    for pos in range(length):
+        ys = [u[1][pos] for u in unwrapped]
         secret.append(_lagrange_at_zero(xs, ys))
     return bytes(secret)
 

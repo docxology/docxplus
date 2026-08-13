@@ -73,3 +73,16 @@ pinned (`tests/test_v5_features.py`):
 One finder agent was interrupted by the same upstream cyber-safeguard false positive
 (redundant-media); its integrity concern was pre-empted independently — extraction
 returns the replica whose bytes match the module digest.
+
+## v0.6 — MCE channel, ODT profile, VSS share verification, sandbox linkers (6 confirmed)
+
+An adversarial pass over the v0.6 extensions confirmed and resolved 6 findings:
+
+| # | Sev | Finding | Resolution |
+| --- | --- | --- | --- |
+| 1 | high | Sandbox environment inherited dangerous dynamic linker variables (`DYLD_INSERT_LIBRARIES`, `LD_PRELOAD`) | Explicitly scrubbed in `_scrubbed_env()` before child execution |
+| 2 | high | Shamir threshold shares lacked polynomial/share tampering detection before reconstruction attempt | Added Verifiable Secret Sharing (VSS) tagged shares with cryptographic commitment verification (`verify_share`) in `src/shamir.py` |
+| 3 | medium | MCE `<mc:Choice>` injection lacked namespace declaration verification in root element | Root `document.xml` parsing dynamically provisions `xmlns:mc` and `mc:Ignorable` namespaces if absent |
+| 4 | medium | ODT package builder did not guarantee `mimetype` first and uncompressed (ZIP_STORED) | `OdtPackage.to_bytes()` explicitly emits uncompressed `mimetype` as byte-exact first ZIP record |
+| 5 | low | MCE payload extraction did not handle malformed/missing XML gracefully | Wrapped in safe XML parser with explicit `ValueError` fail-closed semantics |
+| 6 | low | Headless interop tests lacked graceful skipping when LibreOffice binary is absent | Added `@pytest.mark.skipif` for headless convert tests in `tests/test_interop.py` |

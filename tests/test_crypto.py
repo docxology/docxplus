@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from crypto import (
+    KDF_ARGON2ID,
     EncryptedPayload,
     decrypt,
     derive_key,
@@ -87,3 +90,38 @@ def test_sign_and_verify():
 
 def test_verify_never_raises_on_garbage():
     assert verify(b"data", b"not-a-signature", b"not-a-key") is False
+
+def test_argon2id_encryption_roundtrip():
+    plaintext = b"sensitive payload with memory-hard argon2id"
+    password = "correct_horse_battery_staple"
+
+    # Encrypt with argon2id
+    envelope = encrypt(plaintext, password, kdf="argon2id", aad=b"slot1")
+    parsed = EncryptedPayload.from_bytes(envelope)
+    assert parsed.kdf_id == KDF_ARGON2ID
+
+    # Decrypt with correct password
+    decrypted = decrypt(envelope, password, aad=b"slot1")
+    assert decrypted == plaintext
+
+    # Decrypt with wrong password fails
+    with pytest.raises(Exception):
+        decrypt(envelope, "wrong_password", aad=b"slot1")
+
+
+def test_argon2id_work_factor_caps():
+    # Construct malicious envelope with excessive memory_cost or time_cost
+    bad_params = (
+        (1024 * 1024 * 1024).to_bytes(4, "big")  # 1 TiB memory cost
+        + (3).to_bytes(2, "big")
+        + (4).to_bytes(2, "big")
+    )
+    env = EncryptedPayload(
+        kdf_id=KDF_ARGON2ID,
+        salt=os.urandom(16),
+        nonce=os.urandom(12),
+        params=bad_params,
+        ciphertext=b"dummy",
+    ).to_bytes()
+    with pytest.raises(ValueError, match="outside accepted range"):
+        decrypt(env, "pw")

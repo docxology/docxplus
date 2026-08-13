@@ -31,6 +31,7 @@ and then uses the standard's own extension points to carry more.
 | `package_part` | `intelligence/payloadN.dxp` | "a package may contain additional files" (§2.2) | bulk / encrypted blobs |
 | `metadata` | `docProps/custom.xml` property | custom document properties (§9) | short routing tags |
 | `stego_media` | LSBs of `word/media/imageN.png` | embedded image parts (§2.1) + LSB stego | payload hidden in a visible figure |
+| `mce` | `<mc:Choice>` in `word/document.xml` | MCE AlternateContent (§4.1) | payload in an ignorable extension namespace |
 
 Every module is described by a signed **manifest** (`intelligence/manifest.json`)
 — the authoritative list of what the package carries, playing the role ODF
@@ -54,6 +55,18 @@ The primitives scale on five orthogonal axes (see `docs/design-rationale.md`):
 `docs/cookbook.md` gives eight buildable document kinds (self-verifying dossier,
 dead-man's envelope, sealed referee packet, provenance ledger, …). The showcase
 `scripts/04_dossier.py` builds and verifies all of them in one file.
+
+## v0.6 — MCE channel, ODT profile, VSS share verification
+
+- **MCE AlternateContent Channel** — `mce` channel embeds payloads inside `<mc:Choice>`
+  under an ignorable extension namespace (`urn:docxplus:mce:1.0`) in `word/document.xml`.
+- **ODT Sibling Profile** — `src/odt.py` constructs conforming OASIS ODF 1.3/1.4 packages
+  (`mimetype` first/uncompressed, `META-INF/manifest.xml`, `content.xml`, `meta.xml`).
+- **Verifiable Secret Sharing (VSS)** — `src/shamir.py` supports tagged shares with
+  cryptographic commitment tags for immediate pre-reconstruction corruption detection.
+- **Hardened Sandbox Env** — Dynamic linker preloads (`DYLD_*`, `LD_*`) are explicitly
+  scrubbed prior to child reproduction execution.
+- **CI & Interop** — GitHub Actions workflow + headless LibreOffice conversion gates.
 
 ## v0.5 — co-signatures, hardened intake, resilient carriers
 

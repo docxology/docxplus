@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from channels.base import Channel, ChannelRecord
 from channels.custom_xml import CustomXmlChannel
+from channels.mce import MceChannel
 from channels.metadata import MetadataChannel
 from channels.package_part import PackagePartChannel
 from channels.stego_media import StegMediaChannel
@@ -13,6 +14,7 @@ _PURE_CHANNELS: dict[str, type] = {
     CustomXmlChannel.id: CustomXmlChannel,
     PackagePartChannel.id: PackagePartChannel,
     MetadataChannel.id: MetadataChannel,
+    MceChannel.id: MceChannel,
 }
 
 
@@ -42,6 +44,7 @@ __all__ = [
     "Channel",
     "ChannelRecord",
     "CustomXmlChannel",
+    "MceChannel",
     "MetadataChannel",
     "PackagePartChannel",
     "StegMediaChannel",

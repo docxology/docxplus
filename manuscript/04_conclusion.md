@@ -20,8 +20,9 @@ promised. Within those boundaries, DOCX+ raises the floor from "bytes anyone can
 read" to "digest-bound, signed, selectively-sealed, self-verifying modules that
 travel inside a document people already trust to open."
 
-Future work: whole-package OPC digital signatures a word processor recognises
-(alongside the manifest signature); an MCE `AlternateContent` channel exercising
-ignorable namespaces; an ODT sibling profile using `META-INF/manifest.xml` directly;
-and a transparency-log entry so a reproduction attestation is discoverable and
-timestamped.
+The v0.6 release brings full implementations of the MCE `AlternateContent` channel
+exercising ignorable namespaces, the ODT sibling profile using `META-INF/manifest.xml`
+directly, the Argon2id memory-hard KDF option, Verifiable Secret Sharing (VSS), and
+the cryptographic transparency log for reproduction attestations. Future work includes
+whole-package OPC XML-DSig digital signatures recognized natively by legacy word processor
+sign-line viewers.

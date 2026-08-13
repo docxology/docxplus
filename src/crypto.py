@@ -33,6 +33,7 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import (
     X25519PublicKey,
 )
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 
@@ -44,6 +45,16 @@ KEY_BYTES = 32  # AES-256
 # KDF identifiers recorded in the DXE1 envelope so a reader derives the same key.
 KDF_PBKDF2 = 1
 KDF_SCRYPT = 2
+KDF_ARGON2ID = 3
+
+# Argon2id parameters (RFC 9106 recommended first-line memory-hard KDF):
+# memory_cost=65536 (64 MiB), time_cost=3, parallelism=4
+ARGON2_MEMORY_COST_KIB = 65536
+ARGON2_TIME_COST = 3
+ARGON2_PARALLELISM = 4
+MAX_ARGON2_MEMORY_COST_KIB = 256 * 1024  # 256 MiB ceiling
+MAX_ARGON2_TIME_COST = 10
+MAX_ARGON2_PARALLELISM = 16
 # PBKDF2 compat mode raised to OWASP-2023 guidance for HMAC-SHA512.
 PBKDF2_ITERATIONS = 600_000
 # Scrypt is the default: memory-hard (~32 MiB), resisting the GPU/ASIC attacks
@@ -100,6 +111,26 @@ def _derive(password: str, salt: bytes, kdf_id: int, params: bytes) -> bytes:
         if not 1 <= n_log2 <= MAX_SCRYPT_N_LOG2 or r < 1 or p < 1:
             raise ValueError("scrypt parameters outside accepted range")
         return Scrypt(salt=salt, length=KEY_BYTES, n=1 << n_log2, r=r, p=p).derive(pw)
+    if kdf_id == KDF_ARGON2ID:
+        # params layout: memory_cost_kib(4) || time_cost(2) || parallelism(2)
+        if len(params) < 8:
+            raise ValueError("malformed Argon2id parameters")
+        memory_cost = int.from_bytes(params[0:4], "big")
+        time_cost = int.from_bytes(params[4:6], "big")
+        parallelism = int.from_bytes(params[6:8], "big")
+        if not (1024 <= memory_cost <= MAX_ARGON2_MEMORY_COST_KIB):
+            raise ValueError("Argon2id memory_cost outside accepted range")
+        if not (1 <= time_cost <= MAX_ARGON2_TIME_COST):
+            raise ValueError("Argon2id time_cost outside accepted range")
+        if not (1 <= parallelism <= MAX_ARGON2_PARALLELISM):
+            raise ValueError("Argon2id parallelism outside accepted range")
+        return Argon2id(
+            salt=salt,
+            length=KEY_BYTES,
+            iterations=time_cost,
+            lanes=parallelism,
+            memory_cost=memory_cost,
+        ).derive(pw)
     raise ValueError(f"unknown KDF id: {kdf_id}")
 
 
@@ -133,19 +164,33 @@ class EncryptedPayload:
         if blob[:4] != b"DXE1":
             raise ValueError("not a DOCX+ encrypted payload (bad magic)")
         i = 4
-        kdf_id = blob[i]; i += 1
-        slen = blob[i]; i += 1
-        salt = blob[i : i + slen]; i += slen
-        nlen = blob[i]; i += 1
-        nonce = blob[i : i + nlen]; i += nlen
-        plen = blob[i]; i += 1
-        params = blob[i : i + plen]; i += plen
+        kdf_id = blob[i]
+        i += 1
+        slen = blob[i]
+        i += 1
+        salt = blob[i : i + slen]
+        i += slen
+        nlen = blob[i]
+        i += 1
+        nonce = blob[i : i + nlen]
+        i += nlen
+        plen = blob[i]
+        i += 1
+        params = blob[i : i + plen]
+        i += plen
         return cls(kdf_id=kdf_id, salt=salt, nonce=nonce, params=params, ciphertext=blob[i:])
 
 
 def _kdf_params(kdf: str) -> tuple[int, bytes]:
     if kdf == "scrypt":
         return KDF_SCRYPT, bytes([SCRYPT_N_LOG2, SCRYPT_R, SCRYPT_P])
+    if kdf == "argon2id" or kdf == "argon2":
+        params = (
+            ARGON2_MEMORY_COST_KIB.to_bytes(4, "big")
+            + ARGON2_TIME_COST.to_bytes(2, "big")
+            + ARGON2_PARALLELISM.to_bytes(2, "big")
+        )
+        return KDF_ARGON2ID, params
     if kdf == "pbkdf2":
         return KDF_PBKDF2, PBKDF2_ITERATIONS.to_bytes(4, "big")
     raise ValueError(f"unknown KDF: {kdf}")

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 import shamir
+from shamir import combine, split, verify_share
 
 
 def test_split_combine_roundtrip():
@@ -60,3 +61,29 @@ def test_gf_multiply_inverse_property():
     for a in range(1, 256):
         inv = shamir._gdiv(1, a)
         assert shamir._gmul(a, inv) == 1
+
+
+def test_verifiable_shares_roundtrip():
+    secret = b"cryptographic_key_32_bytes_len!!"
+    shares = split(secret, 3, 5, verifiable=True)
+    assert len(shares) == 5
+    for s in shares:
+        assert verify_share(s) is True
+
+    # Reconstruct from subset
+    recovered = combine([shares[0], shares[2], shares[4]])
+    assert recovered == secret
+
+
+def test_verifiable_share_tamper_detection():
+    secret = b"top_secret_data"
+    shares = split(secret, 2, 3, verifiable=True)
+
+    # Tamper with share 1 payload byte
+    tampered = bytearray(shares[0])
+    tampered[-1] ^= 0x01
+    tampered_b = bytes(tampered)
+
+    assert verify_share(tampered_b) is False
+    with pytest.raises(ValueError, match="tampered share detected"):
+        combine([tampered_b, shares[1]])

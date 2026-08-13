@@ -1,7 +1,7 @@
 paper:
   title: "DOCX+: An Intelligent Document Container over Standards-Conforming OOXML"
   subtitle: "Carrying signed, encrypted, modular, self-verifying payloads inside an ordinary .docx"
-  version: "0.5.0"
+  version: "0.6.0"
   date: "2026-08-13"
 
 authors:

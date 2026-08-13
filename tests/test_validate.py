@@ -10,6 +10,7 @@ from crypto import generate_signing_key
 from opc import OpcPackage, Relationship, read_package
 from validate import assert_valid, validate_bytes, validate_package
 from wordml import new_base_document
+from channels.mce import MceChannel
 
 
 def test_plain_document_validates_with_note():
@@ -99,3 +100,18 @@ def test_unreadable_bytes_report():
     report = validate_bytes(b"not a zip at all")
     assert not report.ok
     assert report.opc_errors
+
+
+def test_validate_mce_channel():
+    pkg = new_base_document(["Testing validation of MCE."])
+    chan = MceChannel()
+    rec = chan.embed(pkg, b"sample mce data", slot="slot_mce")
+
+    # Check valid MCE channel in package
+    from manifest import Manifest, write_manifest
+    m = Manifest()
+    m.add(rec)
+    write_manifest(pkg, m)
+
+    report = validate_package(pkg)
+    assert report.ok is True

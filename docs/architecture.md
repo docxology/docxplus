@@ -11,8 +11,8 @@ is self-contained.
 Modules form a strict dependency stack — lower layers never import higher ones:
 
 ```
-L0  foundations   opc • crypto • shamir • lsb • provenance • project_paths
-L1  vocabulary    wordml • payloads • steg_bridge • channels/(base,*)
+L0  foundations   opc • crypto • shamir • lsb • provenance • project_paths • transparency
+L1  vocabulary    wordml • odt • payloads • steg_bridge • channels/(base,*)
 L2  format        manifest • reproduce • intake
 L3  composition   container  (DocxPlusBuilder / DocxPlusReader)
 L4  validation    validate
@@ -27,10 +27,12 @@ L6  orchestration docxplus_cli.py • scripts/*
 | `shamir.py` | L0 | k-of-n secret sharing over GF(256) |
 | `lsb.py` | L0 | pure-Python LSB stego codec |
 | `provenance.py` | L0 | Merkle root + inclusion proofs over the module set |
+| `transparency.py` | L0 | cryptographic transparency log & hash-chain for attestations |
 | `wordml.py` | L1 | minimal conforming WordprocessingML surface document |
+| `odt.py` | L1 | conforming OASIS OpenDocument Text (ODT) sibling container |
 | `payloads.py` | L1 | typed payload registry: bytes/text/json/project/docxplus |
 | `steg_bridge.py` | L1 | subprocess bridge to the steganographer Rust CLI |
-| `channels/` | L1 | side-channels (base protocol + custom_xml, package_part, metadata, stego_media) |
+| `channels/` | L1 | side-channels (base protocol + custom_xml, package_part, metadata, stego_media, mce) |
 | `manifest.py` | L2 | signed intelligence manifest (Merkle + surface-digest bound body; co-signatures) |
 | `reproduce.py` | L2 | reproduction attestation + opt-in hermetic sandbox (the only execution path) |
 | `intake.py` | L2 | hardened untrusted-input threat scan (no execution) |

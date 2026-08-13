@@ -88,6 +88,11 @@ document can visibly display. Two backends, recorded in `location.backend`:
 * `steganographer` — the docxology/steganographer Rust CLI generic-packet channel,
   adding BLAKE3 hashing, Ed25519 signing, and optional Reed-Solomon ECC.
 
+### 3.5 `mce` (Markup Compatibility and Extensibility)
+Payload is embedded inside `<mc:Choice Requires="dxm">` under the `urn:docxplus:mce:1.0`
+ignorable extension namespace within `word/document.xml`, with standard empty `<mc:Fallback>`
+elements. Unaware consumers discard the Choice branch and render the Fallback without error.
+
 ## 4. Encryption
 
 When a module is password-sealed, the plaintext is wrapped in a self-describing
@@ -252,3 +257,12 @@ rejected as vacuous. Authors seal attestations over the *packed* content (a clea
 extraction), so the attested digest matches what a reader reproduces. Honest limit:
 a match proves the pipeline ran as stated on a matching toolchain — never that the
 science is sound.
+
+## 13. Sibling profiles & Verifiable Secret Sharing (v0.6)
+
+* **OpenDocument Text (ODT) Profile**: Compliant with OASIS OpenDocument v1.3/v1.4 Part 2.
+  Packages store `mimetype` uncompressed as the first ZIP entry, followed by
+  `META-INF/manifest.xml` index records, `content.xml`, `meta.xml`, and payload entries.
+* **Verifiable Secret Sharing (VSS)**: Shamir shares support an optional integrity header
+  (`0xFF || x(1) || digest(32) || payload`) enabling polynomial/share validation prior
+  to interpolation.

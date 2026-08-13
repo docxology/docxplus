@@ -34,6 +34,8 @@ contract:
 - **stego_media** — LSB steganography in `word/media/imageN.png`, an image the
   document can visibly display, so the intelligence hides inside content a reader
   sees.
+- **mce** — Markup Compatibility and Extensibility (`<mc:AlternateContent>`) Choice
+  branch in `word/document.xml` under an ignorable namespace with fallback markup.
 
 The manifest, not the byte layout, is authoritative; a reader never guesses part
 names. This mirrors the role ODF assigns to its mandatory `META-INF/manifest.xml`.
