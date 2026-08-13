@@ -122,13 +122,31 @@ model, grounded in the USENIX 2022/2023 analyses the standards report cites.
 ## Layout
 
 ```
-src/            tested domain modules (opc, wordml, crypto, lsb, channels/, manifest, container, validate)
-scripts/        thin orchestrators (preflight, build example, roundtrip report, capacity figure)
+src/            tested domain modules — opc, wordml, crypto, shamir, payloads,
+                provenance, reproduce, intake, lsb, steg_bridge, channels/,
+                manifest, container, validate
+scripts/        thin orchestrators (preflight, example build, roundtrip report,
+                capacity figure, dossier showcase, living manuscript)
 tests/          real round-trip tests, no mocks (≥90% coverage gate)
 manuscript/     the DOCX+ format write-up
-docs/           format spec, architecture, security model, standards report
-docxplus_cli.py the `docxplus` command-line tool
+docs/           spec, architecture, design rationale, security model, cookbook,
+                reproduction design, redteam audit, standards report
+docxplus_cli.py the `docxplus` CLI (build, inspect, graph, extract, unpack-project,
+                validate, scan, verify-reproduction, reproduce, keygen)
 ```
+
+## Documentation
+
+| Doc | What it covers |
+| --- | --- |
+| [`docs/format-spec.md`](docs/format-spec.md) | the container specification (implementable alone) |
+| [`docs/architecture.md`](docs/architecture.md) | module map and data flow |
+| [`docs/design-rationale.md`](docs/design-rationale.md) | first-principles decomposition |
+| [`docs/security-model.md`](docs/security-model.md) | defenses, non-defenses, residual risks |
+| [`docs/reproduction-design.md`](docs/reproduction-design.md) | the four-lens reproduction design |
+| [`docs/cookbook.md`](docs/cookbook.md) | eight buildable document kinds |
+| [`docs/redteam-audit.md`](docs/redteam-audit.md) | every adversarial finding and its fix |
+| [`docs/standards-report.md`](docs/standards-report.md) | the standards-first OOXML/ODT research report |
 
 ## License
 

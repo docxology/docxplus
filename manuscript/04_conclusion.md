@@ -9,15 +9,19 @@ know nothing of DOCX+ open the document normally, and DOCX+ readers recover exac
 what the manifest attests.
 
 The honest boundaries are stated plainly (`docs/security-model.md`): concealment is
-offered only by the media channel and is defeatable by steganalysis; a manifest
-signature attests the manifest, not the visible prose; and parsing untrusted `.docx`
-input still demands the intake hardening the standards report catalogues. Within
-those boundaries, DOCX+ raises the floor from "bytes anyone can read" to
-"digest-bound, signed, selectively-encrypted modules that travel inside a document
-people already trust to open."
+offered only by the media channel and is defeatable by steganalysis; a signature
+now binds the visible text (via `surface_digest`) but proves *authenticity* only
+against a caller-pinned key, since the embedded signer key is self-asserted; a
+reproduction match attests process, not that the science is sound; and deniability
+holds against inspection, not proof. The untrusted-input hardening the standards
+report catalogues — inflate-ratio and entry caps, traversal and collision guards,
+DTD disabling, and a sandboxed, opt-in reproduce path — is implemented, not
+promised. Within those boundaries, DOCX+ raises the floor from "bytes anyone can
+read" to "digest-bound, signed, selectively-sealed, self-verifying modules that
+travel inside a document people already trust to open."
 
-Future work: whole-package OPC digital signatures alongside the manifest signature;
-an ODT sibling profile using `META-INF/manifest.xml` directly; an MCE
-`AlternateContent` channel exercising ignorable namespaces; and an intake pipeline
-wrapping the reader with the report's untrusted-input checklist (inflate-ratio caps,
-Zip-Slip canonicalisation, DTD disabling, sandboxed parsing).
+Future work: whole-package OPC digital signatures a word processor recognises
+(alongside the manifest signature); an MCE `AlternateContent` channel exercising
+ignorable namespaces; an ODT sibling profile using `META-INF/manifest.xml` directly;
+and a transparency-log entry so a reproduction attestation is discoverable and
+timestamped.

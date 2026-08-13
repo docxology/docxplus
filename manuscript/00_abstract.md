@@ -7,19 +7,27 @@ and permissive. We exploit exactly those documented affordances to define **DOCX
 a profile of Office Open XML WordprocessingML in which a single file is
 simultaneously (a) a conforming `.docx` that opens as an ordinary document in Word,
 LibreOffice, and Google Docs, and (b) a carrier of a modular *intelligence layer*:
-typed payload modules bound by an Ed25519-signed manifest, with optional
-AES-256-GCM payload encryption whose key derivation follows the MS-OFFCRYPTO agile
-lineage. Encryption is applied per payload rather than to the whole package, so the
-surface document remains openable — a property whole-package OOXML encryption
-sacrifices.
+typed payload modules bound by a signed manifest. Sealing is applied per payload
+rather than to the whole package, so the surface document remains openable — a
+property whole-package OOXML encryption sacrifices — with lineages spanning
+memory-hard password encryption (Scrypt + AES-256-GCM), X25519 multi-recipient
+sealing, Shamir k-of-n threshold, and plausible-deniability decoys.
 
-Four channels are implemented and tested: custom XML parts, additional package
-parts, custom document properties, and least-significant-bit steganography in an
-embedded image the document visibly displays. The media channel offers a
-zero-setup pure-Python LSB backend and a premium backend bridging the
-`docxology/steganographer` Rust CLI, which BLAKE3-hashes and Ed25519-signs each
-embedded packet. The reference implementation is deterministic, dependency-light,
-and validated by real round-trip tests with no mocks and a 90% coverage gate; the
-steganographer bridge is exercised end-to-end against the built binary. Every
-structural decision traces to primary standards text collected in an accompanying
-standards-first research report.
+Payloads are typed (`bytes`, `text`, `json`, a whole reproducible `project`, or a
+nested DOCX+), so a document can carry the software that produced it. Provenance is
+a signed Merkle root over the module set plus a digest of the visible text, with
+inclusion proofs and detached co-signatures; authenticity requires a caller-pinned
+key. A `project` module can carry a signed **reproduction attestation**: a reader
+verifies it cryptographically without executing anything, or opts in to re-run the
+attested command in a hermetic sandbox and confirm the outputs. A hardened intake
+path scans untrusted `.docx` for external references, macros, and foreign-content
+imports without executing them.
+
+Four channels are implemented and tested — custom XML parts, additional package
+parts, custom document properties, and redundancy-capable least-significant-bit
+steganography in a visibly displayed image (a zero-setup pure-Python backend and a
+premium `docxology/steganographer` Rust backend). The reference implementation is
+deterministic, dependency-light, and validated by real round-trip tests with no
+mocks under a 90% coverage gate, hardened across five versions by adversarial review
+with independent verification. Every structural decision traces to primary standards
+text collected in an accompanying standards-first research report.
