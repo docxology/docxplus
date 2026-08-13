@@ -20,6 +20,8 @@ includes `src`): `import opc`, `import container`, `import channels`.
 | `intake.py` | hardened untrusted-input scan (external rels / macros / altChunk); no execution |
 | `validate.py` | OPC + intelligence conformance |
 | `project_paths.py` | output directory resolution |
+| `reference_docs.py` | the one canonical example document, defined once |
+| `manuscript_vars.py` | derive every doc value from live constants (no hard-coding) + token renderer |
 
 Extending: a new **payload type** registers in `payloads.py`; a new **sealing mode**
 adds a branch in `container._place` / `DocxPlusReader._unseal` plus a `sealing.mode`

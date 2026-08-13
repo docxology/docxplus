@@ -10,7 +10,7 @@ LibreOffice, and Google Docs, and (b) a carrier of a modular *intelligence layer
 typed payload modules bound by a signed manifest. Sealing is applied per payload
 rather than to the whole package, so the surface document remains openable — a
 property whole-package OOXML encryption sacrifices — with lineages spanning
-memory-hard password encryption (Scrypt + AES-256-GCM), X25519 multi-recipient
+memory-hard password encryption (Scrypt + AES-{{KEY_BITS}}-GCM), X25519 multi-recipient
 sealing, Shamir k-of-n threshold, and plausible-deniability decoys.
 
 Payloads are typed (`bytes`, `text`, `json`, a whole reproducible `project`, or a
@@ -23,11 +23,11 @@ attested command in a hermetic sandbox and confirm the outputs. A hardened intak
 path scans untrusted `.docx` for external references, macros, and foreign-content
 imports without executing them.
 
-Four channels are implemented and tested — custom XML parts, additional package
+{{CHANNEL_COUNT}} channels are implemented and tested — custom XML parts, additional package
 parts, custom document properties, and redundancy-capable least-significant-bit
 steganography in a visibly displayed image (a zero-setup pure-Python backend and a
 premium `docxology/steganographer` Rust backend). The reference implementation is
 deterministic, dependency-light, and validated by real round-trip tests with no
-mocks under a 90% coverage gate, hardened across five versions by adversarial review
+mocks under a {{COVERAGE_GATE}}% coverage gate, hardened across five versions by adversarial review
 with independent verification. Every structural decision traces to primary standards
 text collected in an accompanying standards-first research report.

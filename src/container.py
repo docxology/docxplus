@@ -27,6 +27,10 @@ from manifest import Manifest, read_manifest, write_manifest
 from opc import OpcPackage, read_package
 from wordml import new_base_document
 
+#: The sealing lineages a module can use (decoy is recorded as ``password`` so it is
+#: indistinguishable). Single source of truth for docs/manuscript generation.
+SEALING_LINEAGES = ("plain", "password", "recipients", "threshold")
+
 
 class ContainerError(RuntimeError):
     """Raised for container-level composition or extraction errors."""

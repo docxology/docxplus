@@ -17,6 +17,7 @@ fi
 run_tests()   { "${PY}" -m pytest --cov=src --cov-report=term-missing -q; }
 run_build()   { "${PY}" scripts/01_build_example.py; "${PY}" scripts/02_roundtrip_report.py; }
 run_figure()  { "${PY}" scripts/03_capacity_figure.py; }
+run_manuscript_vars() { "${PY}" scripts/z_generate_manuscript_variables.py && "${PY}" scripts/render_manuscript.py; }
 run_dossier() { "${PY}" scripts/04_dossier.py; }
 run_manuscript() { "${PY}" scripts/05_living_manuscript.py; }
 run_preflight() { "${PY}" scripts/00_preflight.py; }
@@ -25,6 +26,7 @@ case "${1:-all}" in
   test)   run_tests ;;
   build)  run_build ;;
   figure) run_figure ;;
+  manuscript-render) run_manuscript_vars ;;
   dossier) run_dossier ;;
   manuscript) run_manuscript ;;
   preflight) run_preflight ;;

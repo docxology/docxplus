@@ -13,9 +13,9 @@ the minimal conforming WordprocessingML surface document.
 
 ## 2.2 Cryptography
 
-`crypto.py` seals payloads with AES-256-GCM under a key from a self-describing,
+`crypto.py` seals payloads with AES-{{KEY_BITS}}-GCM under a key from a self-describing,
 KDF-tagged `DXE1` envelope. The default KDF is memory-hard **Scrypt**; PBKDF2-HMAC-
-SHA512 (600 000 iterations) remains available for compatibility, and readers cap
+SHA512 ({{PBKDF2_ITERATIONS}} iterations) remains available for compatibility, and readers cap
 attacker-supplied work factors so a hostile envelope cannot become a denial-of-
 service. The module slot is bound as AEAD additional data, and the manifest digest
 covers the stored ciphertext (never a plaintext digest, which would be an offline
