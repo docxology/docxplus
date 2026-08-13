@@ -55,6 +55,18 @@ The primitives scale on five orthogonal axes (see `docs/design-rationale.md`):
 dead-man's envelope, sealed referee packet, provenance ledger, …). The showcase
 `scripts/04_dossier.py` builds and verifies all of them in one file.
 
+## v0.5 — co-signatures, hardened intake, resilient carriers
+
+- **Detached co-signatures** — `add_cosigner(key)` lets multiple parties sign one
+  document (author AND institution); `verify_cosigners([keys])` enforces a policy.
+- **Hardened intake** — `intake.safe_open(bytes, policy)` opens untrusted `.docx`
+  under caps and returns a threat report (external relationships, macros, `altChunk`
+  imports) without executing anything; a strict policy refuses dirty input.
+  CLI: `docxplus scan file.docx [--strict]`.
+- **Redundant media carriers** — `redundancy=N` replicates a stego payload across N
+  figures; the document survives losing all but one, and extraction returns the
+  replica whose bytes match the module digest.
+
 ## v0.4 — the reproduction attestation (execution as evidence)
 
 Designed through four lenses (FirstPrinciples, Council, Science, RedTeam;

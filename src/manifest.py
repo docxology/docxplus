@@ -34,6 +34,8 @@ class Manifest:
     public_key: str = ""  # hex Ed25519 public key, if signed
     signature: str = ""  # hex Ed25519 signature over canonical_body()
     surface_digest: str = ""  # digest of word/document.xml, so the signature binds visible text
+    #: Detached co-signatures over the same canonical body: [{public_key, value}, ...].
+    cosignatures: list[dict] = field(default_factory=list)
 
     def add(self, record: ChannelRecord) -> None:
         if any(r.slot == record.slot for r in self.records):
@@ -77,6 +79,7 @@ class Manifest:
                 "public_key": self.public_key,
                 "value": self.signature,
             },
+            "cosignatures": [dict(c) for c in self.cosignatures],
         }
         return json.dumps(doc, indent=2, sort_keys=True).encode("utf-8")
 
@@ -90,7 +93,25 @@ class Manifest:
             public_key=sig.get("public_key", ""),
             signature=sig.get("value", ""),
             surface_digest=doc.get("surface_digest", ""),
+            cosignatures=[dict(c) for c in doc.get("cosignatures", [])],
         )
+
+    def verify_cosignatures(self) -> dict[str, bool]:
+        """Verify every detached co-signature over the canonical body → {hex_key: ok}.
+
+        Co-signatures are independent attestations by additional parties over the
+        same signed content. A verifier checks for the *expected* signer keys; a
+        stranger adding their own valid co-signature does not help them.
+        """
+        body = self.canonical_body()
+        out: dict[str, bool] = {}
+        for c in self.cosignatures:
+            key, value = c.get("public_key", ""), c.get("value", "")
+            try:
+                out[key] = _verify(body, bytes.fromhex(value), bytes.fromhex(key))
+            except ValueError:
+                out[key] = False
+        return out
 
     def is_signed(self) -> bool:
         return bool(self.signature and self.public_key)

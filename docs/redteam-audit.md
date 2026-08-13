@@ -53,3 +53,23 @@ reproduction attestation and sandbox. Confirmed findings and their resolution:
 One verifier agent was interrupted by an upstream cyber-safeguard false positive; the
 other three dimensions verified fully. Every fix above is pinned by a test in
 `tests/test_reproduce.py` or `tests/test_hardening.py`.
+
+## v0.5 — co-signatures, intake, redundant media (8 confirmed)
+
+A RedTeam pass over the three new features confirmed 8 findings, all closed and
+pinned (`tests/test_v5_features.py`):
+
+| # | Sev | Finding | Resolution |
+| --- | --- | --- | --- |
+| 1 | high | Co-signatures/`cosigners()` did not bind the visible text — editing the paragraphs left co-signers "valid" | `cosigners()` is surface-bound (returns `[]` on a surface-digest mismatch); the primary-signer branch of `verify_cosigners` now gates on `verify_provenance()` |
+| 2 | high | `altChunk` intake detection scanned only `.xml`-named parts — evadable by a non-`.xml` main-document part | detection is by resolved content type and XML parsing, not filename extension |
+| 3 | medium | `altChunk` substring match false-positived on benign prose | matches the `altChunk` element in the WordprocessingML namespace via `defusedxml`, not a raw substring |
+| 4 | medium | Macro filename match was case-sensitive vs case-insensitive OPC part names | case-folded match + flag by the `vbaProject` relationship type |
+| 5 | medium | `read_package` materialized all entries with no count cap | `MAX_ENTRIES` enforced before any part is read |
+| 6 | medium | Duplicate guard missed path-normalization/case collisions (silent part overwrite) | rejects any entries that collapse to the same normalized+casefolded part name |
+| 7 | low | `verify_cosigners([])` passed vacuously | an empty expected-key policy is rejected |
+| 8 | low | External-relationship `TargetMode` matched case-sensitively | case-folded comparison |
+
+One finder agent was interrupted by the same upstream cyber-safeguard false positive
+(redundant-media); its integrity concern was pre-empted independently — extraction
+returns the replica whose bytes match the module digest.

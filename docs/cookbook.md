@@ -53,11 +53,15 @@ builder.sign(priv)                 # signs the Merkle root over all modules
 reader.verify_provenance()         # -> root matches, tip intact
 ```
 
-## 6. The Polyglot Carrier (redundant media) — *roadmap*
-A payload spread across several embedded figures so the document survives losing
-one image (crop, re-export). Survivability, not just concealment. Redundant/spread
-media carriers are a planned channel option (see `TODO.md`); today the media
-channel places one carrier per module.
+## 6. The Polyglot Carrier (redundant media)
+A payload replicated across several embedded figures so the document survives losing
+all but one (crop, re-export, a stripped figure). Extraction returns the first
+replica whose bytes match the module digest, so a corrupted-but-decodable carrier is
+skipped, not returned. Survivability, not just concealment.
+```python
+builder.add_module("fig", "stego_media", data, backend="python_lsb", redundancy=3)
+# lose any two of the three carriers; reader.extract("fig") still recovers the payload
+```
 
 ## 7. The Time-Capsule with a Decoy (plausible deniability)
 Two payloads share one module: a benign cover story under one password, the real

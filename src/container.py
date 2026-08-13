@@ -57,6 +57,7 @@ class DocxPlusBuilder:
     _pending: list[_Pending] = field(default_factory=list)
     _private_key: bytes | None = None
     _public_key: bytes | None = None
+    _cosigners: list[bytes] = field(default_factory=list)
     #: populated after :meth:`build`; ``{slot: [share_bytes, ...]}`` for threshold modules.
     threshold_shares: dict[str, list[bytes]] = field(default_factory=dict)
 
@@ -169,6 +170,11 @@ class DocxPlusBuilder:
         ).public_key().public_bytes_raw()
         return self
 
+    def add_cosigner(self, private_key: bytes) -> DocxPlusBuilder:
+        """Add a detached co-signature over the same body (e.g. author + institution)."""
+        self._cosigners.append(private_key)
+        return self
+
     # -- build -------------------------------------------------------------
     def build(self) -> bytes:
         pkg = self.base_package or new_base_document(
@@ -186,11 +192,18 @@ class DocxPlusBuilder:
         doc_part = pkg.parts.get("word/document.xml", b"")
         manifest.surface_digest = crypto.digest(doc_part)
 
+        body = manifest.canonical_body()
         if self._private_key is not None and self._public_key is not None:
             manifest.public_key = self._public_key.hex()
-            manifest.signature = crypto.sign(
-                manifest.canonical_body(), self._private_key
-            ).hex()
+            manifest.signature = crypto.sign(body, self._private_key).hex()
+
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+        for priv in self._cosigners:
+            pub = Ed25519PrivateKey.from_private_bytes(priv).public_key().public_bytes_raw()
+            manifest.cosignatures.append(
+                {"public_key": pub.hex(), "value": crypto.sign(body, priv).hex()}
+            )
 
         write_manifest(pkg, manifest)
         return pkg.to_bytes()
@@ -470,6 +483,35 @@ class DocxPlusReader:
             return False
         doc_part = self.package.parts.get("word/document.xml", b"")
         return crypto.digest(doc_part) == self.manifest.surface_digest
+
+    def _surface_matches(self) -> bool:
+        doc_part = self.package.parts.get("word/document.xml", b"")
+        return crypto.digest(doc_part) == self.manifest.surface_digest
+
+    def cosigners(self) -> list[str]:
+        """Hex public keys that have added a valid detached co-signature.
+
+        Surface-bound: returns ``[]`` when the visible document no longer matches the
+        signed surface digest, so a co-signature can never vouch for text its signer
+        did not sign (an edit to the paragraphs invalidates every co-signer here).
+        """
+        if not self._surface_matches():
+            return []
+        return [k for k, ok in self.manifest.verify_cosignatures().items() if ok]
+
+    def verify_cosigners(self, expected_public_keys: list[bytes]) -> bool:
+        """True when every expected key has a valid signature over *this* document
+        (co-signer or the primary signer). Use for 'signed by author AND institution'.
+
+        Binds the visible text (via ``cosigners()`` / ``verify_provenance``) and
+        rejects an empty policy, which would otherwise pass vacuously.
+        """
+        if not expected_public_keys:
+            raise ContainerError("verify_cosigners requires at least one expected key")
+        valid = set(self.cosigners())  # surface-bound
+        if self.verify_provenance():  # primary signature valid AND surface/merkle bound
+            valid.add(self.manifest.public_key)
+        return all(k.hex() in valid for k in expected_public_keys)
 
     def inclusion_proof(self, slot: str) -> dict:
         """A Merkle inclusion proof that ``slot`` belongs to this document's signed

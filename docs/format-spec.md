@@ -189,6 +189,35 @@ to the signed set without seeing the other modules — the capability that makes
 Merkle tree more than a re-hash of the signed list. Verify with
 `provenance.verify_inclusion(proof)`.
 
+**Detached co-signatures (v0.5).** `cosignatures: [{public_key, value}, ...]` in the
+manifest are independent Ed25519 signatures by additional parties over the *same*
+canonical body — "signed by author AND institution". `verify_cosigners([keys])`
+returns true only when every expected key has a valid signature (the primary signer
+counts when its signature validates). A stranger adding their own valid co-signature
+does not help them: verification checks for *expected* keys, and — per §11 — every
+verdict that means "authentic" requires the caller to pin the keys they trust.
+
+## 11. Authenticity requires a pinned key (v0.4)
+
+The manifest's signer public key is **self-asserted**: it travels inside the
+manifest. A valid signature proves only that whoever holds that key signed this
+content (integrity + a self-asserted signer) — an attacker can sign a fabricated
+document with their own key and it validates as *self-consistent*. `signature_status`,
+`verify_provenance`, and `verify_reproduction` therefore accept an
+`expected_public_key`; only when the signer matches it (constant-time) is the verdict
+`valid` / authentic. `signer()` exposes the key so a caller can decide out-of-band.
+
+## 12. Hardened intake (v0.5)
+
+`intake.safe_open(bytes, policy=...)` opens untrusted `.docx` bytes under caps and
+returns a threat report — **executing nothing**. `read_package` enforces the
+zip-bomb / duplicate-entry / size caps and defuses XML (DTDs off); `intake.scan`
+adds the package-level surface a defender triages: external (off-package)
+relationships, macro parts (`vbaProject.bin`, macro-enabled content types), and
+`altChunk` foreign-content imports, plus a part-count cap. Under a strict policy a
+non-clean report raises; otherwise the caller gets the report and (for a DOCX+) a
+reader. This operationalises the standards report's untrusted-input checklist.
+
 ## 10. Reproduction attestation (v0.4)
 
 A `project` module may carry a signed **reproduction attestation** so a reader can

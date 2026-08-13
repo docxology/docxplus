@@ -184,8 +184,24 @@ def read_package(data: bytes) -> OpcPackage:
     pkg = OpcPackage()
     with zipfile.ZipFile(io.BytesIO(data)) as zf:
         names = zf.namelist()
+        if len(names) > MAX_ENTRIES:
+            raise OpcError(f"package has too many entries ({len(names)} > {MAX_ENTRIES})")
         if len(names) != len(set(names)):
             raise OpcError("package contains duplicate ZIP entry names")
+        # OPC part names are equivalent under path normalization and case folding;
+        # two raw entries that collapse to the same part are a smuggling vector
+        # (a reader that takes the first entry sees different bytes than the scanner).
+        seen: dict[str, str] = {}
+        for name in names:
+            if name.endswith("/"):
+                continue
+            try:
+                key = _normalize_part_name(name).casefold()
+            except OpcError:
+                continue
+            if key in seen and seen[key] != name:
+                raise OpcError(f"colliding part names: {seen[key]!r} and {name!r}")
+            seen[key] = name
         if CONTENT_TYPES_PART not in names:
             raise OpcError("missing mandatory [Content_Types].xml")
         _guard_zip_bomb(zf.infolist(), len(data))
@@ -204,6 +220,7 @@ def read_package(data: bytes) -> OpcPackage:
 MAX_ENTRY_BYTES = 256 * 1024 * 1024        # per-part inflated size
 MAX_TOTAL_BYTES = 1024 * 1024 * 1024       # whole-package inflated size
 MAX_INFLATE_RATIO = 200                     # inflated/compressed per entry
+MAX_ENTRIES = 4096                          # pathological part-graph cap (checked pre-read)
 
 
 def _guard_zip_bomb(infos, compressed_len: int) -> None:

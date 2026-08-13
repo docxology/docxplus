@@ -53,6 +53,8 @@ def _cmd_build(args: argparse.Namespace) -> int:
 
     if args.signing_key:
         builder.sign(bytes.fromhex(Path(args.signing_key).read_text().strip()))
+    for keyfile in args.cosign or []:
+        builder.add_cosigner(bytes.fromhex(Path(keyfile).read_text().strip()))
 
     data = builder.build()
     Path(args.output).write_bytes(data)
@@ -145,6 +147,19 @@ def _cmd_validate(args: argparse.Namespace) -> int:
     return 0 if report.ok else 1
 
 
+def _cmd_scan(args: argparse.Namespace) -> int:
+    import intake
+
+    policy = intake.IntakePolicy(strict=args.strict)
+    try:
+        report, _reader = intake.safe_open(Path(args.docx).read_bytes(), policy=policy)
+    except intake.IntakeError as exc:
+        print(str(exc))
+        return 1
+    print(json.dumps(report.to_dict(), indent=2))
+    return 0 if report.ok else 1
+
+
 def _cmd_keygen(args: argparse.Namespace) -> int:
     if args.type == "x25519":
         priv, pub = crypto.generate_recipient_key()
@@ -176,6 +191,7 @@ def main(argv: list[str] | None = None) -> int:
         "--attest", action="store_true",
         help="run each project's .docxplus-reproduce.json recipe and seal the attestation",
     )
+    b.add_argument("--cosign", action="append", metavar="KEYFILE", help="hex Ed25519 co-signer key (repeatable)")
     b.set_defaults(func=_cmd_build)
 
     i = sub.add_parser("inspect", help="dump the manifest as JSON")
@@ -219,6 +235,11 @@ def main(argv: list[str] | None = None) -> int:
     v = sub.add_parser("validate", help="validate OPC + intelligence conformance")
     v.add_argument("docx")
     v.set_defaults(func=_cmd_validate)
+
+    sc = sub.add_parser("scan", help="hardened untrusted-intake threat scan (no execution)")
+    sc.add_argument("docx")
+    sc.add_argument("--strict", action="store_true", help="exit nonzero / refuse on any threat")
+    sc.set_defaults(func=_cmd_scan)
 
     k = sub.add_parser("keygen", help="generate a signing (ed25519) or recipient (x25519) key")
     k.add_argument("output")

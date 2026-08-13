@@ -17,7 +17,7 @@ def test_python_lsb_channel_roundtrip(sample_payload):
     record = ch.embed(pkg, sample_payload, slot="hidden")
     assert record.location["backend"] == "python_lsb"
     # The carrier is a real, valid image part in word/media/.
-    assert record.location["part"].startswith("word/media/image")
+    assert record.location["parts"][0].startswith("word/media/image")
     reparsed = read_package(pkg.to_bytes())
     assert ch.extract(reparsed, record) == sample_payload
 

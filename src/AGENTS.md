@@ -17,6 +17,7 @@ includes `src`): `import opc`, `import container`, `import channels`.
 | `channels/` | the modular side-channels (base protocol + implementations) |
 | `manifest.py` | signed intelligence manifest (Merkle-bound canonical body) |
 | `container.py` | DocxPlusBuilder / DocxPlusReader (typed payloads, sealing modes, nesting, projects) |
+| `intake.py` | hardened untrusted-input scan (external rels / macros / altChunk); no execution |
 | `validate.py` | OPC + intelligence conformance |
 | `project_paths.py` | output directory resolution |
 

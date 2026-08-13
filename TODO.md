@@ -14,20 +14,20 @@ no longer leak; signature binds the visible document text (`surface_digest`); Me
 inclusion proofs; zip/tar decompression-bomb + traversal + symlink + nesting caps;
 root-anchored reachability. 18 confirmed findings closed, each pinned by a test.
 
+## Shipped in v0.4-v0.5
+Reproduction attestation (verify_reproduction / opt-in sandboxed reproduce), the
+trust-anchor fix (expected_public_key pinning), detached co-signatures (surface-bound),
+hardened untrusted-intake `intake.safe_open` (external rels / macros / altChunk +
+entry/collision caps), and redundant media carriers. See docs/redteam-audit.md v0.4-v0.5.
+
 ## Format
 - [ ] Whole-package OPC digital signature alongside the manifest signature
       (Digital Signature Origin part), per standards-report §7.1.
 - [ ] MCE `AlternateContent`/`Choice`/`Fallback` channel exercising an Ignorable
       extension namespace inside `document.xml` (standards-report §4.1).
-- [ ] Detached co-signatures: multiple independent signers over one Merkle root.
-- [ ] Redundant/spread media carriers (ECC across N images) for the polyglot carrier.
 - [ ] ODT sibling profile using `META-INF/manifest.xml` directly (standards-report §2.2).
 
 ## Hardening
-- [ ] Untrusted-input intake wrapper around the reader: inflate-ratio cap,
-      per-entry size cap, Zip-Slip canonicalisation, DTD disabling, sandboxed parse
-      (standards-report §14.3). `defusedxml`, no-disk-extraction, and the project
-      unpack path-traversal guard are already in place.
 - [ ] Steganalysis self-check via the steganographer `analyze` command.
 - [ ] Argon2id KDF option alongside PBKDF2 for password sealing.
 
