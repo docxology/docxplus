@@ -25,3 +25,18 @@ baselines:
   - plain_document
 ablations:
   - single_channel
+
+# Reproduction attestation experiment (docs/reproduction-design.md, tests/test_reproduce.py).
+reproduction_experiment:
+  goal: "A reader can trust that a carried project reproduces its sealed outputs without trusting the author's word."
+  hypotheses:
+    - id: H1
+      claim: "Re-running the carried project's declared command in a clean sandbox yields the sealed output digest."
+    - id: H2
+      role: negative_control
+      claim: "A tampered source produces a different output digest — reproduction MUST fail."
+    - id: H3
+      claim: "Two independent clean reproductions of the untouched source yield the same digest."
+  deterministic_outputs: "seeded, timestamp-free files only; the exemplar attests a digest computed over its own source tree"
+  pass_criterion: "H1 and H3 hold and H2 fires; empty/absent outputs are rejected as vacuous"
+  exemplar: "projects/templates/template_code_project via scripts/05_living_manuscript.py"

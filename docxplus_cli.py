@@ -48,7 +48,8 @@ def _cmd_build(args: argparse.Namespace) -> int:
 
     for spec in args.project or []:
         slot, path = spec.split(":", 1)
-        builder.add_project(slot, path, **seal)
+        # A project ships its own .docxplus-reproduce.json when --attest is set.
+        builder.add_project(slot, path, reproduce=args.attest or None, **seal)
 
     if args.signing_key:
         builder.sign(bytes.fromhex(Path(args.signing_key).read_text().strip()))
@@ -110,8 +111,32 @@ def _cmd_unpack_project(args: argparse.Namespace) -> int:
     reader = DocxPlusReader.from_bytes(Path(args.docx).read_bytes())
     creds = {"password": args.password} if args.password else {}
     dest = reader.extract_project(args.slot, args.dest, **creds)
-    print(f"unpacked project to {dest}")
+    print(f"extracted project to {dest}")
     return 0
+
+
+def _cmd_verify_reproduction(args: argparse.Namespace) -> int:
+    reader = DocxPlusReader.from_bytes(Path(args.docx).read_bytes())
+    expected = bytes.fromhex(Path(args.expected_key).read_text().strip()) if args.expected_key else None
+    info = reader.verify_reproduction(args.slot, expected_public_key=expected)
+    if expected is None:
+        info["_warning"] = f"signer {reader.signer()[:16]}… is self-asserted; pass --expected-key to authenticate"
+    print(json.dumps(info, indent=2))
+    return 0 if info.get("attested") and info.get("verified") else 1
+
+
+def _cmd_reproduce(args: argparse.Namespace) -> int:
+    if not args.allow_execution:
+        sys.stderr.write(
+            "reproduce EXECUTES code carried by the document. Re-run with "
+            "--allow-execution, and only in a sandbox you trust.\n"
+        )
+        return 2
+    reader = DocxPlusReader.from_bytes(Path(args.docx).read_bytes())
+    creds = {"password": args.password} if args.password else {}
+    result = reader.reproduce(args.slot, args.dest, allow_execution=True, **creds)
+    print(json.dumps(result, indent=2))
+    return 0 if result["match"] else 1
 
 
 def _cmd_validate(args: argparse.Namespace) -> int:
@@ -147,6 +172,10 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--threshold", metavar="K:N", help="Shamir k-of-n seal")
     b.add_argument("--shares-dir", help="where to write threshold shares")
     b.add_argument("--signing-key", help="hex Ed25519 private key file")
+    b.add_argument(
+        "--attest", action="store_true",
+        help="run each project's .docxplus-reproduce.json recipe and seal the attestation",
+    )
     b.set_defaults(func=_cmd_build)
 
     i = sub.add_parser("inspect", help="dump the manifest as JSON")
@@ -172,6 +201,20 @@ def main(argv: list[str] | None = None) -> int:
     up.add_argument("dest")
     up.add_argument("--password")
     up.set_defaults(func=_cmd_unpack_project)
+
+    vr = sub.add_parser("verify-reproduction", help="cryptographically verify a repro attestation (no execution)")
+    vr.add_argument("docx")
+    vr.add_argument("slot")
+    vr.add_argument("--expected-key", help="hex Ed25519 public key file to pin the signer (authenticate)")
+    vr.set_defaults(func=_cmd_verify_reproduction)
+
+    rp = sub.add_parser("reproduce", help="OPT-IN: re-run a carried project's attested command in a sandbox")
+    rp.add_argument("docx")
+    rp.add_argument("slot")
+    rp.add_argument("dest")
+    rp.add_argument("--password")
+    rp.add_argument("--allow-execution", action="store_true", help="required; executes carried code")
+    rp.set_defaults(func=_cmd_reproduce)
 
     v = sub.add_parser("validate", help="validate OPC + intelligence conformance")
     v.add_argument("docx")

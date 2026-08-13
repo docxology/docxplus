@@ -30,3 +30,26 @@ Each fix is pinned by a regression test in `tests/test_hardening.py`, so a
 reintroduced defect fails the suite. The adversarial method — find, then
 independently reproduce before believing — is itself the deliverable: green tests
 are necessary, not sufficient, and every claim here traces to a reproduced defect.
+
+## v0.4 — reproduction/execution surface (11 confirmed)
+
+A second RedTeam pass (four dimensions + independent verification) attacked the new
+reproduction attestation and sandbox. Confirmed findings and their resolution:
+
+| # | Sev | Finding | Resolution |
+| --- | --- | --- | --- |
+| 1 | high | Sandbox denied only the network; the reproduce command could write anywhere the user can | macOS seatbelt / Linux `bwrap` now confine writes to the project + temp dirs; honest per-platform limits documented |
+| 2 | high | **No trust anchor** — a forger signs a fabricated document with their own key and it reads as "valid"/"authentic" | `verify_provenance`/`signature_status`/`verify_reproduction` take `expected_public_key` (constant-time); without it the verdict is "self-consistent, self-asserted signer", never "authentic". `signer()` exposes the key |
+| 3 | high | An attestation could bind a carried **input** (a source file) instead of a computed product | outputs are snapshotted before the run; a digested file unchanged by the run is rejected |
+| 4 | medium | Author-controlled timeout was uncapped (hang) | clamped to `MAX_REPRO_SECONDS`; stdin closed |
+| 5 | medium | Timeout reaped only the direct child; orphans survived | child runs in its own session; the whole process group is killed |
+| 6 | medium | Output `read_bytes()` pulled attacker-sized files into the parent | streamed in chunks with a per-file size ceiling; child `RLIMIT_FSIZE` set |
+| 7 | medium | `verify_reproduction` reported `signed:true` without binding the actual carried bytes | it now recomputes the stored payload digest and only reports `verified` when the signature holds AND the bytes are intact |
+| 8 | medium | Toolchain mismatch was not surfaced in the reproduce verdict | `reproduce()` returns an explicit `toolchain_match` |
+| 9 | medium | A literal declared output matching nothing was silently dropped | a non-wildcard output producing no file is now an error |
+| 10 | low | No confinement on non-POSIX platforms | documented explicitly; the caller must supply a jail |
+| 11 | low | `verify_reproduction` surfaced an unbound digest on unsigned docs | the digest/command are nested under `unverified_attestation` until `verified` |
+
+One verifier agent was interrupted by an upstream cyber-safeguard false positive; the
+other three dimensions verified fully. Every fix above is pinned by a test in
+`tests/test_reproduce.py` or `tests/test_hardening.py`.

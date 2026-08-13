@@ -188,3 +188,38 @@ Validation independently recomputes and checks the stored `merkle_root`.
 to the signed set without seeing the other modules — the capability that makes the
 Merkle tree more than a re-hash of the signed list. Verify with
 `provenance.verify_inclusion(proof)`.
+
+## 10. Reproduction attestation (v0.4)
+
+A `project` module may carry a signed **reproduction attestation** so a reader can
+trust that its outputs *follow from its code*, not merely that its bytes are
+authentic (`docs/reproduction-design.md`). The attestation is a record field:
+
+```json
+"reproduction": {
+  "command": ["python", "src/compute.py"],
+  "outputs": ["output/result.json"],
+  "timeout": 300,
+  "output_digest": "<blake2b over the produced outputs>",
+  "toolchain": {"python": "3.12.13", "implementation": "CPython", "platform": "…"}
+}
+```
+
+It is folded into the signed manifest body, so the signature binds
+`carried source → attested output`. Two trust paths, per the Council synthesis:
+
+- **`verify_reproduction(slot)`** — cryptographic, **executes nothing**. Confirms an
+  attestation exists and, on a signed document, that the signature binds it to
+  exactly this source. This is the default: the reader relies on the signer's run.
+- **`reproduce(slot, dest, allow_execution=True)`** — **opt-in, executes carried
+  code**. Extracts the project and re-runs the attested command in a best-effort
+  hermetic sandbox (scrubbed environment, resource caps, wall-clock timeout, network
+  denied via `sandbox-exec`/`unshare` where available, throwaway directory), then
+  compares output digests. Never reached without the explicit flag; never called on
+  any read/validate/verify path.
+
+An attestation with no declared outputs, or whose outputs are not produced, is
+rejected as vacuous. Authors seal attestations over the *packed* content (a clean
+extraction), so the attested digest matches what a reader reproduces. Honest limit:
+a match proves the pipeline ran as stated on a matching toolchain — never that the
+science is sound.

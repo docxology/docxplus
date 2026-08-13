@@ -43,6 +43,7 @@ class _Pending:
     threshold: tuple[int, int] | None
     decoy: tuple[object, str, object, str] | None  # (real, real_pw, decoy, decoy_pw)
     channel_kwargs: dict
+    reproduction: dict = None  # type: ignore[assignment]  # attestation for project modules
 
 
 @dataclass
@@ -91,11 +92,41 @@ class DocxPlusBuilder:
         return self
 
     def add_project(
-        self, slot: str, project_dir: str | Path, *, channel_id: str = "package_part", **seal
+        self,
+        slot: str,
+        project_dir: str | Path,
+        *,
+        channel_id: str = "package_part",
+        reproduce: object | bool | None = None,
+        **seal,
     ) -> DocxPlusBuilder:
-        """Pack an entire directory tree and carry it as a ``project`` module."""
-        blob = payloads.pack_project(Path(project_dir))
-        return self.add_module(slot, channel_id, blob, payload_type="project", **seal)
+        """Pack an entire directory tree and carry it as a ``project`` module.
+
+        ``reproduce`` optionally attests reproduction at build time (author side):
+        pass a ``reproduce.ReproSpec``, or ``True`` to load the project's own
+        ``.docxplus-reproduce.json`` recipe. The recipe is executed once now and its
+        signed attestation travels in the manifest. Nothing is executed on read.
+        """
+        project_dir = Path(project_dir)
+        blob = payloads.pack_project(project_dir)
+        self.add_module(slot, channel_id, blob, payload_type="project", **seal)
+        if reproduce is not None and reproduce is not False:
+            import tempfile
+
+            import reproduce as _repro
+
+            spec = _repro.load_recipe(project_dir) if reproduce is True else reproduce
+            if spec is None:
+                raise ContainerError(
+                    f"{slot!r}: reproduce=True but no {_repro.RECIPE_FILE} in the project"
+                )
+            # Attest over a clean extraction of the *packed* bytes, not the author's
+            # working tree, so the attested digest matches exactly what a reader
+            # reproduces (the packed subset — no .venv, output/, caches).
+            with tempfile.TemporaryDirectory() as td:
+                clean = payloads.unpack_project(blob, Path(td) / "proj")
+                self._pending[-1].reproduction = _repro.attest(clean, spec)
+        return self
 
     def add_nested(
         self, slot: str, inner_docx: bytes, *, channel_id: str = "package_part", **seal
@@ -208,6 +239,7 @@ class DocxPlusBuilder:
         record.payload_type = m.payload_type
         record.encrypted = sealing["mode"] != "plain"
         record.sealing = sealing
+        record.reproduction = m.reproduction or {}
         # record.digest/size come from the channel = digest/len of the STORED bytes,
         # so the manifest (and its signature) bind exactly what travels; plaintext
         # integrity is the AEAD tag's job, checked on decryption.
@@ -312,6 +344,68 @@ class DocxPlusReader:
     #: Guards against a maliciously deep matryoshka chain exhausting resources.
     MAX_NEST_DEPTH = 32
 
+    def verify_reproduction(self, slot: str, expected_public_key: bytes | None = None) -> dict:
+        """Cryptographically verify a project module's reproduction attestation —
+        **executing nothing**. Confirms an attestation exists, that the signature
+        binds it to exactly these carried bytes and the visible text, and (when
+        ``expected_public_key`` is given) that a trusted key signed it.
+
+        Returns ``{attested, signed, verified, attestation|unverified_attestation}``.
+        ``verified`` is the load-bearing field: an attested claim is trustworthy only
+        when ``verified`` is true. This is the default trust path — the reader relies
+        on the signer's attested run without executing anything.
+        """
+        record = self._record(slot)
+        att = record.reproduction
+        signed = self.verify_provenance(expected_public_key)
+        # Bind the attestation to the ACTUAL carried bytes: the signature covers
+        # record.digest, but the stored bytes could have been swapped post-signing —
+        # in which case the signature would already fail, but confirm it here so a
+        # "verified" verdict never rides on unread bytes.
+        stored_ok = crypto.digest(
+            channel_registry.get_channel(record.channel).extract(self.package, record)
+        ) == record.digest
+        verified = bool(signed and stored_ok)
+        if not att:
+            return {"attested": False, "signed": signed, "verified": verified}
+        result = {
+            "attested": True,
+            "signed": signed,
+            "verified": verified,  # signature valid (optionally to a trusted key) AND bytes intact
+        }
+        # Only surface the attested claim as bound when it is cryptographically
+        # verified; otherwise the digest/command are self-asserted and untrusted.
+        key = "attestation" if verified else "unverified_attestation"
+        result[key] = {
+            "output_digest": att.get("output_digest", ""),
+            "command": att.get("command", []),
+            "toolchain": att.get("toolchain", {}),
+        }
+        return result
+
+    def reproduce(self, slot: str, dest: str | Path, *, allow_execution: bool = False, **creds) -> dict:
+        """OPT-IN, EXECUTES CARRIED CODE. Recover the project and re-run its attested
+        command in a best-effort hermetic sandbox, comparing output digests.
+
+        This runs code authored by whoever built the document. Call it only with
+        ``allow_execution=True`` and only in an environment you are willing to run
+        untrusted code in (see docs/security-model.md). Never called on any read,
+        validate, or verify path.
+        """
+        if not allow_execution:
+            raise ContainerError(
+                "reproduce() executes carried code; pass allow_execution=True and run "
+                "only inside a sandbox you trust (see docs/security-model.md)"
+            )
+        record = self._record(slot)
+        att = record.reproduction
+        if not att:
+            raise ContainerError(f"module {slot!r} carries no reproduction attestation")
+        project_dir = self.extract_project(slot, dest, **creds)
+        import reproduce as _repro
+
+        return _repro.reproduce_and_compare(project_dir, att)
+
     def open_nested(self, slot: str, **creds) -> DocxPlusReader:
         """Recover a nested ``docxplus`` module and return a reader over it.
 
@@ -331,16 +425,48 @@ class DocxPlusReader:
     def merkle_root(self) -> str:
         return self.manifest.merkle_root()
 
-    def signature_status(self) -> str:
+    def signer(self) -> str:
+        """The hex Ed25519 public key that signed the manifest (``""`` if unsigned).
+
+        This key is *self-asserted* — it is carried inside the manifest. A valid
+        signature proves the manifest was signed by whoever holds this key, not that
+        the key belongs to anyone you trust. Pin it via ``expected_public_key``.
+        """
+        return self.manifest.public_key
+
+    def signature_status(self, expected_public_key: bytes | None = None) -> str:
+        """``unsigned`` / ``invalid`` / ``valid`` / ``untrusted-signer``.
+
+        Without ``expected_public_key``, ``valid`` means the signature is internally
+        consistent (integrity + a *self-asserted* signer) — NOT authenticity. Pass the
+        signer's known public key to get ``valid`` only when it matches (constant time),
+        else ``untrusted-signer``.
+        """
         if not self.manifest.is_signed():
             return "unsigned"
-        return "valid" if self.manifest.verify_signature() else "invalid"
+        if not self.manifest.verify_signature():
+            return "invalid"
+        if expected_public_key is not None and not _key_matches(
+            self.manifest.public_key, expected_public_key
+        ):
+            return "untrusted-signer"
+        return "valid"
 
-    def verify_provenance(self) -> bool:
-        """True when the manifest is signed, the signature validates (binding the
-        Merkle root over all modules *and* the visible document text), and the
-        surface document on disk matches the signed surface digest."""
+    def verify_provenance(self, expected_public_key: bytes | None = None) -> bool:
+        """True when the manifest signature validates (binding the Merkle root over
+        all modules *and* the visible document text) and the surface document matches
+        the signed digest.
+
+        Without ``expected_public_key`` this proves integrity + a *self-asserted*
+        signer — an attacker can sign a fabricated document with their own key and it
+        validates. Pass the signer's known public key to require it (constant-time),
+        turning "self-consistent" into "authentic". See docs/security-model.md.
+        """
         if not (self.manifest.is_signed() and self.manifest.verify_signature()):
+            return False
+        if expected_public_key is not None and not _key_matches(
+            self.manifest.public_key, expected_public_key
+        ):
             return False
         doc_part = self.package.parts.get("word/document.xml", b"")
         return crypto.digest(doc_part) == self.manifest.surface_digest
@@ -358,6 +484,16 @@ class DocxPlusReader:
             return self.manifest.slot(slot)
         except KeyError as exc:
             raise ContainerError(f"no such module: {slot}") from exc
+
+
+def _key_matches(manifest_key_hex: str, expected_public_key: bytes) -> bool:
+    """Constant-time comparison of the manifest's signer key to a trusted key."""
+    import hmac
+
+    try:
+        return hmac.compare_digest(bytes.fromhex(manifest_key_hex), expected_public_key)
+    except ValueError:
+        return False
 
 
 def _frame_seq(envelopes: list[bytes]) -> bytes:

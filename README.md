@@ -55,6 +55,25 @@ The primitives scale on five orthogonal axes (see `docs/design-rationale.md`):
 dead-man's envelope, sealed referee packet, provenance ledger, …). The showcase
 `scripts/04_dossier.py` builds and verifies all of them in one file.
 
+## v0.4 — the reproduction attestation (execution as evidence)
+
+Designed through four lenses (FirstPrinciples, Council, Science, RedTeam;
+`docs/reproduction-design.md`). A `project` module can carry a **signed
+reproduction attestation** binding its source to a deterministic output digest, so
+a reader can trust that its results *follow from its code*:
+
+- **`verify_reproduction(slot)`** — cryptographic, **executes nothing** (the default
+  trust path; the document is inert data).
+- **`reproduce(slot, dest, allow_execution=True)`** — opt-in, re-runs the attested
+  command in a best-effort hermetic sandbox (scrubbed env, resource caps, timeout,
+  network denied where the platform allows) and compares digests.
+
+`scripts/05_living_manuscript.py` carries the real `template_code_project`, attests
+it, verifies cryptographically, and reproduces it in the sandbox — the exemplar a
+document carries, reproduces, and proves. The Council's rule is enforced in code: a
+document never executes on open; only a deliberately-invoked verifier does, in a
+jail. A digest match attests process, not that the science is sound — stated plainly.
+
 ## v0.3 — RedTeam-hardened
 
 An adversarial review (`docs/redteam-audit.md`, run as a multi-agent workflow with

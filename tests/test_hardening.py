@@ -189,6 +189,48 @@ def test_signed_document_no_unsigned_warning():
     assert json.loads(read_package(data).parts["intelligence/manifest.json"])["surface_digest"]
 
 
+# -- trust anchor: a forged signature must not read as "authentic" ---------
+def test_forged_signature_is_not_authentic_without_pinned_key():
+    author_priv, author_pub = generate_signing_key()
+    attacker_priv, attacker_pub = generate_signing_key()
+
+    # An attacker fabricates a whole document and signs it with THEIR OWN key.
+    forged = (
+        DocxPlusBuilder(paragraphs=["Fabricated results by attacker."])
+        .add_module("claim", "custom_xml", b"fake")
+        .sign(attacker_priv)
+        .build()
+    )
+    reader = DocxPlusReader.from_bytes(forged)
+
+    # Without a pinned key it is only self-consistent — the signer is the forger.
+    assert reader.signature_status() == "valid"          # internal consistency only
+    assert reader.signer() == attacker_pub.hex()
+    # Pinned to the real author's key, the forgery is rejected.
+    assert reader.signature_status(expected_public_key=author_pub) == "untrusted-signer"
+    assert reader.verify_provenance(expected_public_key=author_pub) is False
+    # The attacker's own key of course matches itself (that is the point of pinning).
+    assert reader.verify_provenance(expected_public_key=attacker_pub) is True
+
+
+def test_verify_reproduction_marks_unsigned_attestation_unverified(tmp_path):
+    import json as _json
+
+    import reproduce
+    (tmp_path / "p" / "src").mkdir(parents=True)
+    (tmp_path / "p" / "src" / "c.py").write_text(
+        "import json,os;os.makedirs('output',exist_ok=True);json.dump({'x':1},open('output/r.json','w'))\n"
+    )
+    (tmp_path / "p" / reproduce.RECIPE_FILE).write_text(
+        _json.dumps({"command": [__import__("sys").executable, "src/c.py"], "outputs": ["output/r.json"]})
+    )
+    data = DocxPlusBuilder().add_project("s", tmp_path / "p", reproduce=True).build()  # unsigned
+    info = DocxPlusReader.from_bytes(data).verify_reproduction("s")
+    assert info["attested"] and not info["signed"] and not info["verified"]
+    # The digest/command are surfaced under the UNVERIFIED key, not as a bound claim.
+    assert "unverified_attestation" in info and "attestation" not in info
+
+
 # -- OPC zip-bomb intake caps ----------------------------------------------
 def test_opc_zip_bomb_guard_rejects_high_ratio():
     import zipfile

@@ -7,10 +7,11 @@ includes `src`): `import opc`, `import container`, `import channels`.
 | --- | --- |
 | `opc.py` | OPC package model + deterministic ZIP (parts, content types, relationships) |
 | `wordml.py` | minimal conforming WordprocessingML surface document |
-| `crypto.py` | PBKDF2-SHA512 KDF, AES-256-GCM, X25519 multi-recipient sealing, BLAKE2b digest, Ed25519 sign/verify |
+| `crypto.py` | Scrypt (default) + PBKDF2 KDF, AES-256-GCM, X25519 multi-recipient sealing, BLAKE2b digest, Ed25519 sign/verify |
 | `shamir.py` | Shamir k-of-n secret sharing over GF(256) (threshold sealing) |
 | `payloads.py` | typed payload registry: bytes/text/json/project/docxplus |
-| `provenance.py` | Merkle root over the module set (tamper-evident binding) |
+| `provenance.py` | Merkle root + inclusion proofs over the module set |
+| `reproduce.py` | reproduction attestation + opt-in hermetic sandbox runner (the ONLY code-execution path) |
 | `lsb.py` | pure-Python LSB stego codec (Pillow) |
 | `steg_bridge.py` | subprocess bridge to the steganographer Rust CLI |
 | `channels/` | the modular side-channels (base protocol + implementations) |

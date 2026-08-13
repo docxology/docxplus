@@ -12,7 +12,8 @@ an integrator must handle.
 | Payload confidentiality | AES-256-GCM over the payload; key from memory-hard **Scrypt** (default; PBKDF2-HMAC-SHA512 available), work factors capped on read | MS-OFFCRYPTO *agile* lineage (report §7.1); OWASP-2023 |
 | Payload integrity | GCM auth tag for plaintext; the manifest digest binds the **stored (ciphertext) bytes** and is checked before decryption | avoids the offline plaintext-confirmation oracle a plaintext digest would give |
 | Context binding | the module **slot** is AAD in every AEAD operation | a ciphertext cannot be spliced into another slot |
-| Manifest + surface authenticity | Ed25519 signature over the canonical body, which binds the Merkle root over all modules **and** the digest of `word/document.xml` | signature covers both the module set and the visible text |
+| Manifest + surface integrity | Ed25519 signature over the canonical body binds the Merkle root over all modules **and** the digest of `word/document.xml` | signature covers both the module set and the visible text |
+| Authenticity (only with a pinned key) | `verify_provenance(expected_public_key=...)` / `signature_status(expected_public_key=...)` compare the signer to a caller-trusted key in constant time | the manifest's embedded key is **self-asserted**; without pinning, a forger can sign a fabricated document with their own key and it reads as self-consistent — never as authentic |
 | Metadata minimalism | the manifest records only sealing mode (+ threshold `k`/`n`); never recipient identities/counts or a decoy marker | blind-review packets do not leak reviewers |
 | Untrusted-input intake | zip-bomb caps (per-entry/total/ratio) on OPC read; project tar.gz caps + `data` filter + link/traversal rejection; nested-depth cap; KDF work-factor cap | report §14.3, §6.1 |
 | Openability preserved | encryption is payload-level, never whole-package | report §6.3, §14.3 |
@@ -57,6 +58,33 @@ an integrator must handle.
 * **Steganalysis.** The `stego_media` channel changes pixel LSBs; chi-squared and
   sample-pair analysis can flag it. The steganographer backend's own `analyze`
   command can be used to check detectability.
+
+## Executing carried code (reproduction)
+
+The reproduction feature (`docs/reproduction-design.md`) is the one place DOCX+ can
+run code a document carries. Its safety rests on two invariants:
+
+1. **The document is inert data.** No read, parse, render, `validate`, `extract`,
+   `verify_provenance`, or `verify_reproduction` path executes a byte. Only
+   `reproduce(..., allow_execution=True)` does, and only on an explicit call.
+2. **Execution is confined (best-effort).** The re-run happens in a scrubbed
+   environment (no host credentials, `HOME=/nonexistent`, stdin closed), in its own
+   process group so a timeout reaps orphaned grandchildren, under
+   CPU/address-space/process-count/**file-size** limits and a clamped wall-clock
+   timeout. The network is denied and **writes are confined to the project and temp
+   directories** via a `sandbox-exec` seatbelt profile (macOS) or `bwrap` (Linux).
+
+Honest residual risks, stated plainly: the sandbox is best-effort, not a microVM.
+On macOS/Linux-with-bwrap writes are confined to the project+temp dirs and the
+network is denied; on Linux with only `unshare -n` the network is denied but **writes
+are not confined**; on any other platform there is **no** confinement and the caller
+must supply their own jail. Resource limits are POSIX-only. A sandbox escape in the
+OS primitive would defeat confinement. Reproduction is therefore a build-server /
+disposable-VM activity a reader chooses, never a side effect of opening a file. A
+digest match attests process, not validity: it proves the declared command produced
+the sealed outputs on a matching toolchain — surfaced as `toolchain_match` — not that
+the method is correct. The reproduction binds only genuinely *computed* outputs: a
+declared output that is a carried input unchanged by the run is rejected.
 
 ## Threat-model summary
 

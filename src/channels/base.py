@@ -43,6 +43,8 @@ class ChannelRecord:
     payload_type: str = "bytes"
     sealing: dict = field(default_factory=lambda: {"mode": "plain"})
     location: dict[str, str] = field(default_factory=dict)
+    #: Optional signed reproduction attestation (project modules); see reproduce.py.
+    reproduction: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -55,6 +57,7 @@ class ChannelRecord:
             "payload_type": self.payload_type,
             "sealing": dict(self.sealing),
             "location": dict(self.location),
+            "reproduction": dict(self.reproduction),
         }
 
     @classmethod
@@ -69,6 +72,7 @@ class ChannelRecord:
             payload_type=data.get("payload_type", "bytes"),
             sealing=dict(data.get("sealing", {"mode": "plain"})),
             location=dict(data.get("location", {})),
+            reproduction=dict(data.get("reproduction", {})),
         )
 
 

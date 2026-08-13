@@ -6,11 +6,14 @@ versions.
 
 ## 1. The Self-Verifying Dossier
 A report that carries the **entire reproducible project** that produced it, signed
-and encrypted. A recipient extracts the project, runs its tests, and reproduces the
-figures — the paper *is* the software.
+and encrypted, plus a signed **reproduction attestation** binding its source to a
+deterministic output digest. A recipient verifies cryptographically (no execution),
+or opts in to re-run it in a sandbox and confirm the outputs match — the paper *is*
+the software, and it proves so.
 ```python
-builder.add_project("source", "projects/templates/template_code_project", password="review")
-reader.extract_project("source", dest, password="review")  # -> runnable repo on disk
+builder.add_project("source", "…/template_code_project", password="review", reproduce=True)
+reader.verify_reproduction("source")                       # cryptographic, executes nothing
+reader.reproduce("source", dest, allow_execution=True, password="review")  # opt-in sandbox re-run
 ```
 
 ## 2. The Matryoshka Document
@@ -69,9 +72,11 @@ reader.extract("notes", password="b")   # the cover story
 ```
 
 ## 8. The Living Manuscript
-Concept #1 + #5: the manuscript carries its own project (self-verifying) under a
-signed Merkle provenance root (tamper-evident). Extract, reproduce, and prove the
-document and its software are the ones the author sealed.
+Concept #1 + #5: the manuscript carries its own project under a signed Merkle
+provenance root (tamper-evident) *and* a reproduction attestation. A reader confirms
+the document, its software, and its results are the ones the author sealed — and can
+re-derive them. Run `scripts/05_living_manuscript.py`, which does exactly this over
+the real `template_code_project`.
 
 ---
 
