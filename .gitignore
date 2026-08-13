@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Virtual environment
+.venv/
+venv/
+
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
+
+# Generated, disposable outputs
+output/
+
+# OS
+.DS_Store
+
+# The steganographer premium backend is a sibling checkout, not vendored here.
+# Keys are never committed.
+*.hex
+keys/

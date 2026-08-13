@@ -1,0 +1,27 @@
+conditions:
+  - name: plain_document
+    role: reference
+    description: "A base .docx with no intelligence layer — must validate as ordinary OOXML."
+  - name: single_channel
+    role: proposed
+    description: "One payload per channel; verify round-trip and OPC conformance."
+  - name: composed_signed_encrypted
+    role: variant
+    description: "Multiple channels + encryption + a signed manifest in one document."
+metrics:
+  primary:
+    name: roundtrip_integrity
+    direction: maximize        # all modules recover with matching digests
+protocol: >-
+  For each condition, build a document, re-read it, validate OPC + intelligence
+  conformance, and verify every module's plaintext digest and the manifest
+  signature. Outputs are deterministic for unencrypted/unsigned builds.
+expected_artifacts:
+  - output/documents/example_docxplus.docx
+  - output/reports/roundtrip.json
+expected_figures:
+  - fig:capacity
+baselines:
+  - plain_document
+ablations:
+  - single_channel

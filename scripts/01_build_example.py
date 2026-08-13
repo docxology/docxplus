@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+"""Build a demonstration DOCX+ carrying intelligence across every pure channel.
+
+Emits a real ``.docx`` to ``output/documents/`` that opens as an ordinary Word
+document yet carries a signed manifest and several payload modules. Prints the
+output path for manifest collection.
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+
+import crypto  # noqa: E402
+from container import DocxPlusBuilder  # noqa: E402
+from project_paths import ensure_output_dirs  # noqa: E402
+
+
+def main() -> int:
+    dirs = ensure_output_dirs()
+    out = dirs["documents"] / "example_docxplus.docx"
+
+    brief = json.dumps(
+        {"classification": "internal", "priority": 2, "note": "structured brief"}
+    ).encode()
+    priv, _ = crypto.generate_signing_key()
+
+    builder = (
+        DocxPlusBuilder(
+            paragraphs=[
+                "Quarterly Operations Summary",
+                "This document reads as an ordinary report in any word processor.",
+            ],
+            title="Quarterly Operations Summary",
+        )
+        .add_module("brief", "custom_xml", brief)
+        .add_module("routing", "metadata", b"channel=alpha;ttl=7d")
+        .add_module("dossier", "package_part", b"detailed dossier bytes...")
+        .add_module("secret", "package_part", b"eyes-only payload", password="correct horse")
+        .sign(priv)
+    )
+
+    # Media channel is opt-in on Pillow; include it when available.
+    try:
+        import PIL  # noqa: F401
+
+        builder.add_module(
+            "figure", "stego_media", b"payload hidden in the figure's pixels",
+            backend="python_lsb",
+        )
+    except ImportError:
+        pass
+
+    out.write_bytes(builder.build())
+    print(str(out))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

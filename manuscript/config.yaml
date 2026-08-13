@@ -1,0 +1,24 @@
+paper:
+  title: "DOCX+: An Intelligent Document Container over Standards-Conforming OOXML"
+  subtitle: "Carrying signed, encrypted, modular payloads inside an ordinary .docx"
+  version: "0.1.0"
+  date: "2026-08-13"
+
+authors:
+  - name: "Daniel Ari Friedman"
+    orcid: "0000-0001-6232-9096"
+    email: "daniel@activeinference.institute"
+    affiliation: "Active Inference Institute"
+    corresponding: true
+
+keywords:
+  - OOXML
+  - Open Packaging Conventions
+  - document steganography
+  - authenticated encryption
+  - structured documents
+  - reproducible research
+
+metadata:
+  license: "MIT"
+  language: "en"
