@@ -93,17 +93,37 @@ def pack_project(root: Path) -> bytes:
     return raw.getvalue()
 
 
-def unpack_project(blob: bytes, dest: Path) -> Path:
-    """Extract a ``project`` payload into ``dest`` (created if needed)."""
+#: Refuse to inflate a project payload past this many bytes (decompression-bomb cap).
+MAX_PROJECT_UNCOMPRESSED = 512 * 1024 * 1024  # 512 MiB
+
+
+def unpack_project(blob: bytes, dest: Path, *, max_uncompressed: int = MAX_PROJECT_UNCOMPRESSED) -> Path:
+    """Extract a ``project`` payload into ``dest`` (created if needed).
+
+    Untrusted-input hardening (standards-report §14.3): a decompression-bomb cap on
+    total inflated size, an explicit path-traversal guard, and — on Python 3.12+ —
+    tarfile's ``data`` extraction filter, which additionally blocks absolute paths,
+    device/symlink/hardlink escapes, and unsafe permissions that the manual name
+    check alone would miss.
+    """
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
+    dest_root = dest.resolve()
     with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as tar:
+        total = 0
         for member in tar.getmembers():
-            # Zip-Slip / path-traversal guard (standards-report §14.3).
+            total += max(0, member.size)
+            if total > max_uncompressed:
+                raise ValueError("project payload exceeds decompression cap (possible bomb)")
+            if member.islnk() or member.issym():
+                raise ValueError(f"link member not allowed in project payload: {member.name}")
             target = (dest / member.name).resolve()
-            if not str(target).startswith(str(dest.resolve())):
+            if target != dest_root and not target.is_relative_to(dest_root):
                 raise ValueError(f"unsafe path in project payload: {member.name}")
-        tar.extractall(dest)
+        try:
+            tar.extractall(dest, filter="data")  # py3.12+ hardened filter
+        except TypeError:  # pragma: no cover - Python < 3.12 fallback
+            tar.extractall(dest)
     return dest
 
 

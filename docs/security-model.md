@@ -9,9 +9,12 @@ an integrator must handle.
 
 | Property | Mechanism | Basis |
 | --- | --- | --- |
-| Payload confidentiality | AES-256-GCM over the payload, key = PBKDF2-HMAC-SHA512(password, salt, spin_count) | MS-OFFCRYPTO *agile* lineage (report §7.1) |
-| Payload integrity | GCM auth tag; plus a plaintext digest recorded in the manifest and checked on extract | report flags ECMA-376 *standard* mode as lacking corruption detection (§7.1) |
-| Manifest authenticity | Ed25519 signature over the canonical manifest body | steganographer signing curve |
+| Payload confidentiality | AES-256-GCM over the payload; key from memory-hard **Scrypt** (default; PBKDF2-HMAC-SHA512 available), work factors capped on read | MS-OFFCRYPTO *agile* lineage (report §7.1); OWASP-2023 |
+| Payload integrity | GCM auth tag for plaintext; the manifest digest binds the **stored (ciphertext) bytes** and is checked before decryption | avoids the offline plaintext-confirmation oracle a plaintext digest would give |
+| Context binding | the module **slot** is AAD in every AEAD operation | a ciphertext cannot be spliced into another slot |
+| Manifest + surface authenticity | Ed25519 signature over the canonical body, which binds the Merkle root over all modules **and** the digest of `word/document.xml` | signature covers both the module set and the visible text |
+| Metadata minimalism | the manifest records only sealing mode (+ threshold `k`/`n`); never recipient identities/counts or a decoy marker | blind-review packets do not leak reviewers |
+| Untrusted-input intake | zip-bomb caps (per-entry/total/ratio) on OPC read; project tar.gz caps + `data` filter + link/traversal rejection; nested-depth cap; KDF work-factor cap | report §14.3, §6.1 |
 | Openability preserved | encryption is payload-level, never whole-package | report §6.3, §14.3 |
 | Premium media provenance | steganographer backend BLAKE3-hashes and Ed25519-signs the embedded packet | steganographer docs |
 
@@ -22,9 +25,19 @@ an integrator must handle.
   of Congress deposit rule forbids access-controlling DRM on archival text (report
   §9); DOCX+ keeps the surface document clean by design.
 * **The manifest is not hidden.** A `custom_xml`/`package_part` module is
-  discoverable by anyone who unzips the file. Concealment (not just
+  discoverable by anyone who opens the archive. Concealment (not just
   confidentiality) is only offered by the `stego_media` channel, and even there LSB
   stego is detectable by steganalysis — treat it as obfuscation, not secrecy.
+* **Deniability is against inspection, not proof.** A decoy module is
+  byte-indistinguishable from an ordinary password module (both carry two envelope
+  frames; the second is chaff when there is no decoy), so nothing in the file
+  *reveals* a hidden payload. But an adversary who knows the scheme knows a second
+  frame is always present and cannot be compelled to accept it as chaff. This is
+  layered access with a cover story, not cryptographic proof of non-existence.
+* **Unsigned = no provenance.** Without a signature, an attacker who rewrites a
+  module can also rewrite its digest; validation emits a loud WARNING for unsigned
+  documents. Only a signed manifest makes the module set and surface text
+  tamper-evident.
 * **A signature proves the manifest, not the surface prose.** As the report notes
   (§6.1, §7), both OOXML and ODF have documented signature-spoofing classes; DOCX+
   signs its own manifest body, which does not attest the visible document text.

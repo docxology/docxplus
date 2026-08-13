@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+
 from container import ContainerError, DocxPlusBuilder, DocxPlusReader
 from crypto import generate_signing_key
 from validate import validate_bytes

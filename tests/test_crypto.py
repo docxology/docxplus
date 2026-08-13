@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+
 from crypto import (
     EncryptedPayload,
     decrypt,
@@ -57,7 +58,8 @@ def test_envelope_bytes_roundtrip():
     env = encrypt(b"x", "pw")
     parsed = EncryptedPayload.from_bytes(env)
     assert parsed.to_bytes() == env
-    assert parsed.spin_count > 0
+    assert parsed.kdf_id in (1, 2)
+    assert len(parsed.params) > 0
 
 
 def test_envelope_bad_magic():

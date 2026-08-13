@@ -188,6 +188,7 @@ def read_package(data: bytes) -> OpcPackage:
             raise OpcError("package contains duplicate ZIP entry names")
         if CONTENT_TYPES_PART not in names:
             raise OpcError("missing mandatory [Content_Types].xml")
+        _guard_zip_bomb(zf.infolist(), len(data))
         raw = {name: zf.read(name) for name in names}
 
     _parse_content_types(pkg, raw.pop(CONTENT_TYPES_PART))
@@ -197,6 +198,27 @@ def read_package(data: bytes) -> OpcPackage:
         else:
             pkg.parts[_normalize_part_name(name)] = blob
     return pkg
+
+
+# Untrusted-intake caps for read_package (standards-report §14.3, §6.1).
+MAX_ENTRY_BYTES = 256 * 1024 * 1024        # per-part inflated size
+MAX_TOTAL_BYTES = 1024 * 1024 * 1024       # whole-package inflated size
+MAX_INFLATE_RATIO = 200                     # inflated/compressed per entry
+
+
+def _guard_zip_bomb(infos, compressed_len: int) -> None:
+    """Reject a package whose entries inflate past sane caps (zip-bomb defence)."""
+    total = 0
+    for info in infos:
+        size = info.file_size
+        if size > MAX_ENTRY_BYTES:
+            raise OpcError(f"zip entry too large ({info.filename}): {size} bytes")
+        comp = max(info.compress_size, 1)
+        if size / comp > MAX_INFLATE_RATIO and size > 1_000_000:
+            raise OpcError(f"suspicious inflate ratio for {info.filename} (possible zip bomb)")
+        total += size
+        if total > MAX_TOTAL_BYTES:
+            raise OpcError("package inflates past the total-size cap (possible zip bomb)")
 
 
 def _parse_content_types(pkg: OpcPackage, blob: bytes) -> None:

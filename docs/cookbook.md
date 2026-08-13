@@ -26,8 +26,10 @@ The dossier's content key is Shamir-split into *n* shares; any *k* custodians
 together reconstruct it, none alone. Distribute shares to a board; three of five can
 open it.
 ```python
-shares = builder.add_threshold("legacy", payload, k=3, n=5)  # returns 5 share files
-DocxPlusReader.from_bytes(data).extract_threshold("legacy", shares[:3])
+builder.add_threshold("legacy", payload, k=3, n=5)
+data = builder.build()
+shares = builder.threshold_shares["legacy"]        # the 5 shares to distribute
+DocxPlusReader.from_bytes(data).extract("legacy", shares=shares[:3])
 ```
 
 ## 4. The Sealed Referee Packet (multi-recipient)
@@ -48,18 +50,22 @@ builder.sign(priv)                 # signs the Merkle root over all modules
 reader.verify_provenance()         # -> root matches, tip intact
 ```
 
-## 6. The Polyglot Carrier (redundant media)
+## 6. The Polyglot Carrier (redundant media) — *roadmap*
 A payload spread across several embedded figures so the document survives losing
-one image (crop, re-export). Survivability, not just concealment.
-```python
-builder.add_module("logo_payload", "stego_media", data, redundancy=3)
-```
+one image (crop, re-export). Survivability, not just concealment. Redundant/spread
+media carriers are a planned channel option (see `TODO.md`); today the media
+channel places one carrier per module.
 
 ## 7. The Time-Capsule with a Decoy (plausible deniability)
-Two payloads share one module: a benign decoy under one password, the real content
-under another. Neither password reveals the other's existence.
+Two payloads share one module: a benign cover story under one password, the real
+content under another. The module is recorded as an ordinary `password` module, and
+every password module carries a second (chaff) frame, so nothing in the file
+reveals that a hidden payload exists. This is deniability against inspection, not a
+proof of non-existence — see `docs/security-model.md`.
 ```python
 builder.add_decoy("notes", real=secret, real_password="a", decoy=cover, decoy_password="b")
+reader.extract("notes", password="a")   # the real content
+reader.extract("notes", password="b")   # the cover story
 ```
 
 ## 8. The Living Manuscript

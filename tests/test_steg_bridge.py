@@ -7,11 +7,11 @@ temporary files acting as the discovered binaries — no behaviour is mocked.
 
 from __future__ import annotations
 
-import os
 import stat
 from pathlib import Path
 
 import pytest
+
 import steg_bridge
 
 

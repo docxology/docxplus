@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from defusedxml.ElementTree import fromstring
+
 from opc import read_package
 from wordml import CT_DOCUMENT, build_document_xml, new_base_document
 

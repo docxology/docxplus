@@ -6,6 +6,7 @@ import zipfile
 from io import BytesIO
 
 import pytest
+
 from opc import (
     CONTENT_TYPES_PART,
     ROOT_RELS_PART,

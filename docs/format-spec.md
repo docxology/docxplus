@@ -90,15 +90,26 @@ document can visibly display. Two backends, recorded in `location.backend`:
 
 ## 4. Encryption
 
-When a module is encrypted, the plaintext is wrapped in a `DXE1` envelope before
-the channel places it:
+When a module is password-sealed, the plaintext is wrapped in a self-describing
+`DXE1` envelope before the channel places it:
 
 ```
-"DXE1" | salt_len(1) | salt(16) | nonce_len(1) | nonce(12) | spin_count(4) | AES-256-GCM ciphertext
+"DXE1" | kdf_id(1) | salt_len(1) | salt | nonce_len(1) | nonce | params_len(1) | params | AES-256-GCM ciphertext
 ```
 
-Key derivation is PBKDF2-HMAC-SHA512 over the password with the stored salt and
-`spin_count` iterations (default 100 000) — the MS-OFFCRYPTO *agile* lineage.
+Key derivation is recorded per envelope. The default is **Scrypt** (memory-hard,
+`N=2^15, r=8, p=1`; `kdf_id=2`, `params = n_log2 ‖ r ‖ p`); **PBKDF2-HMAC-SHA512**
+is available for compatibility (`kdf_id=1`, `params = iterations(4)`, default
+600 000 per OWASP-2023). Readers **cap** attacker-supplied work factors
+(scrypt `N ≤ 2^21`, PBKDF2 `≤ 5,000,000`) so a hostile envelope cannot turn
+opening into a denial-of-service.
+
+The AEAD is bound to the module **slot as additional authenticated data (AAD)**, so
+a ciphertext cannot be spliced into a different slot. The manifest digest for a
+sealed module is over the **stored (ciphertext) bytes**, never the plaintext — a
+plaintext digest would be an offline confirmation oracle against short secrets.
+Plaintext integrity is the GCM tag, checked on decryption.
+
 Because only the payload is encrypted, the surface `.docx` remains a valid,
 openable Office document; this is intentional and contrasts with whole-package
 OOXML encryption, which yields a file most tools cannot open.
@@ -130,30 +141,50 @@ bytes and back, so a payload is a typed object, not a blob. Built-in types:
 | `project` | a whole directory tree | deterministic tar.gz (fixed mtime, sorted, junk excluded); path-traversal-guarded on unpack |
 | `docxplus` | a nested DOCX+ document | identity bytes, typed so readers recurse |
 
-The digest recorded for a module is over the **packed** payload (post-pack,
-pre-seal), so integrity is checked against the reconstructed object.
+The digest recorded for a module is over the **stored bytes** the channel holds
+(plaintext for a plain module, ciphertext for a sealed one), so it binds exactly
+what travels and is checked before any decryption — never a plaintext digest of a
+sealed module.
 
 ## 8. Sealing modes (v2.0)
 
 Each module's `sealing.mode` selects how the packed payload is protected. All modes
-seal the *payload*, never the package, so the surface `.docx` stays openable.
+seal the *payload*, never the package, so the surface `.docx` stays openable. The
+manifest records only the mode (and, for threshold, `k`/`n`) — never recipient
+identities, counts, or a "decoy" marker.
 
 | Mode | Envelope | Credential to open | Use |
 | --- | --- | --- | --- |
 | `plain` | none | — | public modules |
-| `password` | `DXE1` (AES-256-GCM, PBKDF2-SHA512) | password | single secret |
+| `password` | two framed `DXE1` envelopes (the payload + a chaff frame) | password | single secret |
 | `recipients` | `DXE2` (X25519 → HKDF-SHA256 → AES-GCM, content key wrapped per recipient) | any recipient's X25519 private key | multi-recipient (referee packet) |
 | `threshold` | AES-GCM under a random content key, key Shamir-split k-of-n over GF(256) | any `k` of `n` shares | dead-man's envelope |
-| `decoy` | two `DXE1` envelopes concatenated behind `DXD1` | either password opens its own payload | plausible deniability |
 
-`DXE2` layout: `"DXE2" | body_len(4) | body | recip_count(2) | [ eph_pub(32) wrap_len(2) wrap ]…`.
+`DXE2` layout: `"DXE2" | body_len(4) | body | recip_count(2) | [ eph_pub(32) wrap_len(2) wrap ]…` (ephemeral pubkeys only).
 
-## 9. Provenance — Merkle binding (v2.0)
+**Decoy / deniability.** A decoy is *not* a separate mode. It is a `password`
+module whose two frames are a real payload and a cover story under different
+passwords. Because every `password` module carries two frames (the second is
+undecryptable chaff when there is no decoy), a decoy is byte-indistinguishable
+from an ordinary password module — neither the manifest nor the frame count
+reveals a hidden payload. This provides deniability against inspection, not a
+proof of non-existence: an adversary who knows the scheme knows a second frame is
+*always* present and cannot be forced to be chaff. See `docs/security-model.md`.
+
+## 9. Provenance — Merkle binding + surface binding (v2.0)
 
 The manifest carries a `merkle_root` over all modules: leaves are
 `blake2b(0x00 ‖ slot ‖ 0x00 ‖ module_digest)`, internal nodes
 `blake2b(0x01 ‖ left ‖ right)`, odd nodes promoted, modules ordered by slot. The
-root is folded into the canonical body that the Ed25519 signature covers, so the
-signature binds the **set** of modules: dropping, adding, or swapping any module
-changes the root and invalidates the signature. `verify_provenance()` returns true
-only when a signature is present and validates over the Merkle-bound body.
+root **and** a `surface_digest` (the digest of `word/document.xml`) are folded into
+the canonical body the Ed25519 signature covers, so the signature binds both the
+**set** of modules and the **visible document text**: altering a module or a
+paragraph invalidates it. `verify_provenance()` returns true only when the
+signature validates and the surface document on disk matches the signed digest.
+Validation independently recomputes and checks the stored `merkle_root`.
+
+**Inclusion proofs.** `inclusion_proof(slot)` yields
+`{slot, digest, siblings, root}` letting a third party confirm one module belongs
+to the signed set without seeing the other modules — the capability that makes the
+Merkle tree more than a re-hash of the signed list. Verify with
+`provenance.verify_inclusion(proof)`.

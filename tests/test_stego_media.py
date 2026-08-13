@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+
 from channels import get_channel
 from opc import read_package
 from wordml import new_base_document

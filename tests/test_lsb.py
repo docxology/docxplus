@@ -6,7 +6,7 @@ import pytest
 
 pytest.importorskip("PIL")
 
-import lsb  # noqa: E402
+import lsb
 
 
 def test_capacity_matches_formula():

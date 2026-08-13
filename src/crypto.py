@@ -34,11 +34,23 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import (
 )
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 
-DEFAULT_SPIN_COUNT = 100_000  # PBKDF2 iterations; report §7.1 calls the count agile.
+DEFAULT_SPIN_COUNT = 100_000  # legacy PBKDF2 count kept for the derive_key() compat API.
 SALT_BYTES = 16
 NONCE_BYTES = 12
 KEY_BYTES = 32  # AES-256
+
+# KDF identifiers recorded in the DXE1 envelope so a reader derives the same key.
+KDF_PBKDF2 = 1
+KDF_SCRYPT = 2
+# PBKDF2 compat mode raised to OWASP-2023 guidance for HMAC-SHA512.
+PBKDF2_ITERATIONS = 600_000
+# Scrypt is the default: memory-hard (~32 MiB), resisting the GPU/ASIC attacks
+# that make a fixed PBKDF2 count weak. N=2^15, r=8, p=1.
+SCRYPT_N_LOG2 = 15
+SCRYPT_R = 8
+SCRYPT_P = 1
 
 _HASHERS = {
     "blake2b": lambda: hashlib.blake2b(digest_size=32),
@@ -58,7 +70,7 @@ def digest(data: bytes, algorithm: str = "blake2b") -> str:
 
 
 def derive_key(password: str, salt: bytes, spin_count: int = DEFAULT_SPIN_COUNT) -> bytes:
-    """PBKDF2-HMAC-SHA512 key derivation (MS-OFFCRYPTO agile lineage, report §7.1)."""
+    """PBKDF2-HMAC-SHA512 key derivation (compat helper; new code uses :func:`encrypt`)."""
     if not password:
         raise ValueError("password must be non-empty")
     return hashlib.pbkdf2_hmac(
@@ -66,58 +78,98 @@ def derive_key(password: str, salt: bytes, spin_count: int = DEFAULT_SPIN_COUNT)
     )
 
 
+# Ceilings on attacker-supplied KDF work factors. Without these, a hostile
+# envelope could set an enormous iteration count / scrypt N and turn any attempt
+# to open it into a CPU/memory denial-of-service on the reader.
+MAX_PBKDF2_ITERATIONS = 5_000_000
+MAX_SCRYPT_N_LOG2 = 21  # N ≤ 2^21 (≈2 GiB at r=8); comfortably above the default 15
+
+
+def _derive(password: str, salt: bytes, kdf_id: int, params: bytes) -> bytes:
+    """Derive a 32-byte key for the KDF recorded in an envelope (work-factor capped)."""
+    if not password:
+        raise ValueError("password must be non-empty")
+    pw = password.encode("utf-8")
+    if kdf_id == KDF_PBKDF2:
+        iterations = int.from_bytes(params, "big")
+        if not 1 <= iterations <= MAX_PBKDF2_ITERATIONS:
+            raise ValueError("PBKDF2 iteration count outside accepted range")
+        return hashlib.pbkdf2_hmac("sha512", pw, salt, iterations, dklen=KEY_BYTES)
+    if kdf_id == KDF_SCRYPT:
+        n_log2, r, p = params[0], params[1], params[2]
+        if not 1 <= n_log2 <= MAX_SCRYPT_N_LOG2 or r < 1 or p < 1:
+            raise ValueError("scrypt parameters outside accepted range")
+        return Scrypt(salt=salt, length=KEY_BYTES, n=1 << n_log2, r=r, p=p).derive(pw)
+    raise ValueError(f"unknown KDF id: {kdf_id}")
+
+
 @dataclass(frozen=True)
 class EncryptedPayload:
-    """Self-describing ciphertext envelope for a package part."""
+    """Self-describing ciphertext envelope (``DXE1``) recording its KDF + params.
 
+    Layout: ``"DXE1" | kdf_id(1) | salt_len(1) | salt | nonce_len(1) | nonce |
+    params_len(1) | params | ciphertext``. AAD is *not* stored — it is contextual
+    (the module slot), so a spliced ciphertext fails its GCM tag.
+    """
+
+    kdf_id: int
     salt: bytes
     nonce: bytes
-    spin_count: int
+    params: bytes
     ciphertext: bytes
 
     def to_bytes(self) -> bytes:
-        header = (
+        return (
             b"DXE1"
-            + len(self.salt).to_bytes(1, "big")
-            + self.salt
-            + len(self.nonce).to_bytes(1, "big")
-            + self.nonce
-            + self.spin_count.to_bytes(4, "big")
+            + bytes([self.kdf_id])
+            + bytes([len(self.salt)]) + self.salt
+            + bytes([len(self.nonce)]) + self.nonce
+            + bytes([len(self.params)]) + self.params
+            + self.ciphertext
         )
-        return header + self.ciphertext
 
     @classmethod
     def from_bytes(cls, blob: bytes) -> EncryptedPayload:
         if blob[:4] != b"DXE1":
             raise ValueError("not a DOCX+ encrypted payload (bad magic)")
         i = 4
-        slen = blob[i]
-        i += 1
-        salt = blob[i : i + slen]
-        i += slen
-        nlen = blob[i]
-        i += 1
-        nonce = blob[i : i + nlen]
-        i += nlen
-        spin = int.from_bytes(blob[i : i + 4], "big")
-        i += 4
-        return cls(salt=salt, nonce=nonce, spin_count=spin, ciphertext=blob[i:])
+        kdf_id = blob[i]; i += 1
+        slen = blob[i]; i += 1
+        salt = blob[i : i + slen]; i += slen
+        nlen = blob[i]; i += 1
+        nonce = blob[i : i + nlen]; i += nlen
+        plen = blob[i]; i += 1
+        params = blob[i : i + plen]; i += plen
+        return cls(kdf_id=kdf_id, salt=salt, nonce=nonce, params=params, ciphertext=blob[i:])
 
 
-def encrypt(plaintext: bytes, password: str, spin_count: int = DEFAULT_SPIN_COUNT) -> bytes:
-    """Encrypt ``plaintext`` under ``password`` → self-describing envelope bytes."""
+def _kdf_params(kdf: str) -> tuple[int, bytes]:
+    if kdf == "scrypt":
+        return KDF_SCRYPT, bytes([SCRYPT_N_LOG2, SCRYPT_R, SCRYPT_P])
+    if kdf == "pbkdf2":
+        return KDF_PBKDF2, PBKDF2_ITERATIONS.to_bytes(4, "big")
+    raise ValueError(f"unknown KDF: {kdf}")
+
+
+def encrypt(plaintext: bytes, password: str, *, aad: bytes = b"", kdf: str = "scrypt") -> bytes:
+    """Encrypt ``plaintext`` under ``password`` → self-describing envelope bytes.
+
+    ``aad`` binds the ciphertext to a context (the module slot); default KDF is the
+    memory-hard Scrypt.
+    """
     salt = os.urandom(SALT_BYTES)
     nonce = os.urandom(NONCE_BYTES)
-    key = derive_key(password, salt, spin_count)
-    ciphertext = AESGCM(key).encrypt(nonce, plaintext, None)
-    return EncryptedPayload(salt, nonce, spin_count, ciphertext).to_bytes()
+    kdf_id, params = _kdf_params(kdf)
+    key = _derive(password, salt, kdf_id, params)
+    ciphertext = AESGCM(key).encrypt(nonce, plaintext, aad or None)
+    return EncryptedPayload(kdf_id, salt, nonce, params, ciphertext).to_bytes()
 
 
-def decrypt(envelope: bytes, password: str) -> bytes:
+def decrypt(envelope: bytes, password: str, *, aad: bytes = b"") -> bytes:
     """Reverse :func:`encrypt`. Raises on wrong password / tampering (GCM tag)."""
     payload = EncryptedPayload.from_bytes(envelope)
-    key = derive_key(password, payload.salt, payload.spin_count)
-    return AESGCM(key).decrypt(payload.nonce, payload.ciphertext, None)
+    key = _derive(password, payload.salt, payload.kdf_id, payload.params)
+    return AESGCM(key).decrypt(payload.nonce, payload.ciphertext, aad or None)
 
 
 # -- signing (Ed25519, steganographer-compatible curve) --------------------
@@ -147,18 +199,18 @@ def verify(data: bytes, signature: bytes, public_key: bytes) -> bool:
 
 
 # -- content-key symmetric layer -------------------------------------------
-def encrypt_with_key(plaintext: bytes, key: bytes) -> bytes:
+def encrypt_with_key(plaintext: bytes, key: bytes, *, aad: bytes = b"") -> bytes:
     """AES-256-GCM under a raw 32-byte key → ``nonce || ciphertext``."""
     if len(key) != KEY_BYTES:
         raise ValueError("content key must be 32 bytes")
     nonce = os.urandom(NONCE_BYTES)
-    return nonce + AESGCM(key).encrypt(nonce, plaintext, None)
+    return nonce + AESGCM(key).encrypt(nonce, plaintext, aad or None)
 
 
-def decrypt_with_key(blob: bytes, key: bytes) -> bytes:
+def decrypt_with_key(blob: bytes, key: bytes, *, aad: bytes = b"") -> bytes:
     """Reverse :func:`encrypt_with_key`."""
     nonce, ciphertext = blob[:NONCE_BYTES], blob[NONCE_BYTES:]
-    return AESGCM(key).decrypt(nonce, ciphertext, None)
+    return AESGCM(key).decrypt(nonce, ciphertext, aad or None)
 
 
 # -- X25519 multi-recipient hybrid sealing (DXE2) --------------------------
@@ -192,19 +244,21 @@ def _unwrap_key(eph_pub: bytes, wrapped: bytes, recipient_priv: bytes) -> bytes:
     return decrypt_with_key(wrapped, kek)
 
 
-def seal_multi(plaintext: bytes, recipients: list[bytes]) -> bytes:
+def seal_multi(plaintext: bytes, recipients: list[bytes], *, aad: bytes = b"") -> bytes:
     """Encrypt ``plaintext`` once, wrapping the content key for each recipient.
 
     Envelope layout::
 
         "DXE2" | body_len(4) | body | recip_count(2) | [ eph(32) wrap_len(2) wrap ]...
 
-    body = encrypt_with_key(plaintext, content_key).
+    body = encrypt_with_key(plaintext, content_key, aad). ``aad`` binds the body to
+    its module context. The envelope does *not* embed recipient public keys, so it
+    does not leak the recipient set (a reader trial-decrypts each wrap slot).
     """
     if not recipients:
         raise ValueError("at least one recipient required")
     content_key = os.urandom(KEY_BYTES)
-    body = encrypt_with_key(plaintext, content_key)
+    body = encrypt_with_key(plaintext, content_key, aad=aad)
     out = bytearray(b"DXE2" + len(body).to_bytes(4, "big") + body)
     out += len(recipients).to_bytes(2, "big")
     for pub in recipients:
@@ -213,7 +267,7 @@ def seal_multi(plaintext: bytes, recipients: list[bytes]) -> bytes:
     return bytes(out)
 
 
-def unseal_multi(envelope: bytes, recipient_priv: bytes) -> bytes:
+def unseal_multi(envelope: bytes, recipient_priv: bytes, *, aad: bytes = b"") -> bytes:
     """Open a :func:`seal_multi` envelope with one recipient's private key."""
     if envelope[:4] != b"DXE2":
         raise ValueError("not a DXE2 multi-recipient envelope")
@@ -234,7 +288,7 @@ def unseal_multi(envelope: bytes, recipient_priv: bytes) -> bytes:
         i += wrap_len
         try:
             content_key = _unwrap_key(eph_pub, wrapped, recipient_priv)
-            return decrypt_with_key(body, content_key)
+            return decrypt_with_key(body, content_key, aad=aad)
         except Exception as exc:  # noqa: BLE001 - wrong slot for this key; try next
             last_error = exc
             continue

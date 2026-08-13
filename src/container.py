@@ -27,8 +27,6 @@ from manifest import Manifest, read_manifest, write_manifest
 from opc import OpcPackage, read_package
 from wordml import new_base_document
 
-_DECOY_MAGIC = b"DXD1"
-
 
 class ContainerError(RuntimeError):
     """Raised for container-level composition or extraction errors."""
@@ -152,6 +150,11 @@ class DocxPlusBuilder:
             record = self._place(pkg, m)
             manifest.add(record)
 
+        # Bind the visible document text into the signed body: a signature over the
+        # manifest otherwise says nothing about the paragraphs a reader sees.
+        doc_part = pkg.parts.get("word/document.xml", b"")
+        manifest.surface_digest = crypto.digest(doc_part)
+
         if self._private_key is not None and self._public_key is not None:
             manifest.public_key = self._public_key.hex()
             manifest.signature = crypto.sign(
@@ -164,44 +167,50 @@ class DocxPlusBuilder:
     def _place(self, pkg: OpcPackage, m: _Pending):
         ptype = payloads.get_type(m.payload_type)
         channel = channel_registry.get_channel(m.channel_id, **m.channel_kwargs)
+        aad = m.slot.encode("utf-8")  # bind every ciphertext to its module slot
 
         if m.decoy is not None:
+            # A decoy is a password module carrying two envelopes; the manifest
+            # records mode "password" so it is indistinguishable from an ordinary
+            # encrypted module (the old "decoy" label advertised the hidden payload).
             real, real_pw, decoy, decoy_pw = m.decoy
-            env_real = crypto.encrypt(ptype.pack(real), real_pw)
-            env_decoy = crypto.encrypt(ptype.pack(decoy), decoy_pw)
-            sealed = _DECOY_MAGIC + len(env_real).to_bytes(4, "big") + env_real + env_decoy
-            record = channel.embed(pkg, sealed, slot=m.slot)
-            record.payload_type = m.payload_type
-            record.encrypted = True
-            record.sealing = {"mode": "decoy"}
-            record.digest = crypto.digest(sealed)  # binds module bytes, not a plaintext
-            record.size = len(sealed)
-            return record
-
-        plaintext = ptype.pack(m.obj)
-        digest = crypto.digest(plaintext)
-        size = len(plaintext)
-
-        if m.password is not None:
-            sealed, sealing = crypto.encrypt(plaintext, m.password), {"mode": "password"}
-        elif m.recipients is not None:
-            sealed = crypto.seal_multi(plaintext, m.recipients)
-            sealing = {"mode": "recipients", "recipients": [p.hex() for p in m.recipients]}
-        elif m.threshold is not None:
-            k, n = m.threshold
-            content_key = _random_key()
-            sealed = crypto.encrypt_with_key(plaintext, content_key)
-            self.threshold_shares[m.slot] = shamir.split(content_key, k, n)
-            sealing = {"mode": "threshold", "k": k, "n": n}
+            sealed = _frame_seq([
+                crypto.encrypt(ptype.pack(real), real_pw, aad=aad),
+                crypto.encrypt(ptype.pack(decoy), decoy_pw, aad=aad),
+            ])
+            sealing = {"mode": "password"}
         else:
-            sealed, sealing = plaintext, {"mode": "plain"}
+            plaintext = ptype.pack(m.obj)
+            if m.password is not None:
+                # Pad with an undecryptable chaff frame so an ordinary password
+                # module carries exactly two frames, byte-indistinguishable from a
+                # decoy module. An observer cannot prove the second frame is (or is
+                # not) a hidden payload — that is the deniability the format offers.
+                sealed = _frame_seq([crypto.encrypt(plaintext, m.password, aad=aad), _chaff(aad)])
+                sealing = {"mode": "password"}
+            elif m.recipients is not None:
+                sealed = crypto.seal_multi(plaintext, m.recipients, aad=aad)
+                # Record neither identities nor count — the manifest must not leak
+                # the recipient set of a blind-review packet. The DXE2 envelope
+                # already carries everything extraction needs.
+                sealing = {"mode": "recipients"}
+            elif m.threshold is not None:
+                k, n = m.threshold
+                content_key = _random_key()
+                sealed = crypto.encrypt_with_key(plaintext, content_key, aad=aad)
+                self.threshold_shares[m.slot] = shamir.split(content_key, k, n)
+                sealing = {"mode": "threshold", "k": k, "n": n}
+            else:
+                sealed = plaintext
+                sealing = {"mode": "plain"}
 
         record = channel.embed(pkg, sealed, slot=m.slot)
         record.payload_type = m.payload_type
         record.encrypted = sealing["mode"] != "plain"
         record.sealing = sealing
-        record.digest = digest
-        record.size = size
+        # record.digest/size come from the channel = digest/len of the STORED bytes,
+        # so the manifest (and its signature) bind exactly what travels; plaintext
+        # integrity is the AEAD tag's job, checked on decryption.
         return record
 
 
@@ -217,6 +226,7 @@ class DocxPlusReader:
 
     package: OpcPackage
     manifest: Manifest
+    _nest_depth: int = 0
 
     @classmethod
     def from_bytes(cls, data: bytes) -> DocxPlusReader:
@@ -252,29 +262,26 @@ class DocxPlusReader:
         """
         record = self._record(slot)
         sealed = channel_registry.get_channel(record.channel).extract(self.package, record)
-        mode = record.sealing.get("mode", "plain")
+        # Integrity of the bytes that actually travelled (uniform across all modes).
+        if crypto.digest(sealed) != record.digest:
+            raise ContainerError(f"digest mismatch for {slot!r} (stored bytes altered)")
 
+        mode = record.sealing.get("mode", "plain")
+        aad = slot.encode("utf-8")
         if mode == "plain":
             plaintext = sealed
-        elif mode == "decoy":
-            if password is None:
-                raise ContainerError(f"module {slot!r} needs a password")
-            plaintext = _open_decoy(sealed, password)
         else:
-            plaintext = self._unseal(slot, mode, sealed, password, private_key, shares)
+            plaintext = self._unseal(slot, mode, sealed, aad, password, private_key, shares)
 
-        if mode not in ("decoy",):
-            computed = crypto.digest(plaintext)
-            if computed != record.digest:
-                raise ContainerError(
-                    f"digest mismatch for {slot!r}: {record.digest} != {computed}"
-                )
         if as_object:
             return payloads.get_type(record.payload_type).unpack(plaintext)
         return plaintext
 
-    def _unseal(self, slot, mode, sealed, password, private_key, shares) -> bytes:
-        """Decrypt a sealed module, converting any crypto failure to ContainerError."""
+    def _unseal(self, slot, mode, sealed, aad, password, private_key, shares) -> bytes:
+        """Decrypt a sealed module, converting any crypto failure to ContainerError.
+
+        Plaintext integrity comes from the AEAD tag here, not a separate digest.
+        """
         if mode == "password" and password is None:
             raise ContainerError(f"module {slot!r} needs a password")
         if mode == "recipients" and private_key is None:
@@ -283,11 +290,11 @@ class DocxPlusReader:
             raise ContainerError(f"module {slot!r} needs threshold shares")
         try:
             if mode == "password":
-                return crypto.decrypt(sealed, password)
+                return _open_password_frames(sealed, password, aad)
             if mode == "recipients":
-                return crypto.unseal_multi(sealed, private_key)
+                return crypto.unseal_multi(sealed, private_key, aad=aad)
             if mode == "threshold":
-                return crypto.decrypt_with_key(sealed, shamir.combine(shares))
+                return crypto.decrypt_with_key(sealed, shamir.combine(shares), aad=aad)
         except ContainerError:
             raise
         except Exception as exc:
@@ -302,12 +309,23 @@ class DocxPlusReader:
         blob = self.extract(slot, **creds)
         return payloads.unpack_project(blob, Path(dest))
 
+    #: Guards against a maliciously deep matryoshka chain exhausting resources.
+    MAX_NEST_DEPTH = 32
+
     def open_nested(self, slot: str, **creds) -> DocxPlusReader:
-        """Recover a nested ``docxplus`` module and return a reader over it."""
+        """Recover a nested ``docxplus`` module and return a reader over it.
+
+        Depth is tracked across the chain so a hostile deeply-nested document
+        cannot drive unbounded recursion/resource use.
+        """
+        if self._nest_depth >= self.MAX_NEST_DEPTH:
+            raise ContainerError("nested document depth cap exceeded")
         record = self._record(slot)
         if record.payload_type != "docxplus":
             raise ContainerError(f"module {slot!r} is not a nested document")
-        return DocxPlusReader.from_bytes(self.extract(slot, **creds))
+        child = DocxPlusReader.from_bytes(self.extract(slot, **creds))
+        child._nest_depth = self._nest_depth + 1
+        return child
 
     # -- provenance --------------------------------------------------------
     def merkle_root(self) -> str:
@@ -319,9 +337,21 @@ class DocxPlusReader:
         return "valid" if self.manifest.verify_signature() else "invalid"
 
     def verify_provenance(self) -> bool:
-        """True when the manifest is signed and the signature (which binds the
-        Merkle root over all modules) validates."""
-        return self.manifest.is_signed() and self.manifest.verify_signature()
+        """True when the manifest is signed, the signature validates (binding the
+        Merkle root over all modules *and* the visible document text), and the
+        surface document on disk matches the signed surface digest."""
+        if not (self.manifest.is_signed() and self.manifest.verify_signature()):
+            return False
+        doc_part = self.package.parts.get("word/document.xml", b"")
+        return crypto.digest(doc_part) == self.manifest.surface_digest
+
+    def inclusion_proof(self, slot: str) -> dict:
+        """A Merkle inclusion proof that ``slot`` belongs to this document's signed
+        module set — verifiable by a third party without the other modules."""
+        from provenance import inclusion_proof as _proof
+
+        self._record(slot)  # KeyError→ContainerError if absent
+        return _proof([(r.slot, r.digest) for r in self.manifest.records], slot)
 
     def _record(self, slot: str):
         try:
@@ -330,16 +360,38 @@ class DocxPlusReader:
             raise ContainerError(f"no such module: {slot}") from exc
 
 
-def _open_decoy(sealed: bytes, password: str) -> bytes:
-    if sealed[:4] != _DECOY_MAGIC:
-        raise ContainerError("not a decoy module")
-    i = 4
-    a_len = int.from_bytes(sealed[i : i + 4], "big")
-    i += 4
-    env_real, env_decoy = sealed[i : i + a_len], sealed[i + a_len :]
-    for env in (env_real, env_decoy):
+def _frame_seq(envelopes: list[bytes]) -> bytes:
+    """Frame one-or-more envelopes as ``[u32 len | envelope]…`` (self-delimiting)."""
+    return b"".join(len(e).to_bytes(4, "big") + e for e in envelopes)
+
+
+def _chaff(aad: bytes) -> bytes:
+    """A well-formed but undecryptable envelope: a random payload under a random,
+    discarded password. Indistinguishable from a real second envelope."""
+    import secrets
+
+    size = 16 + secrets.randbelow(240)
+    return crypto.encrypt(secrets.token_bytes(size), secrets.token_hex(16), aad=aad)
+
+
+def _iter_frames(blob: bytes):
+    i = 0
+    while i < len(blob):
+        length = int.from_bytes(blob[i : i + 4], "big")
+        i += 4
+        yield blob[i : i + length]
+        i += length
+
+
+def _open_password_frames(sealed: bytes, password: str, aad: bytes) -> bytes:
+    """Try each framed envelope with ``password``; return the first that opens.
+
+    A single-secret module has one frame; a decoy has two (a real payload and a
+    cover story under different passwords). Both look identical in the manifest.
+    """
+    for env in _iter_frames(sealed):
         try:
-            return crypto.decrypt(env, password)
-        except Exception:  # noqa: BLE001,S112 - wrong password for this slot; try the other
+            return crypto.decrypt(env, password, aad=aad)
+        except Exception:  # noqa: BLE001,S112 - wrong frame for this password; try next
             continue
-    raise ContainerError("neither decoy slot opened with this password")
+    raise ContainerError("no envelope opened with this password")

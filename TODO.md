@@ -7,6 +7,13 @@ Typed payloads (bytes/text/json/**project**/**docxplus**), multi-recipient X2551
 sealing, Shamir k-of-n threshold, decoy/plausible-deniability, matryoshka nesting,
 and a signed Merkle provenance root. See `docs/cookbook.md` and `scripts/04_dossier.py`.
 
+## Shipped in v0.3 (RedTeam hardening — `docs/redteam-audit.md`)
+Memory-hard Scrypt KDF (default) with capped work factors; ciphertext-bound module
+digests (no plaintext oracle); AAD slot binding; recipient-set and decoy metadata
+no longer leak; signature binds the visible document text (`surface_digest`); Merkle
+inclusion proofs; zip/tar decompression-bomb + traversal + symlink + nesting caps;
+root-anchored reachability. 18 confirmed findings closed, each pinned by a test.
+
 ## Format
 - [ ] Whole-package OPC digital signature alongside the manifest signature
       (Digital Signature Origin part), per standards-report §7.1.

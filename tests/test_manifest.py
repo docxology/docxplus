@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+
 from channels.base import ChannelRecord
 from crypto import generate_signing_key, sign
 from manifest import Manifest, read_manifest, write_manifest

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+
 from crypto import (
     KEY_BYTES,
     decrypt_with_key,

@@ -55,6 +55,17 @@ The primitives scale on five orthogonal axes (see `docs/design-rationale.md`):
 dead-man's envelope, sealed referee packet, provenance ledger, …). The showcase
 `scripts/04_dossier.py` builds and verifies all of them in one file.
 
+## v0.3 — RedTeam-hardened
+
+An adversarial review (`docs/redteam-audit.md`, run as a multi-agent workflow with
+independent verification) confirmed and closed 18 findings: memory-hard **Scrypt**
+key derivation with capped work factors, **ciphertext-bound** module digests (no
+plaintext-confirmation oracle), **AAD** slot binding, recipient-set and decoy
+metadata that no longer leak, a signature that also binds the **visible document
+text**, **Merkle inclusion proofs**, and untrusted-intake caps (zip/tar
+decompression bombs, path-traversal, symlink escape, nesting depth). Each fix is
+pinned by a regression test in `tests/test_hardening.py`.
+
 ## Quick start
 
 ```bash

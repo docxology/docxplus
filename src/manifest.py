@@ -33,6 +33,7 @@ class Manifest:
     version: str = FORMAT_VERSION
     public_key: str = ""  # hex Ed25519 public key, if signed
     signature: str = ""  # hex Ed25519 signature over canonical_body()
+    surface_digest: str = ""  # digest of word/document.xml, so the signature binds visible text
 
     def add(self, record: ChannelRecord) -> None:
         if any(r.slot == record.slot for r in self.records):
@@ -61,6 +62,7 @@ class Manifest:
             "version": self.version,
             "modules": [r.to_dict() for r in sorted(self.records, key=lambda x: x.slot)],
             "merkle_root": self.merkle_root(),
+            "surface_digest": self.surface_digest,
         }
         return json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
@@ -69,7 +71,12 @@ class Manifest:
             "version": self.version,
             "modules": [r.to_dict() for r in sorted(self.records, key=lambda x: x.slot)],
             "merkle_root": self.merkle_root(),
-            "signature": {"algorithm": "ed25519", "public_key": self.public_key, "value": self.signature},
+            "surface_digest": self.surface_digest,
+            "signature": {
+                "algorithm": "ed25519",
+                "public_key": self.public_key,
+                "value": self.signature,
+            },
         }
         return json.dumps(doc, indent=2, sort_keys=True).encode("utf-8")
 
@@ -82,6 +89,7 @@ class Manifest:
             version=doc.get("version", FORMAT_VERSION),
             public_key=sig.get("public_key", ""),
             signature=sig.get("value", ""),
+            surface_digest=doc.get("surface_digest", ""),
         )
 
     def is_signed(self) -> bool:

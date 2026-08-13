@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+
 from channels import available_channels, get_channel
 from channels.metadata import MAX_PAYLOAD
 from wordml import new_base_document

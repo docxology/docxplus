@@ -86,25 +86,37 @@ def _check_opc(pkg: OpcPackage, report: ValidationReport) -> None:
 
 
 def _all_parts_reachable(pkg: OpcPackage) -> bool:
-    """Approximate OPC reachability: every non-rels part is a relationship target
-    from the package root or from another reachable part (report §14.1)."""
-    targets: set[str] = set()
+    """Root-anchored OPC reachability (report §14.1): walk relationships starting
+    from the package root, following only sources already proven reachable. A part
+    referenced solely by another *orphan* part must NOT count as reachable — a plain
+    "is any relationship a target" check would wrongly pass such orphan chains."""
     import posixpath
 
-    for source, rels in pkg.relationships.items():
+    def targets_of(source: str) -> set[str]:
         base_dir = "" if source == "" else posixpath.dirname(source)
-        for rel in rels:
+        out: set[str] = set()
+        for rel in pkg.relationships.get(source, []):
             if rel.mode == "External":
                 continue
             resolved = posixpath.normpath(
                 posixpath.join(base_dir, rel.target) if base_dir else rel.target
             )
-            targets.add(resolved.lstrip("/"))
+            out.add(resolved.lstrip("/"))
+        return out
+
+    reachable: set[str] = set()
+    frontier = list(targets_of(""))  # package-root relationships
+    while frontier:
+        part = frontier.pop()
+        if part in reachable:
+            continue
+        reachable.add(part)
+        frontier.extend(targets_of(part))
 
     for part in pkg.parts:
         if part.endswith(".rels"):
             continue
-        if part not in targets:
+        if part not in reachable:
             return False
     return True
 
@@ -116,6 +128,7 @@ def _check_intelligence(pkg: OpcPackage, report: ValidationReport) -> None:
         return
 
     import channels as channel_registry
+    from crypto import digest as _digest
 
     report.notes.append(f"intelligence modules: {len(manifest.records)}")
     for record in manifest.records:
@@ -129,21 +142,31 @@ def _check_intelligence(pkg: OpcPackage, report: ValidationReport) -> None:
         except Exception as exc:  # noqa: BLE001 - report, don't crash the validator
             report.fail(report.intelligence_errors, f"{record.slot}: extract failed: {exc}")
             continue
-        from crypto import digest as _digest
-
-        # For encrypted modules the stored bytes are the envelope; the manifest
-        # digest is over the *plaintext*, so we can only length-check here.
-        if record.encrypted:
-            if len(raw) < record.size:
-                report.fail(
-                    report.intelligence_errors,
-                    f"{record.slot}: ciphertext shorter than declared plaintext size",
-                )
-        elif _digest(raw) != record.digest:
+        # The manifest digest binds the STORED bytes uniformly (plaintext or sealed);
+        # plaintext integrity for sealed modules is the AEAD tag, checked on decrypt.
+        if _digest(raw) != record.digest:
             report.fail(report.intelligence_errors, f"{record.slot}: digest mismatch")
 
-    if manifest.is_signed() and not manifest.verify_signature():
-        report.fail(report.intelligence_errors, "manifest signature is invalid")
+    # Make the stored Merkle root live: it must equal the root recomputed from the
+    # module set, or the manifest is internally inconsistent.
+    import json as _json
+
+    from manifest import MANIFEST_PART
+
+    stored_root = _json.loads(pkg.parts[MANIFEST_PART]).get("merkle_root", "")
+    if stored_root != manifest.merkle_root():
+        report.fail(report.intelligence_errors, "stored merkle_root does not match the module set")
+
+    if manifest.is_signed():
+        if not manifest.verify_signature():
+            report.fail(report.intelligence_errors, "manifest signature is invalid")
+    else:
+        # Unsigned manifests carry no cryptographic provenance: an attacker who
+        # rewrites a module can also rewrite its digest. Loudly note it.
+        report.notes.append(
+            "WARNING: manifest is unsigned — module digests are not tamper-evident "
+            "without a signature (see docs/security-model.md)"
+        )
 
 
 def assert_valid(data: bytes) -> None:

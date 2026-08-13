@@ -53,3 +53,38 @@ def merkle_root(leaves: list[tuple[str, str]]) -> str:
 def verify_root(leaves: list[tuple[str, str]], root: str) -> bool:
     """True when the recomputed root matches ``root`` (both empty is vacuously ok)."""
     return merkle_root(leaves) == root
+
+
+def inclusion_proof(leaves: list[tuple[str, str]], slot: str) -> dict:
+    """Return a compact proof that ``slot`` is a leaf of the tree over ``leaves``.
+
+    The proof — ``{slot, digest, siblings: [[hex, is_right], ...], root}`` — lets a
+    third party confirm one module belongs to the signed set without seeing the
+    other modules' digests. This is the capability that makes the Merkle root more
+    than a redundant re-hash of the signed manifest.
+    """
+    ordered = sorted(leaves, key=lambda x: x[0])
+    slots = [s for s, _ in ordered]
+    if slot not in slots:
+        raise KeyError(slot)
+    digest = dict(ordered)[slot]
+    level = [leaf_hash(s, d) for s, d in ordered]
+    idx = slots.index(slot)
+    siblings: list[list] = []
+    while len(level) > 1:
+        if len(level) % 2 == 1:
+            level.append(level[-1])
+        sib = idx + 1 if idx % 2 == 0 else idx - 1
+        siblings.append([level[sib].hex(), idx % 2 == 0])
+        idx //= 2
+        level = [_h(_NODE, level[i], level[i + 1]) for i in range(0, len(level), 2)]
+    return {"slot": slot, "digest": digest, "siblings": siblings, "root": level[0].hex()}
+
+
+def verify_inclusion(proof: dict) -> bool:
+    """Verify an :func:`inclusion_proof` self-consistently (leaf folds to root)."""
+    cur = leaf_hash(proof["slot"], proof["digest"])
+    for sib_hex, is_right in proof["siblings"]:
+        sib = bytes.fromhex(sib_hex)
+        cur = _h(_NODE, cur, sib) if is_right else _h(_NODE, sib, cur)
+    return cur.hex() == proof["root"]
