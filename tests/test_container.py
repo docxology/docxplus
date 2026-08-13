@@ -62,7 +62,7 @@ def test_encrypted_module_requires_password(sample_payload):
         .build()
     )
     reader = DocxPlusReader.from_bytes(data)
-    with pytest.raises(ContainerError, match="encrypted"):
+    with pytest.raises(ContainerError, match="password"):
         reader.extract("secret")
 
 

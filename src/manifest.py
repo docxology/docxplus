@@ -22,7 +22,7 @@ from opc import OpcPackage, Relationship
 MANIFEST_PART = "intelligence/manifest.json"
 CT_MANIFEST = "application/vnd.docxplus.manifest+json"
 REL_MANIFEST = "urn:docxplus:intelligence:1.0/manifest"
-FORMAT_VERSION = "1.0"
+FORMAT_VERSION = "2.0"
 
 
 @dataclass
@@ -45,11 +45,22 @@ class Manifest:
                 return r
         raise KeyError(name)
 
+    def merkle_root(self) -> str:
+        """Merkle root over the module set — binds the collection, not just parts."""
+        from provenance import merkle_root as _root
+
+        return _root([(r.slot, r.digest) for r in self.records])
+
     def canonical_body(self) -> bytes:
-        """Deterministic bytes signed/verified: modules + version, no signature."""
+        """Deterministic bytes signed/verified: version + modules + Merkle root.
+
+        Including the Merkle root means the signature binds the *set* of modules;
+        dropping or injecting a module changes the root and breaks the signature.
+        """
         body = {
             "version": self.version,
             "modules": [r.to_dict() for r in sorted(self.records, key=lambda x: x.slot)],
+            "merkle_root": self.merkle_root(),
         }
         return json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
@@ -57,12 +68,13 @@ class Manifest:
         doc = {
             "version": self.version,
             "modules": [r.to_dict() for r in sorted(self.records, key=lambda x: x.slot)],
+            "merkle_root": self.merkle_root(),
             "signature": {"algorithm": "ed25519", "public_key": self.public_key, "value": self.signature},
         }
         return json.dumps(doc, indent=2, sort_keys=True).encode("utf-8")
 
     @classmethod
-    def from_bytes(cls, blob: bytes) -> "Manifest":
+    def from_bytes(cls, blob: bytes) -> Manifest:
         doc = json.loads(blob)
         sig = doc.get("signature", {})
         return cls(

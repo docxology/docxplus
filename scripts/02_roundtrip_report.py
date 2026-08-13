@@ -13,9 +13,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from container import DocxPlusReader  # noqa: E402
-from project_paths import ensure_output_dirs  # noqa: E402
-from validate import validate_bytes  # noqa: E402
+from container import DocxPlusReader
+from project_paths import ensure_output_dirs
+from validate import validate_bytes
 
 _PASSWORDS = {"secret": "correct horse"}
 

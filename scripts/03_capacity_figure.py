@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from project_paths import ensure_output_dirs  # noqa: E402
+from project_paths import ensure_output_dirs
 
 
 def main() -> int:

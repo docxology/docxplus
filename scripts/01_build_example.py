@@ -14,9 +14,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-import crypto  # noqa: E402
-from container import DocxPlusBuilder  # noqa: E402
-from project_paths import ensure_output_dirs  # noqa: E402
+import crypto
+from container import DocxPlusBuilder
+from project_paths import ensure_output_dirs
 
 
 def main() -> int:

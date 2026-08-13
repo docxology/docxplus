@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import base64
 
+from defusedxml.ElementTree import fromstring as _safe_fromstring
+
 from channels.base import ChannelRecord
 from crypto import digest as _digest
-from defusedxml.ElementTree import fromstring as _safe_fromstring
 from opc import OpcPackage, Relationship
 
 CT_CUSTOM_XML = "application/xml"
@@ -34,7 +35,7 @@ class CustomXmlChannel:
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             f'<dx:payload xmlns:dx="{NS_DXPLUS}" slot="{slot}" encoding="base64">'
             f"{encoded}</dx:payload>"
-        ).encode("utf-8")
+        ).encode()
         pkg.add_part(part_name, xml, CT_CUSTOM_XML)
         rid = pkg.next_rel_id("word/document.xml")
         pkg.add_relationship(

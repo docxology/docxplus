@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-import steg_bridge  # noqa: E402
+import steg_bridge
 
 
 def main() -> int:

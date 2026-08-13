@@ -46,7 +46,7 @@ def build_document_xml(paragraphs: list[str]) -> bytes:
         # A sectPr keeps Word happy about page geometry.
         '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/></w:sectPr>'
         "</w:body></w:document>"
-    ).encode("utf-8")
+    ).encode()
 
 
 def build_core_props(title: str, creator: str, keywords: str = "") -> bytes:
@@ -62,7 +62,7 @@ def build_core_props(title: str, creator: str, keywords: str = "") -> bytes:
         f"<dc:creator>{escape(creator)}</dc:creator>"
         f"<cp:keywords>{escape(keywords)}</cp:keywords>"
         "</cp:coreProperties>"
-    ).encode("utf-8")
+    ).encode()
 
 
 def new_base_document(

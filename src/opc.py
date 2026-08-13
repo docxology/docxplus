@@ -15,8 +15,8 @@ from __future__ import annotations
 
 import posixpath
 import zipfile
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Iterable
 
 from defusedxml.ElementTree import fromstring as _safe_fromstring
 

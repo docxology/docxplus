@@ -36,6 +36,25 @@ Every module is described by a signed **manifest** (`intelligence/manifest.json`
 — the authoritative list of what the package carries, playing the role ODF
 assigns to `META-INF/manifest.xml`.
 
+## What v0.2 adds
+
+The primitives scale on five orthogonal axes (see `docs/design-rationale.md`):
+
+- **Typed payloads** — `bytes`, `text`, `json`, **`project`** (a whole reproducible
+  repo packed to a deterministic tar), **`docxplus`** (a nested container). A
+  document can literally carry the software that produced it.
+- **Cryptographic depth** — `password` (AES-GCM), **multi-recipient** (X25519, one
+  file that opens for many key-holders), **k-of-n threshold** (Shamir; no single
+  holder can open it), and **decoy** (two secrets, two passwords).
+- **Composition** — nest a sealed DOCX+ inside another (matryoshka).
+- **Provenance** — a signed **Merkle root** binds the whole module set; adding,
+  dropping, or swapping a module breaks the signature.
+- **Covert depth** — the media channel's dual LSB backends.
+
+`docs/cookbook.md` gives eight buildable document kinds (self-verifying dossier,
+dead-man's envelope, sealed referee packet, provenance ledger, …). The showcase
+`scripts/04_dossier.py` builds and verifies all of them in one file.
+
 ## Quick start
 
 ```bash

@@ -45,6 +45,6 @@ __all__ = [
     "MetadataChannel",
     "PackagePartChannel",
     "StegMediaChannel",
-    "get_channel",
     "available_channels",
+    "get_channel",
 ]

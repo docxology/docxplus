@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
-"""``docxplus`` command-line interface — build, inspect, extract, validate DOCX+.
+"""``docxplus`` — build, inspect, extract, validate intelligent documents.
 
-Thin orchestrator: all logic lives in ``src/``. Examples::
+Thin orchestrator over ``src/``. Highlights::
 
-    docxplus build out.docx --text "Hello" --module brief:custom_xml:payload.json
-    docxplus inspect out.docx
-    docxplus extract out.docx brief --out brief.json
-    docxplus validate out.docx
-    docxplus keygen key.hex
+    docxplus build out.docx --text "Report" \
+        --module brief:custom_xml:brief.json --payload-type json
+    docxplus build out.docx --project source:./myrepo --password s3cret
+    docxplus build out.docx --module m:package_part:x.bin \
+        --recipient <hex> --recipient <hex>          # multi-recipient
+    docxplus build out.docx --module m:package_part:x.bin --threshold 3:5 --shares-dir shares/
+    docxplus graph out.docx                          # module tree
+    docxplus extract out.docx m --private-key key.hex --out m.bin
+    docxplus keygen key.hex --type ed25519|x25519
 """
 
 from __future__ import annotations
@@ -19,43 +23,94 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
-import crypto  # noqa: E402
-from container import DocxPlusBuilder, DocxPlusReader  # noqa: E402
-from validate import validate_bytes  # noqa: E402
+import crypto
+from container import DocxPlusBuilder, DocxPlusReader
+from validate import validate_bytes
 
 
 def _cmd_build(args: argparse.Namespace) -> int:
     builder = DocxPlusBuilder(paragraphs=[args.text], title=args.title)
+    recipients = [bytes.fromhex(h) for h in (args.recipient or [])]
+    threshold = tuple(int(x) for x in args.threshold.split(":")) if args.threshold else None
+    seal = {}
+    if args.password:
+        seal["password"] = args.password
+    elif recipients:
+        seal["recipients"] = recipients
+
     for spec in args.module or []:
         slot, channel, src = spec.split(":", 2)
         payload = Path(src).read_bytes()
-        builder.add_module(slot, channel, payload, password=args.password)
+        if threshold:
+            builder.add_threshold(slot, payload, k=threshold[0], n=threshold[1], channel_id=channel)
+        else:
+            builder.add_module(slot, channel, payload, payload_type=args.payload_type, **seal)
+
+    for spec in args.project or []:
+        slot, path = spec.split(":", 1)
+        builder.add_project(slot, path, **seal)
+
     if args.signing_key:
         builder.sign(bytes.fromhex(Path(args.signing_key).read_text().strip()))
-    Path(args.output).write_bytes(builder.build())
-    print(f"wrote {args.output}")
+
+    data = builder.build()
+    Path(args.output).write_bytes(data)
+    if threshold and builder.threshold_shares:
+        share_dir = Path(args.shares_dir or "shares")
+        share_dir.mkdir(parents=True, exist_ok=True)
+        for slot, shares in builder.threshold_shares.items():
+            for i, sh in enumerate(shares, 1):
+                (share_dir / f"{slot}.share{i}.bin").write_bytes(sh)
+        print(f"wrote {args.output} and {sum(len(s) for s in builder.threshold_shares.values())} shares to {share_dir}")
+    else:
+        print(f"wrote {args.output}")
     return 0
 
 
 def _cmd_inspect(args: argparse.Namespace) -> int:
     reader = DocxPlusReader.from_bytes(Path(args.docx).read_bytes())
-    info = {
+    print(json.dumps({
         "modules": [r.to_dict() for r in reader.manifest.records],
+        "merkle_root": reader.merkle_root(),
         "signature": reader.signature_status(),
         "version": reader.manifest.version,
-    }
-    print(json.dumps(info, indent=2))
+    }, indent=2))
+    return 0
+
+
+def _cmd_graph(args: argparse.Namespace) -> int:
+    reader = DocxPlusReader.from_bytes(Path(args.docx).read_bytes())
+    print(f"{Path(args.docx).name}  [signature: {reader.signature_status()}]")
+    print(f"  merkle_root: {reader.merkle_root()[:16]}…" if reader.merkle_root() else "  (no modules)")
+    for r in reader.manifest.records:
+        mode = r.sealing.get("mode", "plain")
+        print(f"  • {r.slot}  type={r.payload_type}  channel={r.channel}  seal={mode}  {r.size}B")
     return 0
 
 
 def _cmd_extract(args: argparse.Namespace) -> int:
     reader = DocxPlusReader.from_bytes(Path(args.docx).read_bytes())
-    data = reader.extract(args.slot, password=args.password)
+    creds = {}
+    if args.password:
+        creds["password"] = args.password
+    if args.private_key:
+        creds["private_key"] = bytes.fromhex(Path(args.private_key).read_text().strip())
+    if args.share:
+        creds["shares"] = [Path(p).read_bytes() for p in args.share]
+    data = reader.extract(args.slot, **creds)
     if args.out:
         Path(args.out).write_bytes(data)
         print(f"wrote {args.out} ({len(data)} bytes)")
     else:
         sys.stdout.buffer.write(data)
+    return 0
+
+
+def _cmd_unpack_project(args: argparse.Namespace) -> int:
+    reader = DocxPlusReader.from_bytes(Path(args.docx).read_bytes())
+    creds = {"password": args.password} if args.password else {}
+    dest = reader.extract_project(args.slot, args.dest, **creds)
+    print(f"unpacked project to {dest}")
     return 0
 
 
@@ -66,10 +121,13 @@ def _cmd_validate(args: argparse.Namespace) -> int:
 
 
 def _cmd_keygen(args: argparse.Namespace) -> int:
-    priv, pub = crypto.generate_signing_key()
+    if args.type == "x25519":
+        priv, pub = crypto.generate_recipient_key()
+    else:
+        priv, pub = crypto.generate_signing_key()
     Path(args.output).write_text(priv.hex())
     Path(args.output + ".pub").write_text(pub.hex())
-    print(f"wrote {args.output} and {args.output}.pub")
+    print(f"wrote {args.output} and {args.output}.pub ({args.type})")
     return 0
 
 
@@ -77,38 +135,52 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="docxplus", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_build = sub.add_parser("build", help="build a DOCX+ document")
-    p_build.add_argument("output")
-    p_build.add_argument("--text", default="This is an ordinary document.")
-    p_build.add_argument("--title", default="Document")
-    p_build.add_argument(
-        "--module",
-        action="append",
-        metavar="SLOT:CHANNEL:FILE",
-        help="attach a payload file on a channel under a manifest slot",
-    )
-    p_build.add_argument("--password", help="encrypt all attached modules")
-    p_build.add_argument("--signing-key", help="hex Ed25519 private key file")
-    p_build.set_defaults(func=_cmd_build)
+    b = sub.add_parser("build", help="build a DOCX+ document")
+    b.add_argument("output")
+    b.add_argument("--text", default="This is an ordinary document.")
+    b.add_argument("--title", default="Document")
+    b.add_argument("--module", action="append", metavar="SLOT:CHANNEL:FILE")
+    b.add_argument("--project", action="append", metavar="SLOT:DIR", help="carry a whole directory")
+    b.add_argument("--payload-type", default="bytes")
+    b.add_argument("--password", help="password-seal all modules")
+    b.add_argument("--recipient", action="append", metavar="HEXPUB", help="X25519 recipient (repeatable)")
+    b.add_argument("--threshold", metavar="K:N", help="Shamir k-of-n seal")
+    b.add_argument("--shares-dir", help="where to write threshold shares")
+    b.add_argument("--signing-key", help="hex Ed25519 private key file")
+    b.set_defaults(func=_cmd_build)
 
-    p_inspect = sub.add_parser("inspect", help="list intelligence modules")
-    p_inspect.add_argument("docx")
-    p_inspect.set_defaults(func=_cmd_inspect)
+    i = sub.add_parser("inspect", help="dump the manifest as JSON")
+    i.add_argument("docx")
+    i.set_defaults(func=_cmd_inspect)
 
-    p_extract = sub.add_parser("extract", help="extract one module by slot")
-    p_extract.add_argument("docx")
-    p_extract.add_argument("slot")
-    p_extract.add_argument("--out")
-    p_extract.add_argument("--password")
-    p_extract.set_defaults(func=_cmd_extract)
+    g = sub.add_parser("graph", help="print the module tree")
+    g.add_argument("docx")
+    g.set_defaults(func=_cmd_graph)
 
-    p_validate = sub.add_parser("validate", help="validate OPC + intelligence conformance")
-    p_validate.add_argument("docx")
-    p_validate.set_defaults(func=_cmd_validate)
+    e = sub.add_parser("extract", help="extract one module by slot")
+    e.add_argument("docx")
+    e.add_argument("slot")
+    e.add_argument("--out")
+    e.add_argument("--password")
+    e.add_argument("--private-key", help="hex X25519 private key file (multi-recipient)")
+    e.add_argument("--share", action="append", metavar="FILE", help="threshold share (repeatable)")
+    e.set_defaults(func=_cmd_extract)
 
-    p_keygen = sub.add_parser("keygen", help="generate an Ed25519 signing key")
-    p_keygen.add_argument("output")
-    p_keygen.set_defaults(func=_cmd_keygen)
+    up = sub.add_parser("unpack-project", help="extract a project module to a directory")
+    up.add_argument("docx")
+    up.add_argument("slot")
+    up.add_argument("dest")
+    up.add_argument("--password")
+    up.set_defaults(func=_cmd_unpack_project)
+
+    v = sub.add_parser("validate", help="validate OPC + intelligence conformance")
+    v.add_argument("docx")
+    v.set_defaults(func=_cmd_validate)
+
+    k = sub.add_parser("keygen", help="generate a signing (ed25519) or recipient (x25519) key")
+    k.add_argument("output")
+    k.add_argument("--type", choices=["ed25519", "x25519"], default="ed25519")
+    k.set_defaults(func=_cmd_keygen)
 
     args = parser.parse_args(argv)
     return args.func(args)

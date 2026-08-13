@@ -73,11 +73,12 @@ def available(repo: Path | None = None) -> bool:
 
 
 def _run(tool: StegTool, args: list[str], timeout: int = 600) -> subprocess.CompletedProcess:
-    proc = subprocess.run(  # noqa: S603 - argv is fully constructed, no shell
+    proc = subprocess.run(
         [*tool.argv_prefix, *args],
         cwd=str(tool.cwd) if tool.cwd else None,
         capture_output=True,
         timeout=timeout,
+        check=False,
     )
     if proc.returncode != 0:
         raise StegError(

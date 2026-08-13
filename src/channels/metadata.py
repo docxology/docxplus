@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import base64
 
+from defusedxml.ElementTree import fromstring as _safe_fromstring
+
 from channels.base import ChannelRecord
 from crypto import digest as _digest
-from defusedxml.ElementTree import fromstring as _safe_fromstring
 from opc import OpcPackage, Relationship
 
 CT_CUSTOM_PROPS = (
@@ -86,7 +87,7 @@ def _store_props(pkg: OpcPackage, props: dict[str, str]) -> None:
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         f'<Properties xmlns="{NS_CUSTOM}" xmlns:vt="{NS_VT}">'
         f'{"".join(entries)}</Properties>'
-    ).encode("utf-8")
+    ).encode()
 
     if CUSTOM_PART in pkg.parts:
         pkg.parts[CUSTOM_PART] = xml

@@ -22,7 +22,17 @@ from opc import OpcPackage
 
 @dataclass
 class ChannelRecord:
-    """One entry in the intelligence manifest describing a placed payload."""
+    """One entry in the intelligence manifest describing a placed payload.
+
+    ``digest`` is over the plaintext, packed payload (after payload-type packing,
+    before sealing). ``sealing`` describes the crypto envelope:
+
+        {"mode": "plain"}                                  # no encryption
+        {"mode": "password"}                               # DXE1 (AES-GCM/PBKDF2)
+        {"mode": "recipients", "recipients": [hex, ...]}   # DXE2 (X25519 multi)
+        {"mode": "threshold", "k": 3, "n": 5}              # Shamir over content key
+        {"mode": "decoy"}                                  # two secrets, two passwords
+    """
 
     channel: str
     slot: str
@@ -30,6 +40,8 @@ class ChannelRecord:
     digest: str
     encrypted: bool = False
     content_type: str = "application/octet-stream"
+    payload_type: str = "bytes"
+    sealing: dict = field(default_factory=lambda: {"mode": "plain"})
     location: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -40,11 +52,13 @@ class ChannelRecord:
             "digest": self.digest,
             "encrypted": self.encrypted,
             "content_type": self.content_type,
+            "payload_type": self.payload_type,
+            "sealing": dict(self.sealing),
             "location": dict(self.location),
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "ChannelRecord":
+    def from_dict(cls, data: dict) -> ChannelRecord:
         return cls(
             channel=data["channel"],
             slot=data["slot"],
@@ -52,6 +66,8 @@ class ChannelRecord:
             digest=data["digest"],
             encrypted=bool(data.get("encrypted", False)),
             content_type=data.get("content_type", "application/octet-stream"),
+            payload_type=data.get("payload_type", "bytes"),
+            sealing=dict(data.get("sealing", {"mode": "plain"})),
             location=dict(data.get("location", {})),
         )
 

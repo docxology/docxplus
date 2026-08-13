@@ -23,11 +23,17 @@ import os
 from dataclasses import dataclass
 
 from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
 )
+from cryptography.hazmat.primitives.asymmetric.x25519 import (
+    X25519PrivateKey,
+    X25519PublicKey,
+)
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 DEFAULT_SPIN_COUNT = 100_000  # PBKDF2 iterations; report §7.1 calls the count agile.
 SALT_BYTES = 16
@@ -81,7 +87,7 @@ class EncryptedPayload:
         return header + self.ciphertext
 
     @classmethod
-    def from_bytes(cls, blob: bytes) -> "EncryptedPayload":
+    def from_bytes(cls, blob: bytes) -> EncryptedPayload:
         if blob[:4] != b"DXE1":
             raise ValueError("not a DOCX+ encrypted payload (bad magic)")
         i = 4
@@ -138,3 +144,98 @@ def verify(data: bytes, signature: bytes, public_key: bytes) -> bool:
         return True
     except (InvalidSignature, ValueError):
         return False
+
+
+# -- content-key symmetric layer -------------------------------------------
+def encrypt_with_key(plaintext: bytes, key: bytes) -> bytes:
+    """AES-256-GCM under a raw 32-byte key → ``nonce || ciphertext``."""
+    if len(key) != KEY_BYTES:
+        raise ValueError("content key must be 32 bytes")
+    nonce = os.urandom(NONCE_BYTES)
+    return nonce + AESGCM(key).encrypt(nonce, plaintext, None)
+
+
+def decrypt_with_key(blob: bytes, key: bytes) -> bytes:
+    """Reverse :func:`encrypt_with_key`."""
+    nonce, ciphertext = blob[:NONCE_BYTES], blob[NONCE_BYTES:]
+    return AESGCM(key).decrypt(nonce, ciphertext, None)
+
+
+# -- X25519 multi-recipient hybrid sealing (DXE2) --------------------------
+def generate_recipient_key() -> tuple[bytes, bytes]:
+    """Return ``(x25519_private_32, x25519_public_32)`` raw bytes."""
+    priv = X25519PrivateKey.generate()
+    return priv.private_bytes_raw(), priv.public_key().public_bytes_raw()
+
+
+def _wrap_key(content_key: bytes, recipient_pub: bytes) -> tuple[bytes, bytes]:
+    """Wrap ``content_key`` for one recipient via X25519 + HKDF + AES-GCM.
+
+    Returns ``(ephemeral_pub, wrapped)`` where ``wrapped = nonce || ct``.
+    """
+    eph = X25519PrivateKey.generate()
+    shared = eph.exchange(X25519PublicKey.from_public_bytes(recipient_pub))
+    eph_pub = eph.public_key().public_bytes_raw()
+    kek = HKDF(hashes.SHA256(), KEY_BYTES, salt=None, info=b"docxplus/dxe2").derive(
+        eph_pub + recipient_pub + shared
+    )
+    return eph_pub, encrypt_with_key(content_key, kek)
+
+
+def _unwrap_key(eph_pub: bytes, wrapped: bytes, recipient_priv: bytes) -> bytes:
+    priv = X25519PrivateKey.from_private_bytes(recipient_priv)
+    recipient_pub = priv.public_key().public_bytes_raw()
+    shared = priv.exchange(X25519PublicKey.from_public_bytes(eph_pub))
+    kek = HKDF(hashes.SHA256(), KEY_BYTES, salt=None, info=b"docxplus/dxe2").derive(
+        eph_pub + recipient_pub + shared
+    )
+    return decrypt_with_key(wrapped, kek)
+
+
+def seal_multi(plaintext: bytes, recipients: list[bytes]) -> bytes:
+    """Encrypt ``plaintext`` once, wrapping the content key for each recipient.
+
+    Envelope layout::
+
+        "DXE2" | body_len(4) | body | recip_count(2) | [ eph(32) wrap_len(2) wrap ]...
+
+    body = encrypt_with_key(plaintext, content_key).
+    """
+    if not recipients:
+        raise ValueError("at least one recipient required")
+    content_key = os.urandom(KEY_BYTES)
+    body = encrypt_with_key(plaintext, content_key)
+    out = bytearray(b"DXE2" + len(body).to_bytes(4, "big") + body)
+    out += len(recipients).to_bytes(2, "big")
+    for pub in recipients:
+        eph_pub, wrapped = _wrap_key(content_key, pub)
+        out += eph_pub + len(wrapped).to_bytes(2, "big") + wrapped
+    return bytes(out)
+
+
+def unseal_multi(envelope: bytes, recipient_priv: bytes) -> bytes:
+    """Open a :func:`seal_multi` envelope with one recipient's private key."""
+    if envelope[:4] != b"DXE2":
+        raise ValueError("not a DXE2 multi-recipient envelope")
+    i = 4
+    body_len = int.from_bytes(envelope[i : i + 4], "big")
+    i += 4
+    body = envelope[i : i + body_len]
+    i += body_len
+    count = int.from_bytes(envelope[i : i + 2], "big")
+    i += 2
+    last_error: Exception | None = None
+    for _ in range(count):
+        eph_pub = envelope[i : i + 32]
+        i += 32
+        wrap_len = int.from_bytes(envelope[i : i + 2], "big")
+        i += 2
+        wrapped = envelope[i : i + wrap_len]
+        i += wrap_len
+        try:
+            content_key = _unwrap_key(eph_pub, wrapped, recipient_priv)
+            return decrypt_with_key(body, content_key)
+        except Exception as exc:  # noqa: BLE001 - wrong slot for this key; try next
+            last_error = exc
+            continue
+    raise ValueError("no recipient slot could be opened with this key") from last_error

@@ -3,7 +3,7 @@
   "@type": "SoftwareSourceCode",
   "name": "DOCX+ — the Intelligent Document Container",
   "description": "A byte-valid OOXML .docx that also carries a modular, signed, encrypted intelligence layer through spec-sanctioned side-channels, with an optional steganographer signed-packet media backend.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "programmingLanguage": "Python",
   "runtimePlatform": "Python 3.10+",
   "license": "https://spdx.org/licenses/MIT",

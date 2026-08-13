@@ -1,4 +1,4 @@
-# DOCX+ Intelligent Container — Format Specification v1.0
+# DOCX+ Intelligent Container — Format Specification v2.0
 
 DOCX+ is a profile of an ordinary Office Open XML (OOXML) WordprocessingML package
 (`.docx`). A conforming DOCX+ file is, first, a conforming OPC package: opening it
@@ -116,3 +116,44 @@ New channels register under the same `Channel` contract (`embed` / `extract` /
 `capacity`) and appear in the manifest by id. Readers that do not recognise a
 channel id fail that module explicitly rather than silently — the manifest is the
 contract.
+
+## 7. Payload types (v2.0)
+
+A module records a `payload_type` id. The type owns how an object is packed to
+bytes and back, so a payload is a typed object, not a blob. Built-in types:
+
+| Type | Meaning | Packing |
+| --- | --- | --- |
+| `bytes` | opaque bytes | identity |
+| `text` | UTF-8 string | encode/decode |
+| `json` | JSON object | canonical compact JSON |
+| `project` | a whole directory tree | deterministic tar.gz (fixed mtime, sorted, junk excluded); path-traversal-guarded on unpack |
+| `docxplus` | a nested DOCX+ document | identity bytes, typed so readers recurse |
+
+The digest recorded for a module is over the **packed** payload (post-pack,
+pre-seal), so integrity is checked against the reconstructed object.
+
+## 8. Sealing modes (v2.0)
+
+Each module's `sealing.mode` selects how the packed payload is protected. All modes
+seal the *payload*, never the package, so the surface `.docx` stays openable.
+
+| Mode | Envelope | Credential to open | Use |
+| --- | --- | --- | --- |
+| `plain` | none | — | public modules |
+| `password` | `DXE1` (AES-256-GCM, PBKDF2-SHA512) | password | single secret |
+| `recipients` | `DXE2` (X25519 → HKDF-SHA256 → AES-GCM, content key wrapped per recipient) | any recipient's X25519 private key | multi-recipient (referee packet) |
+| `threshold` | AES-GCM under a random content key, key Shamir-split k-of-n over GF(256) | any `k` of `n` shares | dead-man's envelope |
+| `decoy` | two `DXE1` envelopes concatenated behind `DXD1` | either password opens its own payload | plausible deniability |
+
+`DXE2` layout: `"DXE2" | body_len(4) | body | recip_count(2) | [ eph_pub(32) wrap_len(2) wrap ]…`.
+
+## 9. Provenance — Merkle binding (v2.0)
+
+The manifest carries a `merkle_root` over all modules: leaves are
+`blake2b(0x00 ‖ slot ‖ 0x00 ‖ module_digest)`, internal nodes
+`blake2b(0x01 ‖ left ‖ right)`, odd nodes promoted, modules ordered by slot. The
+root is folded into the canonical body that the Ed25519 signature covers, so the
+signature binds the **set** of modules: dropping, adding, or swapping any module
+changes the root and invalidates the signature. `verify_provenance()` returns true
+only when a signature is present and validates over the Merkle-bound body.
