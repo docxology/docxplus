@@ -39,3 +39,10 @@ contract:
 
 The manifest, not the byte layout, is authoritative; a reader never guesses part
 names. This mirrors the role ODF assigns to its mandatory `META-INF/manifest.xml`.
+
+## 1.4 Sibling ODF profile
+
+DOCX+ architecture extends symmetrically to OpenDocument Text (`.odt`). Grounded in
+OASIS OpenDocument v1.3/v1.4 Part 2, the ODT profile stores `mimetype` uncompressed
+as the byte-exact first ZIP record, establishes `META-INF/manifest.xml` index records,
+and nests `intelligence/manifest.json` along with side-channel payloads seamlessly.

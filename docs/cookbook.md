@@ -24,10 +24,10 @@ inner = DocxPlusBuilder(...).add_module("q4", "package_part", secret).build()
 builder.add_nested("sealed", inner)          # a whole container as one module
 ```
 
-## 3. The Dead-Man's Envelope (k-of-n threshold)
+## 3. The Dead-Man's Envelope (k-of-n threshold & VSS)
 The dossier's content key is Shamir-split into *n* shares; any *k* custodians
-together reconstruct it, none alone. Distribute shares to a board; three of five can
-open it.
+together reconstruct it, none alone. Optional Verifiable Secret Sharing (`verifiable=True`)
+attaches Blake2b integrity tags so corrupted or malicious shares are detected prior to reconstruction.
 ```python
 builder.add_threshold("legacy", payload, k=3, n=5)
 data = builder.build()
@@ -82,7 +82,26 @@ the document, its software, and its results are the ones the author sealed — a
 re-derive them. Run `scripts/05_living_manuscript.py`, which does exactly this over
 the real `template_code_project`.
 
+## 9. The MCE Hidden Channel
+Embeds payload modules directly inside the WordprocessingML main document (`word/document.xml`)
+using `<mc:Choice>` branches marked with an ignorable namespace (`urn:docxplus:mce:1.0`).
+Unaware word processors discard the choice branch and render the benign `<mc:Fallback>` text.
+```python
+builder.add_module("notes", "mce", secret_data)
+reader.extract("notes")
+```
+
+## 10. The ODT Sibling Container
+Produces OASIS OpenDocument Text archives carrying the same signed intelligence manifest
+and side-channel payloads, maintaining byte-exact ODF 1.3/1.4 conformance.
+```python
+from odt import new_base_odt
+pkg = new_base_odt(["ODF surface text"])
+pkg.add_part("intelligence/payload1.dxp", payload_bytes)
+odt_bytes = pkg.to_bytes()
+```
+
 ---
 
 Every recipe keeps the **surface contract**: the file still opens as an ordinary
-`.docx`. The intelligence is additive.
+document (`.docx` or `.odt`). The intelligence is additive.

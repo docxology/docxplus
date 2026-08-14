@@ -1,6 +1,6 @@
 # 2. Implementation
 
-## 2.1 Package layer
+## 2.1 Package layer & ODT profile
 
 `opc.py` implements the OPC model directly on stdlib `zipfile`: parts, per-extension
 Default and per-part Override content types, and relationship sets keyed by owning
@@ -9,20 +9,24 @@ first, remaining entries sorted by name — following the Reproducible Builds
 guidance the standards report cites. Documented invariants are enforced on both
 write and read: duplicate part names are rejected, `[Content_Types].xml` is
 required, and every part must carry a resolvable content type. `wordml.py` builds
-the minimal conforming WordprocessingML surface document.
+the minimal conforming WordprocessingML surface document. In parallel, `odt.py`
+implements the OASIS OpenDocument Text package layout with uncompressed `mimetype`
+first-entry placement, `META-INF/manifest.xml` generation, and XML defusing.
 
-## 2.2 Cryptography
+## 2.2 Cryptography & Key Derivation
 
 `crypto.py` seals payloads with AES-{{KEY_BITS}}-GCM under a key from a self-describing,
-KDF-tagged `DXE1` envelope. The default KDF is memory-hard **Scrypt**; PBKDF2-HMAC-
-SHA512 ({{PBKDF2_ITERATIONS}} iterations) remains available for compatibility, and readers cap
-attacker-supplied work factors so a hostile envelope cannot become a denial-of-
-service. The module slot is bound as AEAD additional data, and the manifest digest
-covers the stored ciphertext (never a plaintext digest, which would be an offline
-confirmation oracle). `crypto.py` also provides X25519 multi-recipient hybrid
-sealing (`DXE2`, content key wrapped per recipient) and Ed25519 signing; `shamir.py`
-implements k-of-n secret sharing over GF(256) for threshold sealing. Manifests are
-signed over a canonical, whitespace-independent body.
+KDF-tagged `DXE1` envelope. Key derivation lineages include RFC 9106 recommended
+**Argon2id** (memory-hard, resistant to GPU/side-channel attacks) and **Scrypt** (the default;
+{{SCRYPT_N}} iterations), alongside PBKDF2-HMAC-SHA512 ({{PBKDF2_ITERATIONS}} iterations)
+for legacy compatibility. Readers strictly cap attacker-supplied work factors so a hostile
+envelope cannot trigger a denial-of-service. The module slot is bound as AEAD additional
+data, and the manifest digest covers the stored ciphertext (never a plaintext digest, which
+would be an offline confirmation oracle). `crypto.py` also provides X25519 multi-recipient
+hybrid sealing (`DXE2`, content key wrapped per recipient) and Ed25519 signing. `shamir.py`
+implements k-of-n secret sharing over GF(256) with optional Verifiable Secret Sharing (VSS)
+cryptographic commitment tags (`0xFF` prefix, Blake2b digest) to detect tampered shares
+prior to polynomial interpolation. Manifests are signed over a canonical, whitespace-independent body.
 
 ## 2.3 Typed payloads, provenance, and reproduction
 
@@ -32,12 +36,15 @@ tar. `provenance.py` computes a Merkle root over the module set and issues inclu
 proofs. The signed manifest body binds that root *and* a digest of `word/
 document.xml`, so a signature covers both the module set and the visible text;
 authenticity requires the caller to pin the signer's key (`expected_public_key`).
+`transparency.py` provides an append-only cryptographic transparency log and hash chain
+for reproduction attestations, enabling distributed zero-knowledge verification.
 `reproduce.py` is the only code-execution path: it runs an attested command in a
-best-effort hermetic sandbox (scrubbed environment, resource + file-size limits, a
-clamped timeout, network denied and writes confined where the platform supports it)
-and only under an explicit opt-in — a document never runs itself.
+best-effort hermetic sandbox (scrubbed environment with dynamic linker injection variables
+explicitly purged, resource + file-size limits, a clamped timeout, network denied and
+writes confined where the platform supports it) and only under an explicit opt-in — a
+document never runs itself.
 
-## 2.4 Media steganography
+## 2.4 Media steganography & MCE
 
 `lsb.py` is a pure-Python LSB codec: a `DXL1`-framed payload is written into the
 least-significant bit of each RGB channel of a PNG, reversibly and
@@ -48,6 +55,8 @@ Reed-Solomon ECC. Absence of the toolchain is a graceful skip; a genuine
 encode/decode failure raises rather than silently no-ops. A `redundancy=N` option
 replicates the payload across N carriers, and extraction returns the replica whose
 bytes match the module digest, so the document survives losing all but one.
+`mce.py` provides the Markup Compatibility and Extensibility channel, embedding
+payloads in `<mc:Choice>` branches under ignorable namespaces in `word/document.xml`.
 
 ## 2.5 Composition, validation, and intake
 

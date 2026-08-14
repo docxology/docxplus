@@ -103,10 +103,12 @@ When a module is password-sealed, the plaintext is wrapped in a self-describing
 ```
 
 Key derivation is recorded per envelope. The default is **Scrypt** (memory-hard,
-`N=2^15, r=8, p=1`; `kdf_id=2`, `params = n_log2 ‖ r ‖ p`); **PBKDF2-HMAC-SHA512**
+`N=2^15, r=8, p=1`; `kdf_id=2`, `params = n_log2 ‖ r ‖ p`); **Argon2id** (RFC 9106,
+`memory_cost=65536 KiB, time_cost=3, parallelism=4`; `kdf_id=3`, `params = memory_cost(4) ‖ time_cost(2) ‖ parallelism(2)`)
+provides first-line side-channel and GPU resistance; **PBKDF2-HMAC-SHA512**
 is available for compatibility (`kdf_id=1`, `params = iterations(4)`, default
 600 000 per OWASP-2023). Readers **cap** attacker-supplied work factors
-(scrypt `N ≤ 2^21`, PBKDF2 `≤ 5,000,000`) so a hostile envelope cannot turn
+(argon2id memory `≤ 256 MiB`, time `≤ 10`, parallelism `≤ 16`; scrypt `N ≤ 2^21`, PBKDF2 `≤ 5,000,000`) so a hostile envelope cannot turn
 opening into a denial-of-service.
 
 The AEAD is bound to the module **slot as additional authenticated data (AAD)**, so
@@ -258,11 +260,16 @@ extraction), so the attested digest matches what a reader reproduces. Honest lim
 a match proves the pipeline ran as stated on a matching toolchain — never that the
 science is sound.
 
-## 13. Sibling profiles & Verifiable Secret Sharing (v0.6)
+## 13. Sibling profiles, Verifiable Secret Sharing, and Transparency Logs (v0.6)
 
 * **OpenDocument Text (ODT) Profile**: Compliant with OASIS OpenDocument v1.3/v1.4 Part 2.
-  Packages store `mimetype` uncompressed as the first ZIP entry, followed by
+  Packages store `mimetype` uncompressed (ZIP_STORED) as the first ZIP entry, followed by
   `META-INF/manifest.xml` index records, `content.xml`, `meta.xml`, and payload entries.
 * **Verifiable Secret Sharing (VSS)**: Shamir shares support an optional integrity header
-  (`0xFF || x(1) || digest(32) || payload`) enabling polynomial/share validation prior
-  to interpolation.
+  (`0xFF || x(1) || digest(32) || payload` where `digest = blake2b(x || payload)`)
+  enabling polynomial/share validation prior to interpolation (`verify_share`).
+* **Cryptographic Transparency Log**: `TransparencyLog` (`src/transparency.py`) produces
+  append-only, tamper-evident hash chains and Merkle inclusion proofs over reproduction
+  attestations, facilitating public verification across distributed nodes without re-execution.
+* **Sandbox Linker Scrubbing**: The sandbox reproduction harness explicitly strips `DYLD_*`
+  and `LD_*` injection vectors (`LD_PRELOAD`, `DYLD_INSERT_LIBRARIES`) before child process dispatch.

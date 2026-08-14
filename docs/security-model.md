@@ -9,7 +9,7 @@ an integrator must handle.
 
 | Property | Mechanism | Basis |
 | --- | --- | --- |
-| Payload confidentiality | AES-256-GCM over the payload; key from memory-hard **Scrypt** (default; PBKDF2-HMAC-SHA512 available), work factors capped on read | MS-OFFCRYPTO *agile* lineage (report §7.1); OWASP-2023 |
+| Payload confidentiality | AES-256-GCM over the payload; key from memory-hard **Argon2id** or **Scrypt** (default; PBKDF2-HMAC-SHA512 available), work factors capped on read | MS-OFFCRYPTO *agile* lineage (report §7.1); RFC 9106; OWASP-2023 |
 | Payload integrity | GCM auth tag for plaintext; the manifest digest binds the **stored (ciphertext) bytes** and is checked before decryption | avoids the offline plaintext-confirmation oracle a plaintext digest would give |
 | Context binding | the module **slot** is AAD in every AEAD operation | a ciphertext cannot be spliced into another slot |
 | Manifest + surface integrity | Ed25519 signature over the canonical body binds the Merkle root over all modules **and** the digest of `word/document.xml` | signature covers both the module set and the visible text |

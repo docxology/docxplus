@@ -37,7 +37,7 @@ ordinary report (confirmed with the independent `python-docx` reader).
 
 Channel capacity (`scripts/03_capacity_figure.py`) spans four orders of magnitude:
 the metadata channel is a short-string carrier (≤ {{METADATA_MAX_BYTES}} bytes by
-design), custom XML and package parts are effectively unbounded, and the media
+design), custom XML, package parts, and MCE branches are effectively unbounded, and the media
 channel scales with carrier pixels — a 256×256 PNG holds {{MEDIA_CAP_256}} bytes and
 a 512×512 PNG {{MEDIA_CAP_512}} — at the standard LSB rate of one payload byte per
 eight colour-channel bits minus framing. The media channel's `redundancy=N` option
@@ -51,14 +51,16 @@ Because sealing is per-module rather than whole-package, the file never enters t
 MS-OFFCRYPTO compound-file envelope and stays a directly openable `.docx` — the
 intelligence layer is additive, not substitutive. Unencrypted, unsigned builds are
 byte-identical across runs (`test_container.py::test_build_is_deterministic`);
-encryption and signing introduce fresh salt/nonce material by design.
+encryption and signing introduce fresh salt/nonce material by design. Headless LibreOffice
+conversions confirm complete interoperability.
 
 ## 3.5 Adversarial verification
 
-Every version from v0.2 onward was hardened by an adversarial review with
+Every version from v0.2 through v0.6 was hardened by an adversarial review with
 independent verification; every confirmed finding and its fix is recorded in
 `docs/redteam-audit.md`, each pinned by a regression test so a reintroduced defect
 fails the suite. A trust-anchor review made authenticity require a caller-pinned
-`expected_public_key`, and a co-signature review bound co-signatures to the visible
-text. Green tests are treated as necessary, not sufficient: the load-bearing claims
-were reproduced by an adversary before being believed.
+`expected_public_key`, a co-signature review bound co-signatures to the visible
+text, and a sandbox audit purged dynamic linker injection variables. Green tests are
+treated as necessary, not sufficient: the load-bearing claims were reproduced by an
+adversary before being believed.
