@@ -17,7 +17,7 @@
 \vspace{0.2in}
 {\normalsize Version: 1.0.1 · Date: 2026-08-17\par}
 {\normalsize Standard Reference: ISO/IEC 29500-2 (OPC) · OASIS OpenDocument v1.3/v1.4\par}
-{\normalsize DOI: \href{https://doi.org/10.5281/zenodo.21983949}{10.5281/zenodo.21983949}\par}
+{\normalsize DOI: \href{https://doi.org/10.5281/zenodo.21985580}{10.5281/zenodo.21985580}\par}
 \vfill
 {\small Licensed under MIT · Deterministic, Mock-Free Verification Gate: 90\% Coverage\par}
 \end{center}

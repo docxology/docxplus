@@ -1,6 +1,6 @@
 # docxplus — the Intelligent Document Container
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21983949.svg)](https://doi.org/10.5281/zenodo.21983949)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21983948.svg)](https://doi.org/10.5281/zenodo.21983948)
 
 > A byte-valid OOXML `.docx` that is **also** a modular, signed, encrypted
 > intelligence carrier. It opens as an ordinary document in Word, LibreOffice, and

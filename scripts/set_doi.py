@@ -94,6 +94,33 @@ def resolves(doi: str, *, timeout: int = 20) -> tuple[bool, str]:
     return True, f"reserved on draft deposition {record}: {title}"
 
 
+def concept_doi(version_doi: str, *, timeout: int = 20) -> str:
+    """The record's concept DOI, which always resolves to the latest version."""
+    record = version_doi.rsplit(".", 1)[-1]
+    try:
+        with urllib.request.urlopen(
+            f"https://zenodo.org/api/records/{record}", timeout=timeout
+        ) as response:
+            return json.load(response).get("conceptdoi", "") or ""
+    except Exception:
+        pass
+    # A reserved DOI has no public record yet, and the badge is written *before*
+    # publication so the released README is correct on the day it ships. The draft
+    # knows its own concept DOI, so ask it.
+    token = os.environ.get("ZENODO_PROD_TOKEN", "").strip()
+    if not token:
+        return ""
+    request = urllib.request.Request(
+        f"https://zenodo.org/api/deposit/depositions/{record}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return json.load(response).get("conceptdoi", "") or ""
+    except Exception:
+        return ""
+
+
 def apply(doi: str) -> list[str]:
     root = project_root()
     touched: list[str] = []
@@ -118,14 +145,28 @@ def apply(doi: str) -> list[str]:
         path.write_text(json.dumps(data, indent=2) + "\n")
         touched.append(name)
 
+    # The README badge cites the *concept* DOI, which Zenodo resolves to whatever
+    # the latest version is. A badge pinned to a version DOI goes stale the moment
+    # the next release lands, and a reader following it lands on an old artefact
+    # while believing they are looking at the current one.
+    concept = concept_doi(doi) or doi
     readme = root / "README.md"
-    text = readme.read_text()
-    badge = f"[![DOI](https://zenodo.org/badge/DOI/{doi}.svg)](https://doi.org/{doi})"
-    if doi not in text:
+    text = original = readme.read_text()
+    badge = f"[![DOI](https://zenodo.org/badge/DOI/{concept}.svg)](https://doi.org/{concept})"
+    existing = re.compile(r"\[!\[DOI\]\(https://zenodo\.org/badge/DOI/10\.\d{4,}/zenodo\.\d+\.svg\)\]\([^)]+\)")
+    if existing.search(text):
+        # Replace rather than append. Appending left two badges citing different
+        # records, which is worse than citing none.
+        text = existing.sub(badge, text)
+    else:
         lines = text.splitlines()
         insert_at = next((i + 1 for i, line in enumerate(lines) if line.startswith("# ")), 0)
         lines.insert(insert_at, "\n" + badge)
-        readme.write_text("\n".join(lines) + "\n")
+        text = "\n".join(lines) + "\n"
+    # Any other bare mention of a superseded version DOI is rewritten too.
+    text = re.sub(r"10\.\d{4,}/zenodo\.\d+", lambda m: m.group(0) if m.group(0) in {doi, concept} else doi, text)
+    if text != original:
+        readme.write_text(text)
         touched.append("README.md")
 
     return touched

@@ -10,7 +10,7 @@
   "checks": {
     "opc_valid": true,
     "provenance": true,
-    "merkle_root": "00d4c69d6e83541a\u2026",
+    "merkle_root": "104cd6c75913e216\u2026",
     "project_reproduced": true,
     "nested_opened": true,
     "multi_recipient": true,

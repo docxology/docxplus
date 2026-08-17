@@ -79,7 +79,7 @@
   "failures": [],
   "formats": {
     "docx": {
-      "bytes": 257168,
+      "bytes": 257253,
       "comparison": {
         "content_mismatches": [],
         "executable_bit_mismatches": [],
@@ -94,7 +94,7 @@
       ]
     },
     "odt": {
-      "bytes": 256758,
+      "bytes": 256908,
       "comparison": {
         "content_mismatches": [],
         "executable_bit_mismatches": [],
