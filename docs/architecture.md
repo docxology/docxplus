@@ -28,6 +28,7 @@ L6  orchestration src/docxplus/cli.py • scripts/*
 | `shamir.py` | L0 | k-of-n secret sharing over GF(256); VSS commitment tags with downgrade-resistant verification |
 | `lsb.py` | L0 | pure-Python LSB stego codec |
 | `provenance.py` | L0 | Merkle root (RFC 6962 splitting) + inclusion proofs over the module set |
+| `cli.py` | L3 | the `docxplus` command; argument parsing only, all logic lives below it |
 | `secure_io.py` | L0 | Owner-only creation of key, share, and recovered-plaintext files |
 | `transparency.py` | L0 | append-only attestation log: hash chain, Merkle inclusion proofs, and the signed tree head that anchors them |
 | `wordml.py` | L1 | minimal conforming WordprocessingML surface document |

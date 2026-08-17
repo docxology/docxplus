@@ -316,12 +316,28 @@ def test_every_guided_directory_has_both_guides(directory, guide):
     assert path.is_file(), f"missing {directory or '.'}/{guide}"
 
 
+def _is_git_ignored(rel: str) -> bool:
+    """True when git would not track this path.
+
+    The guide list describes the repository, so it must be checked against what the
+    repository contains rather than against whatever a build happened to leave on
+    disk. A wheel build dropped a `build/` tree and failed the guard for a directory
+    that is not part of the project at all.
+    """
+    import subprocess
+
+    result = subprocess.run(
+        ["git", "check-ignore", "-q", rel], cwd=ROOT, capture_output=True
+    )
+    return result.returncode == 0
+
+
 def test_no_source_directory_escapes_the_guide_list():
     """A new top-level directory must be added to GUIDED_DIRS, not silently skipped."""
     on_disk = {
         p.name
         for p in ROOT.iterdir()
-        if p.is_dir() and p.name not in _UNGUIDED
+        if p.is_dir() and p.name not in _UNGUIDED and not _is_git_ignored(p.name)
     }
     assert not (on_disk - set(GUIDED_DIRS)), (
         f"top-level directories with no entry in GUIDED_DIRS: {sorted(on_disk - set(GUIDED_DIRS))}"

@@ -100,7 +100,7 @@ def _cli_commands(root: Path) -> list[str]:
     # `\s*` matters: a subparser registered across several lines would otherwise be
     # skipped, silently under-reporting the command count in the manuscript — the
     # exact drift this module exists to prevent.
-    text = (root / "src/docxplus/cli.py").read_text()
+    text = (root / "src" / "docxplus" / "cli.py").read_text()
     return sorted(set(re.findall(r'add_parser\(\s*"([a-z-]+)"', text)))
 
 

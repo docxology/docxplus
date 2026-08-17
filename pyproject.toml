@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "docxplus"
-version = "1.0.0"
+version = "1.0.1"
 license = { text = "MIT" }
 description = "docxplus — a byte-valid OOXML .docx that also carries a modular, signed, encrypted intelligence layer through spec-sanctioned side-channels."
 authors = [
@@ -51,6 +51,14 @@ markers = [
 ]
 
 [tool.coverage.run]
+# The CLI is exercised by launching it as a real subprocess, which is the point:
+# a command-line tool tested only by calling main() in-process never proves the
+# entry point, the argument parsing, or the exit codes actually work. Coverage
+# therefore has to follow the child, or 399 statements read as untested when they
+# are in fact the most end-to-end-tested code in the repository.
+parallel = true
+concurrency = ["multiprocessing", "thread"]
+sigterm = true
 source = ["src"]
 branch = true
 omit = ["tests/*", "*/__init__.py", "*/test_*.py"]

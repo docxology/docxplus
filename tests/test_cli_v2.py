@@ -8,11 +8,14 @@ from pathlib import Path
 
 import pytest
 
-CLI = Path(__file__).resolve().parent.parent / "src/docxplus/cli.py"
+#: The CLI is a module inside the package, so it is invoked with -m. Run by
+#: file path it would have no parent package and every relative import in it
+#: would fail — which is exactly how this broke when the module moved.
+CLI_MODULE = "docxplus.cli"
 
 
 def _run(args, **kw):
-    return subprocess.run([sys.executable, str(CLI), *args], capture_output=True, text=True, **kw)
+    return subprocess.run([sys.executable, "-m", CLI_MODULE, *args], capture_output=True, text=True, **kw)
 
 
 def test_project_build_and_unpack(tmp_path):
@@ -93,7 +96,6 @@ def _write_log(tmp_path, entries=5, *, sign=True):
     import json as _json
     import sys as _sys
 
-    _sys.path.insert(0, str(CLI.parent / "src"))
     from docxplus import crypto
     from docxplus.transparency import TransparencyLog
 
@@ -153,7 +155,6 @@ def test_verify_transparency_fails_closed_on_a_wrong_pinned_signer(tmp_path):
     import json as _json
     import sys as _sys
 
-    _sys.path.insert(0, str(CLI.parent / "src"))
     from docxplus import crypto
 
     log_path, _log, sth_path, _key = _write_log(tmp_path)
@@ -282,7 +283,6 @@ def test_analyze_carrier_exit_code_distinguishes_clean_from_embedded(tmp_path):
     import sys as _sys
 
     pytest.importorskip("PIL")
-    _sys.path.insert(0, str(CLI.parent / "src"))
     from docxplus import lsb
 
     clean = _carrier(tmp_path / "clean.png")

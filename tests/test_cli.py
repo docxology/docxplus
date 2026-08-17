@@ -6,12 +6,15 @@ import subprocess
 import sys
 from pathlib import Path
 
-CLI = Path(__file__).resolve().parent.parent / "src/docxplus/cli.py"
+#: The CLI is a module inside the package, so it is invoked with -m. Run by
+#: file path it would have no parent package and every relative import in it
+#: would fail — which is exactly how this broke when the module moved.
+CLI_MODULE = "docxplus.cli"
 
 
 def _run(args, **kw):
     return subprocess.run(
-        [sys.executable, str(CLI), *args], capture_output=True, text=True, **kw
+        [sys.executable, "-m", CLI_MODULE, *args], capture_output=True, text=True, **kw
     )
 
 

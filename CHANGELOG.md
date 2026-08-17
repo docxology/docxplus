@@ -7,6 +7,29 @@ Findings referenced by number are recorded in full in [`docs/redteam-audit.md`](
 
 ## [Unreleased]
 
+## [1.0.1] — 2026-08-17
+
+### Fixed
+
+- **The package was not installable.** `pip install docxplus` reported success and
+  left nothing importable: the modules lived in `src/` as flat top-level files that
+  no wheel shipped, `[tool.uv] package = false` kept it out of any build, and the
+  console script crashed on `from docxplus_cli import main`. Anyone who installed
+  v1.0.0 got an empty package, which the tests never caught because they ran from a
+  checkout with `src/` on the path — the one configuration where it worked.
+
+### Changed
+
+- Modules moved under a real `docxplus` package and now import each other
+  relatively, so the layout is relocatable and a checkout behaves like an install.
+  Flat imports (`import crypto`) become `from docxplus import crypto`.
+- The CLI moved into the package as `docxplus.cli`; invoke it with
+  `python -m docxplus.cli`, or through the `docxplus` console script.
+- `project_root()` finds the checkout by looking for it rather than by counting
+  parent directories, which is what broke when the modules gained a level.
+- Coverage now follows the CLI into the subprocesses that exercise it. Measuring the
+  parent only, the most end-to-end-tested module in the repository reported 0%.
+
 ## [1.0.0] — 2026-08-17
 
 First stable release. Cleared every category-A and category-B blocker from the

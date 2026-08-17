@@ -18,6 +18,7 @@ Byte-level and mathematical primitives. No knowledge of documents.
 | `crypto.py` | Argon2id / Scrypt / PBKDF2 KDFs with work-factor **and** memory ceilings, AES-256-GCM, X25519 multi-recipient sealing, Ed25519, BLAKE2b digests |
 | `shamir.py` | k-of-n secret sharing over GF(256), with downgrade-resistant VSS commitment tags |
 | `provenance.py` | Merkle root (RFC 6962 splitting) and inclusion proofs over the module set |
+| `cli.py` | the `docxplus` command line; parses arguments and calls into the modules above |
 | `transparency.py` | append-only attestation log: hash chain, inclusion and consistency proofs, and the signed tree head that anchors them |
 | `lsb.py` | pure-Python LSB stego codec over PNG carriers (Pillow) |
 | `secure_io.py` | owner-only creation of key, share, and recovered-plaintext files |
