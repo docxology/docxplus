@@ -3,7 +3,7 @@
 The payload is hidden in the LSBs of a PNG that is *also* a visible image part of
 the document (``word/media/``). To a reader the file is a document with a picture;
 the picture's pixels carry the intelligence packet. This is the channel that lets
-a DOCX+ "look completely ordinary" while carrying content.
+a docxplus "look completely ordinary" while carrying content.
 
 Two real backends:
 
@@ -33,6 +33,45 @@ REL_IMAGE = (
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
 )
 BACKENDS = ("python_lsb", "steganographer")
+
+
+def _insert_drawing(pkg: OpcPackage, rid: str, size: tuple[int, int]) -> None:
+    """Add a `<w:drawing>` paragraph rendering the carrier at its natural size.
+
+    A relationship alone does not put an image on the page. The channel's premise is
+    that the carrier is a figure the document *visibly displays* — that is what makes
+    it plausible cover rather than an obviously spare part — so the body gets a
+    drawing that references it.
+
+    EMU is the WordprocessingML unit: 914400 per inch, and a PNG with no declared DPI
+    is conventionally read at 96, giving 9525 EMU per pixel.
+    """
+    from channels.mce import _body_insertion_point
+
+    width_emu, height_emu = size[0] * 9525, size[1] * 9525
+    drawing = (
+        '<w:p><w:r><w:drawing>'
+        '<wp:inline distT="0" distB="0" distL="0" distR="0" '
+        'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">'
+        f'<wp:extent cx="{width_emu}" cy="{height_emu}"/>'
+        '<wp:docPr id="1" name="Figure"/>'
+        '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+        '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+        '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
+        '<pic:nvPicPr><pic:cNvPr id="1" name="Figure"/><pic:cNvPicPr/></pic:nvPicPr>'
+        '<pic:blipFill>'
+        '<a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" '
+        f'r:embed="{rid}"/>'
+        '<a:stretch><a:fillRect/></a:stretch></pic:blipFill>'
+        '<pic:spPr><a:xfrm><a:off x="0" y="0"/>'
+        f'<a:ext cx="{width_emu}" cy="{height_emu}"/></a:xfrm>'
+        '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>'
+        '</pic:pic></a:graphicData></a:graphic></wp:inline>'
+        '</w:drawing></w:r></w:p>'
+    )
+    doc_xml = pkg.parts["word/document.xml"].decode("utf-8")
+    pos = _body_insertion_point(doc_xml)
+    pkg.parts["word/document.xml"] = (doc_xml[:pos] + drawing + doc_xml[pos:]).encode("utf-8")
 
 
 class StegMediaChannel:
@@ -101,6 +140,11 @@ class StegMediaChannel:
             Relationship(rid, REL_IMAGE, f"media/image{index}.png"),
             source_part="word/document.xml",
         )
+        # A relationship alone does not put the image on the page. The channel's
+        # premise is that the carrier is a figure the document *visibly displays* —
+        # that is what makes it plausible cover rather than an obviously spare part —
+        # so the body gets a drawing that references it.
+        _insert_drawing(pkg, rid, self.carrier_size)
         return part_name
 
     def extract(self, pkg: OpcPackage, record: ChannelRecord) -> bytes:

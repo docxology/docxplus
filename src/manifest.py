@@ -1,4 +1,4 @@
-"""The DOCX+ intelligence manifest.
+"""The docxplus intelligence manifest.
 
 The manifest is the modular spine of the format: a single JSON part
 (``intelligence/manifest.json``, with an Override content type) that enumerates
@@ -22,6 +22,8 @@ from opc import OpcPackage, Relationship
 MANIFEST_PART = "intelligence/manifest.json"
 CT_MANIFEST = "application/vnd.docxplus.manifest+json"
 REL_MANIFEST = "urn:docxplus:intelligence:1.0/manifest"
+SIGNATURE_ALGORITHM = "ed25519"
+
 FORMAT_VERSION = "2.0"
 
 
@@ -36,6 +38,11 @@ class Manifest:
     surface_digest: str = ""  # digest of word/document.xml, so the signature binds visible text
     #: Detached co-signatures over the same canonical body: [{public_key, value}, ...].
     cosignatures: list[dict] = field(default_factory=list)
+    #: The signature algorithm the manifest declares. Recorded so a disagreement can
+    #: be refused; never used to *select* a verifier. Selecting on an attacker-
+    #: supplied algorithm field is the JWT `alg` confusion class, and this field is
+    #: not inside canonical_body, so it is not authenticated either.
+    algorithm: str = SIGNATURE_ALGORITHM
 
     def add(self, record: ChannelRecord) -> None:
         if any(r.slot == record.slot for r in self.records):
@@ -75,7 +82,7 @@ class Manifest:
             "merkle_root": self.merkle_root(),
             "surface_digest": self.surface_digest,
             "signature": {
-                "algorithm": "ed25519",
+                "algorithm": self.algorithm,
                 "public_key": self.public_key,
                 "value": self.signature,
             },
@@ -87,12 +94,25 @@ class Manifest:
     def from_bytes(cls, blob: bytes) -> Manifest:
         doc = json.loads(blob)
         sig = doc.get("signature", {})
+        # `add` refuses a duplicate slot on the write path, but a manifest read from
+        # a package never goes through `add`, so a hand-crafted one could carry two
+        # records under one name. That is a parser differential: `slot()` returns the
+        # first match while a validator iterating `records` sees both, so the module
+        # a reader extracts need not be the module a validator checked. Refuse here,
+        # where untrusted bytes actually enter.
+        records = [ChannelRecord.from_dict(m) for m in doc.get("modules", [])]
+        seen: set[str] = set()
+        for record in records:
+            if record.slot in seen:
+                raise ValueError(f"duplicate manifest slot: {record.slot}")
+            seen.add(record.slot)
         return cls(
-            records=[ChannelRecord.from_dict(m) for m in doc.get("modules", [])],
+            records=records,
             version=doc.get("version", FORMAT_VERSION),
             public_key=sig.get("public_key", ""),
             signature=sig.get("value", ""),
             surface_digest=doc.get("surface_digest", ""),
+            algorithm=str(sig.get("algorithm", SIGNATURE_ALGORITHM)),
             cosignatures=[dict(c) for c in doc.get("cosignatures", [])],
         )
 
@@ -116,8 +136,27 @@ class Manifest:
     def is_signed(self) -> bool:
         return bool(self.signature and self.public_key)
 
+    def declares_supported_algorithm(self) -> bool:
+        """True when the manifest names the signature algorithm this build implements.
+
+        The field was written and never read: a manifest could declare
+        ``"algorithm": "rsa-4096"`` and still verify, because verification hard-codes
+        Ed25519. Nothing was exploitable — hard-coding is what makes it safe, and
+        dispatching on the field instead would be the JWT ``alg``-confusion mistake —
+        but a recorded value nobody checks is a claim the format cannot keep, and it
+        left no way to notice a document from a future version using something else.
+
+        So the field is checked and never obeyed. Note that it sits outside
+        ``canonical_body`` and is therefore unauthenticated: flipping it can turn a
+        valid document into a refused one, which is a nuisance rather than a
+        compromise, and strictly better than accepting a statement known to be false.
+        """
+        return self.algorithm == SIGNATURE_ALGORITHM
+
     def verify_signature(self) -> bool:
         """True when a present signature validates over the canonical body."""
+        if not self.declares_supported_algorithm():
+            return False
         if not self.is_signed():
             return False
         return _verify(

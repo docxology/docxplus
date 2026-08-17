@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: If you use this software, please cite it using the metadata from this file.
-title: "DOCX+ — the Intelligent Document Container"
+title: "docxplus — the Intelligent Document Container"
 abstract: >-
   A standards-first reference implementation of a byte-valid OOXML .docx that also
   carries a modular, Ed25519-signed, AES-256-GCM-encrypted intelligence layer through
@@ -21,6 +21,6 @@ keywords:
   - structured documents
   - reproducible research
 license: MIT
-repository-code: "https://github.com/docxology/docx"
-version: "0.6.0"
+repository-code: "https://github.com/docxology/docxplus"
+version: "1.0.0"
 date-released: "2026-08-13"

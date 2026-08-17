@@ -1,4 +1,4 @@
-"""Channel interface for the DOCX+ intelligence layer.
+"""Channel interface for the docxplus intelligence layer.
 
 A *channel* is one spec-sanctioned side-channel through which a payload can ride
 inside an otherwise-ordinary OOXML package. Every channel implements the same

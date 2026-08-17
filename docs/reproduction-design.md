@@ -1,7 +1,7 @@
 # Reproduction Attestation — Design (v0.4)
 
 Synthesis of a four-lens review (FirstPrinciples, Council, Science, RedTeam) for
-making the "self-verifying dossier" real: a DOCX+ that carries
+making the "self-verifying dossier" real: a docxplus that carries
 `template_code_project` and lets a reader trust that its results *follow from its
 code*, not just that its bytes are authentic.
 
@@ -64,3 +64,18 @@ in `tests/test_reproduce.py`.
    in a project+temp-confined directory (macOS seatbelt / Linux bwrap) with no host credentials.
 3. The attestation is folded into the signed manifest body, so it is bound to the
    exact source and cannot be swapped.
+
+## What bounds the verifier, not only the child
+
+The confinement list — network denied, writes confined, environment scrubbed, CPU,
+address space, process count and file size limited — describes what the *child*
+cannot do. None of it reaches the parent, and the parent used to read both of the
+child's streams through `subprocess.communicate()`, which buffers them in its own
+address space. A carried command that simply printed could therefore exhaust the
+machine doing the verifying while every listed control held: 400 MiB of child stdout
+grew the verifier's resident set by roughly a gigabyte, and the run was reported as a
+success.
+
+Both streams now go to files rather than pipes, which puts the child's own
+`RLIMIT_FSIZE` back in the path, and the parent reads only a bounded prefix of stderr
+for its failure message. Standard output is discarded, as it always was.

@@ -1,4 +1,4 @@
-# DOCX+ Cookbook — Intelligent Document Concepts
+# docxplus Cookbook — Intelligent Document Concepts
 
 Eight document *kinds* the v0.2 primitives make buildable. Each is a real recipe
 against the `DocxPlusBuilder` / `DocxPlusReader` API; see `tests/` for executable
@@ -17,7 +17,7 @@ reader.reproduce("source", dest, allow_execution=True, password="review")  # opt
 ```
 
 ## 2. The Matryoshka Document
-A DOCX+ whose module is itself a sealed DOCX+, recursively. Each layer can target
+A docxplus whose module is itself a sealed docxplus, recursively. Each layer can target
 different recipients — an outer document for the team, an inner one for two people.
 ```python
 inner = DocxPlusBuilder(...).add_module("q4", "package_part", secret).build()
@@ -85,23 +85,88 @@ the real `template_code_project`.
 ## 9. The MCE Hidden Channel
 Embeds payload modules directly inside the WordprocessingML main document (`word/document.xml`)
 using `<mc:Choice>` branches marked with an ignorable namespace (`urn:docxplus:mce:1.0`).
-Unaware word processors discard the choice branch and render the benign `<mc:Fallback>` text.
+Unaware word processors discard the choice branch and render the empty `<mc:Fallback/>`, so a concealed
+module adds no visible paragraph.
 ```python
 builder.add_module("notes", "mce", secret_data)
 reader.extract("notes")
 ```
 
 ## 10. The ODT Sibling Container
-Produces OASIS OpenDocument Text archives carrying the same signed intelligence manifest
-and side-channel payloads, maintaining byte-exact ODF 1.3/1.4 conformance.
+An OASIS OpenDocument Text archive carrying the same signed intelligence manifest as the
+`.docx` profile, in byte-exact ODF 1.3/1.4 conformance. Use `OdtPlusBuilder`: `odt.py`
+alone builds only the *surface* package, so `new_base_odt(...).add_part(...)` yields a
+conforming `.odt` carrying loose bytes and **no manifest, no sealing, and no signature**.
 ```python
-from odt import new_base_odt
-pkg = new_base_odt(["ODF surface text"])
-pkg.add_part("intelligence/payload1.dxp", payload_bytes)
-odt_bytes = pkg.to_bytes()
+from odt_container import OdtPlusBuilder, OdtPlusReader
+
+builder = OdtPlusBuilder(paragraphs=["ODF surface text"])
+builder.add_module("brief", payload_bytes, password="s3cret").sign(priv)
+odt_bytes = builder.build()
+
+reader = OdtPlusReader.from_bytes(odt_bytes)
+assert reader.verify_provenance(expected_public_key=pub)
+assert reader.extract("brief", password="s3cret") == payload_bytes
 ```
 
 ---
 
 Every recipe keeps the **surface contract**: the file still opens as an ordinary
 document (`.docx` or `.odt`). The intelligence is additive.
+
+## 11. The self-carrying project, verified both ways
+
+A report that carries its own source, in either container, with the round trip proved
+rather than assumed.
+
+```python
+from container import DocxPlusBuilder, DocxPlusReader
+from odt_container import OdtPlusBuilder, OdtPlusReader
+import crypto
+
+priv, pub = crypto.generate_signing_key()
+
+docx = DocxPlusBuilder(paragraphs=["A report that carries its own source."])
+docx.add_project("source", "./myproject", reproduce=True, password="s3cret").sign(priv)
+
+odt = OdtPlusBuilder(paragraphs=["The same, as OpenDocument."])
+odt.add_project("source", "./myproject", reproduce=True, password="s3cret").sign(priv)
+
+reader = DocxPlusReader.from_bytes(docx.build())
+assert reader.verify_provenance(expected_public_key=pub)      # authenticity needs the pin
+assert reader.verify_reproduction("source", expected_public_key=pub)["verified"]
+reader.extract_project("source", "./recovered", password="s3cret")
+```
+
+From the CLI, including the fidelity check:
+
+```bash
+docxplus build report.docx --project source:./myproject --attest \
+    --password s3cret --signing-key key.hex
+docxplus odt-build report.odt --module notes:notes.txt --signing-key key.hex
+docxplus validate report.docx && docxplus odt-validate report.odt
+./run.sh roundtrip          # diffs a carried tree against the original, both profiles
+```
+
+**What you are relying on.** The tree comes back with contents and the executable bit
+intact, empty directories present, and build junk absent. Symlinks are refused rather
+than followed — packing one would embed its target's bytes under the link's name — so
+a tree containing them needs `follow_symlinks=True` and a moment's thought about what
+those links point at. `docs/format-spec.md` §8.1 is the full contract.
+
+## 12. A document inside a document, across containers
+
+Matryoshka nesting does not care which container the inner document uses.
+
+```python
+from odt_container import OdtPlusBuilder, OdtPlusReader, open_document
+
+outer = OdtPlusBuilder(paragraphs=["An ODF wrapper."])
+outer.add_nested("inner", signed_docx_bytes, password="matryoshka").sign(priv)
+
+reader = OdtPlusReader.from_bytes(outer.build())
+inner = reader.open_nested("inner", password="matryoshka")   # returns a DocxPlusReader
+assert inner.verify_provenance(expected_public_key=pub)
+
+open_document(some_bytes)   # dispatches on the container's own magic, not a caller flag
+```

@@ -1,5 +1,5 @@
 domain: document_engineering
-display_name: DOCX+ Intelligent Document Container
+display_name: docxplus Intelligent Document Container
 required_packages:
   - cryptography
   - defusedxml

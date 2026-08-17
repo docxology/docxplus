@@ -47,7 +47,9 @@ def test_mce_markup_preserves_ignorable_choice():
     assert 'mc:Ignorable="dxm"' in doc_xml or 'mc:Ignorable=' in doc_xml
     assert "<mc:AlternateContent" in doc_xml
     assert '<mc:Choice Requires="dxm">' in doc_xml
-    assert "<mc:Fallback>" in doc_xml
+    # Self-closing: an empty fallback adds no visible paragraph, so concealing a
+    # module leaves the rendered surface unchanged.
+    assert "<mc:Fallback/>" in doc_xml
 
 
 def test_mce_missing_part_or_slot_raises():
@@ -65,3 +67,59 @@ def test_mce_missing_part_or_slot_raises():
     pkg_empty.parts.clear()
     with pytest.raises(ValueError, match="missing from package"):
         chan.embed(pkg_empty, b"data", slot="s1")
+
+
+# -- CT_Body ordering ---------------------------------------------------------
+
+
+def _body_children(docx_bytes: bytes) -> list[str]:
+    import re
+
+    from opc import read_package
+
+    doc = read_package(docx_bytes).parts["word/document.xml"].decode("utf-8")
+    body = doc[doc.index("<w:body>"):doc.index("</w:body>")]
+    return re.findall(r"<(?:w:|mc:)(p|tbl|sectPr|AlternateContent)\b", body)
+
+
+def test_sectpr_remains_the_last_body_child():
+    """`CT_Body` is `(EG_BlockLevelElts*, sectPr?)`.
+
+    Appending at `</w:body>` put the AlternateContent after the body-level sectPr and
+    produced schema-invalid markup on the one channel that writes into the main story
+    part. Word validates document.xml on load and offers repair, which is the loudest
+    possible way to break the surface contract.
+    """
+    from container import DocxPlusBuilder
+
+    builder = DocxPlusBuilder(paragraphs=["visible"])
+    builder.add_module("a", "mce", b"payload-a")
+    builder.add_module("b", "mce", b"payload-b")
+    children = _body_children(builder.build())
+
+    assert children[-1] == "sectPr", children
+    assert children.count("sectPr") == 1
+    assert children.count("AlternateContent") == 2
+
+
+def test_concealing_a_module_adds_no_visible_paragraph():
+    """Dual-contract independence: the rendered surface must not change."""
+    from container import DocxPlusBuilder
+
+    plain = _body_children(DocxPlusBuilder(paragraphs=["visible"]).build())
+    with_mce = _body_children(
+        DocxPlusBuilder(paragraphs=["visible"]).add_module("a", "mce", b"x").build()
+    )
+    assert [c for c in with_mce if c == "p"] == [c for c in plain if c == "p"]
+
+
+def test_a_section_break_inside_a_paragraph_is_not_mistaken_for_the_body_sectpr():
+    """Only a body-level sectPr terminates the body; a `w:pPr` one is a section break."""
+    from channels.mce import _body_insertion_point
+
+    doc = (
+        "<w:body><w:p><w:pPr><w:sectPr><w:type/></w:sectPr></w:pPr></w:p>"
+        "<w:p>tail</w:p></w:body>"
+    )
+    # No body-level sectPr here, so content belongs immediately before </w:body>.
+    assert _body_insertion_point(doc) == doc.rfind("</w:body>")

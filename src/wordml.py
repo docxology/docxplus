@@ -69,7 +69,7 @@ def new_base_document(
     paragraphs: list[str] | None = None,
     *,
     title: str = "Document",
-    creator: str = "DOCX+",
+    creator: str = "docxplus",
 ) -> OpcPackage:
     """Construct a fresh, valid base DOCX as an :class:`OpcPackage`.
 

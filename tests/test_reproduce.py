@@ -192,3 +192,31 @@ def test_reproduce_timeout_kills_and_raises(tmp_path):
     spec = ReproSpec(command=[PY, "src/c.py"], outputs=["output/r"], timeout=1)
     with pytest.raises(reproduce.ReproError, match="timed out"):
         reproduce.run_and_digest(proj, spec)
+
+
+# -- v0.6.2: sandbox profile construction ------------------------------------
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="seatbelt profile is macOS-only")
+def test_sandbox_profile_refuses_an_unquotable_project_path(tmp_path):
+    """A path containing a quote could append rules to the seatbelt profile.
+
+    `x") (allow network*) (subpath "/` closes the SBPL string literal and turns the
+    network denial back on its head, so the wrapper must refuse to build at all.
+    """
+    hostile = tmp_path / 'x") (allow network*) (subpath "/'
+    hostile.mkdir()
+    with pytest.raises(reproduce.ReproError, match="cannot be safely quoted"):
+        reproduce._sandbox_wrap(["/bin/echo", "hi"], str(hostile))
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="seatbelt profile is macOS-only")
+def test_sandbox_profile_denies_network_for_an_ordinary_path(tmp_path):
+    proj = tmp_path / "project"
+    proj.mkdir()
+    argv = reproduce._sandbox_wrap(["/bin/echo", "hi"], str(proj))
+    assert argv[0] == "sandbox-exec"
+    profile = argv[2]
+    assert "(deny network*)" in profile
+    assert "(allow network*)" not in profile
+    assert str(proj.resolve()) in profile

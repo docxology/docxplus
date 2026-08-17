@@ -1,6 +1,6 @@
 ---
 name: docxplus
-description: DOCX+ intelligent document container — build/read/validate a byte-valid .docx that also carries a signed, encrypted, modular intelligence layer through OOXML side-channels, with a steganographer media backend.
+description: docxplus intelligent document container — build/read/validate a byte-valid .docx that also carries a signed, encrypted, modular intelligence layer through OOXML side-channels, with a steganographer media backend.
 version: 0.1.0
 author: docxology
 license: MIT
@@ -9,12 +9,12 @@ tags: [ooxml, docx, steganography, document-security, thin-orchestrator]
 
 # docxplus
 
-Project-scoped skill for the DOCX+ container in this repo. Load it when working
+Project-scoped skill for the docxplus container in this repo. Load it when working
 inside the project — building documents, adding a channel, or validating output.
 
 ## When to use
 
-- Producing or reading a DOCX+ file (a `.docx` carrying an intelligence layer).
+- Producing or reading a docxplus file (a `.docx` carrying an intelligence layer).
 - Adding a new payload channel or crypto option.
 - Validating that a produced document is both OPC-conforming and manifest-consistent.
 
@@ -22,7 +22,7 @@ inside the project — building documents, adding a channel, or validating outpu
 
 ```bash
 uv venv && uv pip install -e '.[dev,media]'
-./run.sh                                   # preflight -> tests -> build -> roundtrip
+./run.sh                                   # preflight, tests, example, dossier, round trips, manuscript
 .venv/bin/python -m pytest --cov=src -q     # 90% gate
 uv run docxplus build out.docx --text "Report" --module brief:custom_xml:brief.json --password s3cret
 uv run docxplus inspect out.docx

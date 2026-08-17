@@ -1,4 +1,4 @@
-# DOCX+ — Intelligent Document Container
+# docxplus — Intelligent Document Container
 # Standalone research project following the docxology/template_code_project paradigm.
 
 [build-system]
@@ -7,9 +7,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "docxplus"
-version = "0.6.0"
+version = "1.0.0"
 license = { text = "MIT" }
-description = "DOCX+ — a byte-valid OOXML .docx that also carries a modular, signed, encrypted intelligence layer through spec-sanctioned side-channels."
+description = "docxplus — a byte-valid OOXML .docx that also carries a modular, signed, encrypted intelligence layer through spec-sanctioned side-channels."
 authors = [
     { name = "Daniel Ari Friedman", email = "daniel@activeinference.institute" },
 ]

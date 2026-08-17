@@ -9,12 +9,30 @@ Share wire format (per share):
 - Legacy format: ``x(1) || share_bytes(len(secret))``
 - Verifiable format (VSS): ``0xFF (magic) || x(1) || digest(32) || share_bytes(len(secret))``
   where digest = blake2b-256(x || share_bytes).
+
+Because the two formats are told apart by sniffing the first byte, ``x`` is capped
+at 254 so that a legacy share can never begin with the 0xFF magic. Without that
+cap a legacy share holding a secret of 33 bytes or more would be misread as a
+verifiable one and rejected as "tampered" when nothing had touched it.
+
+The tag is only a guarantee if the verifier insists on it. An attacker holding a
+verifiable share can strip the eight-byte header back to ``x || payload`` and
+hand over a legacy share, and a verifier that accepts either format will happily
+reconstruct from the tampered bytes. Callers that issued verifiable shares must
+therefore pass ``require_verifiable=True`` to :func:`combine`; the container reads
+that requirement out of the *signed* manifest, so it cannot be downgraded.
 """
 
 from __future__ import annotations
 
 import hashlib
 import os
+
+# Largest share x-coordinate. 255 (0xFF) is reserved as the VSS magic byte so the
+# two wire formats stay unambiguous.
+MAX_X = 254
+VSS_MAGIC = 0xFF
+_VSS_HEADER = 34  # magic(1) + x(1) + digest(32)
 
 # GF(256) exp/log tables built from generator 3 over the AES polynomial 0x11B.
 _EXP = [0] * 512
@@ -75,8 +93,8 @@ def split(secret: bytes, k: int, n: int, *, verifiable: bool = False) -> list[by
 
     If ``verifiable=True``, prepends integrity commitment headers to each share.
     """
-    if not 1 <= k <= n <= 255:
-        raise ValueError("require 1 <= k <= n <= 255")
+    if not 1 <= k <= n <= MAX_X:
+        raise ValueError(f"require 1 <= k <= n <= {MAX_X}")
     if not secret:
         raise ValueError("secret must be non-empty")
     raw_shares = [bytearray([x]) for x in range(1, n + 1)]
@@ -97,37 +115,60 @@ def split(secret: bytes, k: int, n: int, *, verifiable: bool = False) -> list[by
     return out
 
 
-def _unwrap_share(s: bytes) -> tuple[int, bytes]:
-    """Unwrap a share (whether legacy or verifiable). Returns (x, payload)."""
+def is_verifiable(share: bytes) -> bool:
+    """True when ``share`` carries a VSS header (magic + x + digest)."""
+    return len(share) >= _VSS_HEADER and share[0] == VSS_MAGIC
+
+
+def _unwrap_share(s: bytes, *, require_verifiable: bool = False) -> tuple[int, bytes]:
+    """Unwrap a share (whether legacy or verifiable). Returns (x, payload).
+
+    With ``require_verifiable`` set, a share lacking the VSS header is refused
+    outright rather than accepted as legacy — this is what blocks the
+    strip-the-header downgrade described in the module docstring.
+    """
     if not s:
         raise ValueError("empty share")
-    if s[0] == 0xFF and len(s) >= 34:  # 1 magic + 1 x + 32 digest + payload
+    if is_verifiable(s):
         x = s[1]
-        tag = s[2:34]
-        payload = s[34:]
+        tag = s[2:_VSS_HEADER]
+        payload = s[_VSS_HEADER:]
         expected_tag = hashlib.blake2b(bytes([x]) + payload, digest_size=32).digest()
         if tag != expected_tag:
             raise ValueError(f"tampered share detected for x={x} (share integrity check failed)")
         return x, payload
+    if require_verifiable:
+        raise ValueError(
+            "share is not in verifiable (VSS) format but verification was required — "
+            "refusing to reconstruct from an unauthenticated share"
+        )
     # Legacy format: x(1) || payload
     return s[0], s[1:]
 
 
-def verify_share(share: bytes) -> bool:
-    """Check if a share is valid (verifiable format tag check). Legacy shares return True."""
+def verify_share(share: bytes, *, require_verifiable: bool = False) -> bool:
+    """Check a share's integrity tag.
+
+    Legacy shares carry no tag, so they return ``True`` unless
+    ``require_verifiable`` is set — absence of a tag is not evidence of integrity.
+    """
     try:
-        _unwrap_share(share)
+        _unwrap_share(share, require_verifiable=require_verifiable)
         return True
     except ValueError:
         return False
 
 
-def combine(shares: list[bytes]) -> bytes:
-    """Reconstruct the secret from ``k`` (or more) shares via Lagrange at x=0."""
+def combine(shares: list[bytes], *, require_verifiable: bool = False) -> bytes:
+    """Reconstruct the secret from ``k`` (or more) shares via Lagrange at x=0.
+
+    Set ``require_verifiable`` whenever the shares were issued in VSS format, so a
+    downgraded share cannot smuggle tampered bytes past the integrity tag.
+    """
     if len(shares) < 1:
         raise ValueError("need at least one share")
 
-    unwrapped = [_unwrap_share(s) for s in shares]
+    unwrapped = [_unwrap_share(s, require_verifiable=require_verifiable) for s in shares]
     xs = [u[0] for u in unwrapped]
     if len(set(xs)) != len(xs):
         raise ValueError("shares must have distinct x-coordinates")

@@ -6,7 +6,7 @@ exactly the LSB technique the standards report and the docxology/steganographer
 project describe. Deterministic and reversible; no external toolchain.
 
 The steganographer Rust CLI remains the *premium* backend (adds BLAKE3 + Ed25519
-signing and Reed-Solomon ECC); this module is the zero-setup default so a DOCX+
+signing and Reed-Solomon ECC); this module is the zero-setup default so a docxplus
 with a media-carried payload can be produced and read with Pillow alone.
 """
 

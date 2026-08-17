@@ -1,4 +1,4 @@
-"""Cryptographic primitives for the DOCX+ intelligence layer.
+"""Cryptographic primitives for the docxplus intelligence layer.
 
 Design mirrors the mechanisms the standards report documents so the intelligence
 layer is *recognisably* an Office-crypto lineage without breaking openability:
@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import random
 from dataclasses import dataclass
 
 from cryptography.exceptions import InvalidSignature
@@ -38,6 +39,9 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 
 DEFAULT_SPIN_COUNT = 100_000  # legacy PBKDF2 count kept for the derive_key() compat API.
+#: Cryptographically secure shuffling for recipient-slot ordering.
+_SYSTEM_RANDOM = random.SystemRandom()
+
 SALT_BYTES = 16
 NONCE_BYTES = 12
 KEY_BYTES = 32  # AES-256
@@ -93,7 +97,12 @@ def derive_key(password: str, salt: bytes, spin_count: int = DEFAULT_SPIN_COUNT)
 # envelope could set an enormous iteration count / scrypt N and turn any attempt
 # to open it into a CPU/memory denial-of-service on the reader.
 MAX_PBKDF2_ITERATIONS = 5_000_000
-MAX_SCRYPT_N_LOG2 = 21  # N ≤ 2^21 (≈2 GiB at r=8); comfortably above the default 15
+MAX_SCRYPT_N_LOG2 = 21  # N ≤ 2^21; the memory ceiling below is the binding constraint
+# Scrypt's footprint is 128 * N * r bytes, so capping N alone bounds nothing: at the
+# permitted r=64 an N of 2^21 demands 16 GiB and hands a hostile envelope a
+# memory-exhaustion DoS. Bound the product instead, at the same 256 MiB ceiling
+# Argon2id already enforces. The default (N=2^15, r=8) needs 32 MiB.
+MAX_SCRYPT_MEMORY_BYTES = 256 * 1024 * 1024
 
 
 def _derive(password: str, salt: bytes, kdf_id: int, params: bytes) -> bytes:
@@ -102,14 +111,22 @@ def _derive(password: str, salt: bytes, kdf_id: int, params: bytes) -> bytes:
         raise ValueError("password must be non-empty")
     pw = password.encode("utf-8")
     if kdf_id == KDF_PBKDF2:
+        if len(params) != 4:
+            raise ValueError("malformed PBKDF2 parameters")
         iterations = int.from_bytes(params, "big")
         if not 1 <= iterations <= MAX_PBKDF2_ITERATIONS:
             raise ValueError("PBKDF2 iteration count outside accepted range")
         return hashlib.pbkdf2_hmac("sha512", pw, salt, iterations, dklen=KEY_BYTES)
     if kdf_id == KDF_SCRYPT:
+        if len(params) < 3:
+            raise ValueError("malformed scrypt parameters")
         n_log2, r, p = params[0], params[1], params[2]
-        if not 1 <= n_log2 <= MAX_SCRYPT_N_LOG2 or r < 1 or p < 1:
+        if not 1 <= n_log2 <= MAX_SCRYPT_N_LOG2 or not 1 <= r <= 64 or not 1 <= p <= 64:
             raise ValueError("scrypt parameters outside accepted range")
+        # The parameters are individually plausible but jointly hostile unless the
+        # resulting allocation is bounded too.
+        if 128 * (1 << n_log2) * r > MAX_SCRYPT_MEMORY_BYTES:
+            raise ValueError("scrypt parameters demand more memory than the reader allows")
         return Scrypt(salt=salt, length=KEY_BYTES, n=1 << n_log2, r=r, p=p).derive(pw)
     if kdf_id == KDF_ARGON2ID:
         # params layout: memory_cost_kib(4) || time_cost(2) || parallelism(2)
@@ -161,23 +178,29 @@ class EncryptedPayload:
 
     @classmethod
     def from_bytes(cls, blob: bytes) -> EncryptedPayload:
+        """Parse an envelope, rejecting anything truncated or self-inconsistent.
+
+        Every field is bounds-checked before it is read. Slicing blindly would let
+        a header that declares a 200-byte salt over a 4-byte remainder parse
+        "successfully" into a short salt, and would surface truncation as
+        ``IndexError`` — a type callers filtering on ``ValueError`` do not expect.
+        """
         if blob[:4] != b"DXE1":
-            raise ValueError("not a DOCX+ encrypted payload (bad magic)")
+            raise ValueError("not a docxplus encrypted payload (bad magic)")
         i = 4
-        kdf_id = blob[i]
-        i += 1
-        slen = blob[i]
-        i += 1
-        salt = blob[i : i + slen]
-        i += slen
-        nlen = blob[i]
-        i += 1
-        nonce = blob[i : i + nlen]
-        i += nlen
-        plen = blob[i]
-        i += 1
-        params = blob[i : i + plen]
-        i += plen
+
+        def take(count: int, what: str) -> bytes:
+            nonlocal i
+            if count < 0 or i + count > len(blob):
+                raise ValueError(f"truncated DXE1 envelope: incomplete {what}")
+            chunk = blob[i : i + count]
+            i += count
+            return chunk
+
+        kdf_id = take(1, "KDF id")[0]
+        salt = take(take(1, "salt length")[0], "salt")
+        nonce = take(take(1, "nonce length")[0], "nonce")
+        params = take(take(1, "parameter length")[0], "parameters")
         return cls(kdf_id=kdf_id, salt=salt, nonce=nonce, params=params, ciphertext=blob[i:])
 
 
@@ -289,7 +312,13 @@ def _unwrap_key(eph_pub: bytes, wrapped: bytes, recipient_priv: bytes) -> bytes:
     return decrypt_with_key(wrapped, kek)
 
 
-def seal_multi(plaintext: bytes, recipients: list[bytes], *, aad: bytes = b"") -> bytes:
+def seal_multi(
+    plaintext: bytes,
+    recipients: list[bytes],
+    *,
+    aad: bytes = b"",
+    pad_to: int = 0,
+) -> bytes:
     """Encrypt ``plaintext`` once, wrapping the content key for each recipient.
 
     Envelope layout::
@@ -297,44 +326,79 @@ def seal_multi(plaintext: bytes, recipients: list[bytes], *, aad: bytes = b"") -
         "DXE2" | body_len(4) | body | recip_count(2) | [ eph(32) wrap_len(2) wrap ]...
 
     body = encrypt_with_key(plaintext, content_key, aad). ``aad`` binds the body to
-    its module context. The envelope does *not* embed recipient public keys, so it
-    does not leak the recipient set (a reader trial-decrypts each wrap slot).
+    its module context. The envelope does not embed recipient public keys, so it does
+    not leak recipient *identities* — a reader trial-decrypts each wrap slot.
+
+    It does leak the recipient **count**, which is a field of the format and is also
+    recoverable from the envelope length at a fixed cost per slot. The manifest goes
+    to some trouble to record neither identities nor count, and that intent is only
+    half achieved without addressing this: for the blind-review packet the format is
+    meant to serve, "sealed to three people" is itself information about the review.
+
+    ``pad_to`` raises the apparent recipient count to a fixed bucket by wrapping the
+    content key to freshly generated public keys whose private halves are discarded
+    before this function returns. A padded slot is a genuine X25519 wrap and is
+    therefore indistinguishable from a real one; it is simply undecryptable, by
+    anyone, forever. This is the same move the password lineage already makes with
+    its chaff frame — the observer sees a slot and cannot tell whether it is a
+    recipient or an absence.
     """
     if not recipients:
         raise ValueError("at least one recipient required")
+    if pad_to and pad_to < len(recipients):
+        raise ValueError(
+            f"pad_to={pad_to} is below the actual recipient count {len(recipients)}; "
+            "padding may only ever add slots"
+        )
+    slots = list(recipients)
+    for _ in range(max(0, pad_to - len(slots))):
+        # The private half is never bound to a name and goes out of scope here.
+        _discarded, decoy_pub = generate_recipient_key()
+        slots.append(decoy_pub)
+
     content_key = os.urandom(KEY_BYTES)
     body = encrypt_with_key(plaintext, content_key, aad=aad)
     out = bytearray(b"DXE2" + len(body).to_bytes(4, "big") + body)
-    out += len(recipients).to_bytes(2, "big")
-    for pub in recipients:
+    out += len(slots).to_bytes(2, "big")
+    # Shuffle so a padded slot cannot be identified by position: appending decoys
+    # would put every real recipient first and defeat the point.
+    _SYSTEM_RANDOM.shuffle(slots)
+    for pub in slots:
         eph_pub, wrapped = _wrap_key(content_key, pub)
         out += eph_pub + len(wrapped).to_bytes(2, "big") + wrapped
     return bytes(out)
 
 
 def unseal_multi(envelope: bytes, recipient_priv: bytes, *, aad: bytes = b"") -> bytes:
-    """Open a :func:`seal_multi` envelope with one recipient's private key."""
+    """Open a :func: envelope with one recipient's private key."""
     if envelope[:4] != b"DXE2":
         raise ValueError("not a DXE2 multi-recipient envelope")
     i = 4
+    if len(envelope) < i + 4:
+        raise ValueError("truncated DXE2 envelope (missing body length)")
     body_len = int.from_bytes(envelope[i : i + 4], "big")
     i += 4
+    if len(envelope) < i + body_len + 2:
+        raise ValueError("truncated DXE2 envelope (missing body or count)")
     body = envelope[i : i + body_len]
     i += body_len
     count = int.from_bytes(envelope[i : i + 2], "big")
     i += 2
     last_error: Exception | None = None
     for _ in range(count):
+        if len(envelope) < i + 34:
+            raise ValueError("truncated DXE2 recipient slot")
         eph_pub = envelope[i : i + 32]
         i += 32
         wrap_len = int.from_bytes(envelope[i : i + 2], "big")
         i += 2
+        if len(envelope) < i + wrap_len:
+            raise ValueError("truncated DXE2 wrapped key")
         wrapped = envelope[i : i + wrap_len]
         i += wrap_len
         try:
             content_key = _unwrap_key(eph_pub, wrapped, recipient_priv)
             return decrypt_with_key(body, content_key, aad=aad)
-        except Exception as exc:  # noqa: BLE001 - wrong slot for this key; try next
+        except Exception as exc:
             last_error = exc
-            continue
     raise ValueError("no recipient slot could be opened with this key") from last_error

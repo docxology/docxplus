@@ -1,8 +1,8 @@
-# DOCX+ Design Rationale (First-Principles)
+# docxplus Design Rationale (First-Principles)
 
-## Deconstruction — what is a DOCX+ actually made of?
+## Deconstruction — what is a docxplus actually made of?
 
-Strip away convention and a DOCX+ is five irreducible primitives:
+Strip away convention and a docxplus is five irreducible primitives:
 
 1. **Container** — a byte-addressable set of named parts with a reachability graph
    (OPC/ZIP). *Hard constraint*: to stay an openable `.docx`, the surface must be a
@@ -43,7 +43,7 @@ axes**, each composable with the others:
 - **Cryptographic depth** — from one-password AES-GCM to X25519 **multi-recipient**
   hybrid sealing (one document, many key-holders) and Shamir **k-of-n threshold**
   (no single holder can open it).
-- **Composition** — nesting: a DOCX+ inside a module of another DOCX+. Matryoshka
+- **Composition** — nesting: a docxplus inside a module of another docxplus. Matryoshka
   sealing, each layer with its own recipients.
 - **Provenance** — a **Merkle root** over all module digests, signed, with an
   append-only tip seal, so the *set* of modules is bound, not just each module (an
@@ -53,7 +53,7 @@ axes**, each composable with the others:
 
 ## Key insight
 
-The limiting assumption was that a DOCX+ *contains data*. It contains **typed,
+The limiting assumption was that a docxplus *contains data*. It contains **typed,
 independently-sealed, provenance-bound objects** — and one of those object types is
 "a whole signed, encrypted, reproducible project," so a document can literally carry
 the software that produced it.

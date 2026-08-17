@@ -1,6 +1,6 @@
 """Reproduction attestation — execute-once-upstream, verify-cryptographically-downstream.
 
-This module is the only place in DOCX+ that executes carried code, and it does so
+This module is the only place in docxplus that executes carried code, and it does so
 ONLY when a caller explicitly opts in (``container.reproduce(allow_execution=True)``).
 Nothing on the read/validate/verify path ever calls it. Following the Council
 synthesis (``docs/reproduction-design.md``):
@@ -26,6 +26,7 @@ import os
 import platform
 import shutil
 import subprocess
+import tempfile
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -36,6 +37,10 @@ RECIPE_FILE = ".docxplus-reproduce.json"
 # Reader-side ceilings on author-controlled values (a hostile attestation must not
 # be able to hang the reader or pull an enormous output into memory).
 MAX_REPRO_SECONDS = 900
+#: Bytes of a failed run's stderr quoted back in the error. The rest is
+#: discarded unread, so a chatty failure cannot become a memory exhaustion.
+MAX_CAPTURED_STDERR = 8192
+
 MAX_OUTPUT_BYTES = 256 * 1024 * 1024
 _CHUNK = 1 << 16
 
@@ -69,7 +74,7 @@ def toolchain_fingerprint() -> dict:
 
 def _scrubbed_env() -> dict:
     """A minimal environment: no host credentials, just enough PATH to find python,
-    with dangerous linker/loader preloads explicitly stripped.
+    with dangerous linker/loader preloads, python path overrides, and scratch dirs explicitly stripped.
     """
     path = os.pathsep.join(["/usr/bin", "/bin", "/usr/local/bin", "/opt/homebrew/bin"])
     return {
@@ -84,6 +89,11 @@ def _scrubbed_env() -> dict:
         "DYLD_INSERT_LIBRARIES": "",
         "DYLD_LIBRARY_PATH": "",
         "DYLD_FALLBACK_LIBRARY_PATH": "",
+        "PYTHONPATH": "",
+        "PYTHONHOME": "",
+        "TMPDIR": "/tmp",
+        "TEMP": "/tmp",
+        "TMP": "/tmp",
     }
 
 
@@ -101,6 +111,18 @@ def _sandbox_wrap(argv: list[str], project_dir: Path) -> list[str]:
     proj = str(Path(project_dir).resolve())
     tmp = os.path.realpath(tempfile.gettempdir())
     if sys.platform == "darwin" and shutil.which("sandbox-exec"):
+        # The profile is a quoted SBPL string, so a path containing a quote or
+        # backslash would close the literal and append attacker-chosen rules — a
+        # directory named `x") (allow network*) (subpath "/` silently restores the
+        # network this profile exists to deny. Refuse rather than escape: no
+        # legitimate project or temp path needs these characters, and a hard
+        # refusal cannot be defeated by a quoting subtlety.
+        for label, path in (("project directory", proj), ("temp directory", tmp)):
+            if any(ch in path for ch in '"\\\n\r\x00'):
+                raise ReproError(
+                    f"refusing to build a sandbox profile: {label} path contains a "
+                    f"character that cannot be safely quoted in SBPL: {path!r}"
+                )
         profile = (
             "(version 1)(allow default)(deny network*)(deny file-write*)"
             f'(allow file-write* (subpath "{proj}") (subpath "{tmp}") (subpath "/private/tmp")'
@@ -213,28 +235,45 @@ def run_and_digest(project_dir: Path, spec: ReproSpec) -> str:
     project_dir = Path(project_dir)
     before = _snapshot(project_dir, spec.outputs)
     argv = _sandbox_wrap(list(spec.command), project_dir)
-    proc = subprocess.Popen(
-        argv,
-        cwd=str(project_dir),
-        env=_scrubbed_env(),
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        preexec_fn=_apply_limits if os.name == "posix" else None,  # noqa: PLW1509 - single-threaded, POSIX rlimits
-        start_new_session=True,
-    )
-    try:
-        _out, err = proc.communicate(timeout=spec.timeout)
-    except subprocess.TimeoutExpired:
-        _kill_group(proc)
-        raise ReproError(f"reproduce command timed out after {spec.timeout}s") from None
-    finally:
-        _kill_group(proc)  # reap any surviving double-forked orphans
-    if proc.returncode != 0:
-        raise ReproError(
-            f"reproduce command failed (exit {proc.returncode}): "
-            f"{err.decode('utf-8', 'replace')[:2000]}"
-        )
+
+    # Streams go to files, not pipes. `communicate()` buffers whatever the child
+    # writes into the *parent's* address space, and none of the child's limits reach
+    # there: RLIMIT_AS bounds the child, RLIMIT_FSIZE bounds files it opens, and a
+    # pipe is neither. A carried command that simply wrote to stdout could therefore
+    # exhaust the verifier's memory while every other confinement held — measured at
+    # roughly 1 GiB of parent RSS for 400 MiB of child output, with the run reported
+    # as a success. Redirecting to real files puts the child's own RLIMIT_FSIZE back
+    # in the path, and the parent reads only a bounded prefix for its message.
+    with tempfile.TemporaryDirectory(prefix="docxplus-repro-") as stream_dir:
+        stdout_path = Path(stream_dir) / "stdout"
+        stderr_path = Path(stream_dir) / "stderr"
+        with open(stdout_path, "wb") as out_stream, open(stderr_path, "wb") as err_stream:
+            proc = subprocess.Popen(
+                argv,
+                cwd=str(project_dir),
+                env=_scrubbed_env(),
+                stdin=subprocess.DEVNULL,
+                stdout=out_stream,
+                stderr=err_stream,
+                preexec_fn=_apply_limits if os.name == "posix" else None,  # noqa: PLW1509 - single-threaded, POSIX rlimits
+                start_new_session=True,
+            )
+            try:
+                proc.wait(timeout=spec.timeout)
+            except subprocess.TimeoutExpired:
+                _kill_group(proc)
+                raise ReproError(
+                    f"reproduce command timed out after {spec.timeout}s"
+                ) from None
+            finally:
+                _kill_group(proc)  # reap any surviving double-forked orphans
+        if proc.returncode != 0:
+            with open(stderr_path, "rb") as handle:
+                tail = handle.read(MAX_CAPTURED_STDERR)
+            raise ReproError(
+                f"reproduce command failed (exit {proc.returncode}): "
+                f"{tail.decode('utf-8', 'replace')}"
+            )
     return _digest_outputs(project_dir, spec.outputs, before)
 
 

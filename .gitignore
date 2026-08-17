@@ -15,8 +15,12 @@ venv/
 .coverage.*
 htmlcov/
 
-# Generated, disposable outputs
-output/
+# Generated outputs are TRACKED: the documents and reports under output/ are the
+# evidence for the claims in the manuscript, so a reader must be able to fetch the
+# repository and inspect the artefacts rather than take the numbers on trust.
+# Only genuinely disposable intermediates are ignored.
+output/roundtrip/
+output/data/
 
 # OS
 .DS_Store

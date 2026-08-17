@@ -211,19 +211,68 @@ def test_opc_rejects_too_many_entries():
         opc.read_package(buf.getvalue())
 
 
-def test_opc_rejects_path_normalization_collision():
+def _package_with(*entries: tuple[str, bytes]) -> bytes:
     import io
     import zipfile
-
-    import opc
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
         zf.writestr("[Content_Types].xml", "<Types/>")
-        zf.writestr("word/document.xml", b"FIRST")
-        zf.writestr("word//document.xml", b"SECOND-smuggled")  # collapses to the same part
+        for name, data in entries:
+            zf.writestr(name, data)
+    return buf.getvalue()
+
+
+def test_opc_rejects_a_noncanonical_entry_name_outright():
+    """Refused on its own, without needing a colliding partner to give it away.
+
+    ``word//document.xml`` denotes ``word/document.xml``, so a reader that
+    normalises it silently operates on a part whose name no other consumer agrees
+    with. Refusing only the *pair* left the single smuggled entry admissible.
+    """
+    import opc
+
+    with pytest.raises(opc.OpcError, match="non-canonical entry name"):
+        opc.read_package(_package_with(("word//document.xml", b"smuggled")))
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "/word/document.xml",       # absolute
+        "//srv/share/document.xml",  # UNC-shaped
+        "C:/word/document.xml",      # drive-qualified
+        "word/./document.xml",       # normalises away
+        "a/../word/document.xml",    # traversal that resolves inside
+        "word\\document.xml",        # backslash separator
+        "word/doc\tument.xml",       # control character
+    ],
+)
+def test_opc_refuses_every_shape_of_noncanonical_name(name):
+    """One rule — canonical form or refusal — rather than a list of bad prefixes.
+
+    An earlier check named ``..`` and left the absolute, UNC, drive-letter and
+    control-character forms admissible, each silently rewritten into some other
+    part name on the way in.
+    """
+    import opc
+
+    with pytest.raises(opc.OpcError):
+        opc.read_package(_package_with((name, b"x")))
+
+
+def test_opc_still_rejects_a_case_folding_collision():
+    """Two individually canonical names that collapse to one part.
+
+    Canonical-form checking cannot catch this pair — both names are already
+    canonical — so the collision check remains load-bearing and is exercised here.
+    """
+    import opc
+
     with pytest.raises(opc.OpcError, match="colliding part names"):
-        opc.read_package(buf.getvalue())
+        opc.read_package(
+            _package_with(("word/document.xml", b"FIRST"), ("word/Document.xml", b"SECOND"))
+        )
 
 
 # -- redundant media carrier -----------------------------------------------

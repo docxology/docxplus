@@ -1,35 +1,44 @@
-# Abstract
+# Abstract {.unnumbered}
 
-DOCX and ODT are ZIP-packaged, XML-vocabulary word-processing formats whose
-extension points — additional package parts, custom XML, custom document
-properties, embedded media, and markup-compatibility namespaces — are documented
-and permissive. We exploit exactly those documented affordances to define **DOCX+**,
-a profile of Office Open XML WordprocessingML in which a single file is
-simultaneously (a) a conforming `.docx` that opens as an ordinary document in Word,
-LibreOffice, and Google Docs, and (b) a carrier of a modular *intelligence layer*:
-typed payload modules bound by a signed manifest. Sealing is applied per payload
-rather than to the whole package, so the surface document remains openable — a
-property whole-package OOXML encryption sacrifices — with lineages spanning
-memory-hard password encryption (Argon2id and Scrypt + AES-{{KEY_BITS}}-GCM), X25519 multi-recipient
-sealing, Shamir k-of-n threshold with Verifiable Secret Sharing (VSS), and plausible-deniability decoys.
+A `.docx` file is a ZIP archive governed by the Open Packaging Conventions (OPC; ISO/IEC 29500-2 /
+ECMA-376-2) [@iso29500], and its OpenDocument counterpart (OASIS ODF v1.3/v1.4) [@oasis_odf] is built the
+same way. Both standards document extension points — auxiliary package parts, custom XML datastores,
+application property sets, embedded media, markup-compatibility choice blocks — that exist precisely so a
+package can carry more than a conforming consumer knows how to read. **docxplus** is an open specification and
+reference implementation that takes those affordances seriously. A single archive satisfies two independent
+contracts at once: it is a conforming `.docx` or `.odt` that opens unremarkably in Microsoft Word,
+LibreOffice, and Google Docs, and it is an authenticated, modular carrier of typed computational payloads
+indexed by a signed manifest.
 
-Payloads are typed (`bytes`, `text`, `json`, a whole reproducible `project`, or a
-nested DOCX+), so a document can carry the software that produced it. Provenance is
-a signed Merkle root over the module set plus a digest of the visible text, with
-inclusion proofs and detached co-signatures; authenticity requires a caller-pinned
-key. A `project` module can carry a signed **reproduction attestation**: a reader
-verifies it cryptographically without executing anything, or opts in to re-run the
-attested command in a hermetic sandbox and confirm the outputs. Attestation records
-can be verified via an append-only cryptographic transparency log. A hardened intake
-path scans untrusted `.docx` for external references, macros, and foreign-content
-imports without executing them.
+The design turns on one decision: seal payloads, never the package. Whole-package MS-OFFCRYPTO encryption
+[@msoffcrypto] buys confidentiality by destroying the artefact — the prose becomes unreadable to anyone
+without a credential, and unreadable to archives permanently. Sealing each module instead leaves the surface
+document public and openable while confidentiality applies exactly where it is wanted. Modules seal under
+memory-hard password derivation (Argon2id [@rfc9106] or Scrypt [@rfc7914], feeding AES-{{KEY_BITS}}-GCM),
+X25519 multi-recipient key encapsulation [@rfc7748], Shamir $k$-of-$n$ threshold sharing [@shamir1979] with
+verifiable-share commitments [@feldman1987], or a decoy frame structurally indistinguishable from an ordinary
+sealed one. Payloads are typed (`bytes`, `text`, `json`, a nested `docxplus` container, or a whole
+reproducible `project` tree), so a paper can carry the code and data that produced it.
 
-{{CHANNEL_COUNT}} channels are implemented and tested — custom XML parts, additional package
-parts, custom document properties, markup compatibility and extensibility (MCE) choice blocks,
-and redundancy-capable least-significant-bit steganography in a visibly displayed image
-(a zero-setup pure-Python backend and a premium `docxology/steganographer` Rust backend).
-An OpenDocument Text (ODT) sibling container profile provides native OASIS ODF compatibility.
-The reference implementation is deterministic, dependency-light, and validated by real round-trip
-tests with no mocks under a {{COVERAGE_GATE}}% coverage gate, hardened across six versions by adversarial review
-with independent verification. Every structural decision traces to primary standards
-text collected in an accompanying standards-first research report.
+Provenance rests on a signed Merkle tree [@merkle1987] over the module roster together with a composite
+digest over every visible WordprocessingML story part — body, headers, footers, footnotes, endnotes, and
+comments — so editing a footnote breaks the signature exactly as editing a payload does. Inclusion proofs let
+a third party confirm one module belongs to the signed set without seeing the others, and detached
+co-signatures let an institution vouch alongside an author [@rfc8032]. Throughout, a verdict of *authentic*
+requires the caller to pin the key they trust; the key travelling inside the manifest is self-asserted, and
+we say so wherever the distinction bites. A `project` module may additionally carry a signed **reproduction
+attestation** binding its source to an output digest, which a reader checks cryptographically while executing
+nothing, or re-runs by explicit opt-in inside a confined, resource-capped sandbox. Attestations chain into an
+append-only transparency log whose authenticity comes from a signed tree head, because a hash chain on its
+own proves only that a log does not contradict itself.
+
+We implement and evaluate {{CHANNEL_COUNT}} spec-sanctioned transport channels: custom XML parts, auxiliary
+package parts, custom document properties, Markup Compatibility and Extensibility (MCE) choice blocks, and
+least-significant-bit steganography in a carrier image the document visibly displays. Concealment is
+measured, not asserted — a chi-squared detector [@westfeld2000] ships in-tree, with a prefix sweep that
+localises the partially-filled carriers whole-image statistics miss, alongside an optional compiled backend
+[@fridrich2001]. Across {{TEST_COUNT}} mock-free test functions under a {{COVERAGE_GATE}}% coverage gate we verify
+deterministic serialisation, round-trip integrity, openability in mainstream word processors, and the
+adversarial boundaries established by {{REDTEAM_AUDIT_COUNT}} red-team cycles closing
+{{REDTEAM_FINDING_COUNT}} confirmed findings — a record that includes the occasions when an earlier fix
+proved incomplete, and one negative result withdrawn rather than shipped.

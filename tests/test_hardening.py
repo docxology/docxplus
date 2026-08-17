@@ -137,9 +137,9 @@ def test_inclusion_proof_verifies_and_rejects_tamper():
     )
     reader = DocxPlusReader.from_bytes(data)
     proof = reader.inclusion_proof("b")
-    assert verify_inclusion(proof)
+    assert verify_inclusion(proof, reader.merkle_root())
     proof["digest"] = "deadbeef"
-    assert not verify_inclusion(proof)
+    assert not verify_inclusion(proof, reader.merkle_root())
 
 
 # -- resource safety -------------------------------------------------------
@@ -166,7 +166,7 @@ def test_project_rejects_symlink_member(tmp_path):
         info.type = tarfile.SYMTYPE
         info.linkname = "/etc/passwd"
         tar.addfile(info)
-    with pytest.raises(ValueError, match="link member"):
+    with pytest.raises(ValueError, match="only plain files and directories"):
         payloads.unpack_project(raw.getvalue(), tmp_path / "dest")
 
 
@@ -322,3 +322,387 @@ def test_tampered_stored_merkle_root_detected():
     report = validate_bytes(pkg.to_bytes())
     assert not report.ok
     assert any("merkle_root" in e for e in report.intelligence_errors)
+
+
+# -- Surface digest binds headers, footers, footnotes, endnotes, comments --
+def test_surface_digest_binds_headers_and_footers():
+    priv, _ = generate_signing_key()
+    b = DocxPlusBuilder(paragraphs=["Main body text."]).sign(priv)
+    # Manually add a header part to base_package
+    pkg = b.base_package or __import__("wordml").new_base_document(b.paragraphs, title=b.title, creator=b.creator)
+    pkg.add_part("word/header1.xml", b"<w:hdr><w:p><w:r><w:t>Confidential Disclaimer</w:t></w:r></w:p></w:hdr>", "application/xml")
+    b.base_package = pkg
+    data = b.add_module("m1", "custom_xml", b"payload").build()
+
+    reader = DocxPlusReader.from_bytes(data)
+    assert reader.verify_provenance() is True
+
+    # Tampering with header invalidates provenance
+    pkg_tampered = read_package(data)
+    pkg_tampered.parts["word/header1.xml"] = b"<w:hdr><w:p><w:r><w:t>Forged Disclaimer</w:t></w:r></w:p></w:hdr>"
+    reader_tampered = DocxPlusReader(package=pkg_tampered, manifest=__import__("manifest").read_manifest(pkg_tampered))
+    assert reader_tampered.verify_provenance() is False
+
+
+# -- ODT zip bomb defense --
+def test_odt_zip_bomb_guard_rejects_high_ratio():
+    import io
+    import zipfile
+    from odt import OdtPackage
+    import opc
+
+    large_zeros = b"\x00" * (5 * 1024 * 1024)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("content.xml", large_zeros)
+
+    with pytest.raises(opc.OpcError, match="inflate ratio|too large"):
+        OdtPackage.from_bytes(buf.getvalue())
+
+
+# -- TransparencyLog deterministic timestamp and SOURCE_DATE_EPOCH --
+def test_transparency_log_source_date_epoch_and_explicit_timestamp(monkeypatch):
+    from transparency import TransparencyLog
+
+    monkeypatch.setenv("SOURCE_DATE_EPOCH", "1700000000")
+    log1 = TransparencyLog()
+    e1 = log1.append({"output_digest": "d1", "toolchain": {}})
+    assert e1.timestamp == 1700000000
+
+    log2 = TransparencyLog()
+    e2 = log2.append({"output_digest": "d1", "toolchain": {}}, timestamp=1234567890)
+    assert e2.timestamp == 1234567890
+
+
+# -- Reproduce scrubbed env includes python and temp isolation --
+def test_reproduce_scrubbed_env_isolation():
+    from reproduce import _scrubbed_env
+    env = _scrubbed_env()
+    assert env["PYTHONPATH"] == ""
+    assert env["PYTHONHOME"] == ""
+    assert env["TMPDIR"] == "/tmp"
+    assert env["LD_PRELOAD"] == ""
+    assert env["DYLD_INSERT_LIBRARIES"] == ""
+
+
+def test_xml_attribute_values_are_escaped_and_round_trip():
+    from channels.custom_xml import CustomXmlChannel
+    from channels.metadata import MetadataChannel
+    from channels.mce import MceChannel
+    from defusedxml.ElementTree import fromstring
+    from wordml import new_base_document
+
+    slot = 'q" & < >'
+    pkg = new_base_document()
+    record = CustomXmlChannel().embed(pkg, b'custom', slot=slot)
+    assert CustomXmlChannel().extract(pkg, record) == b'custom'
+    MetadataChannel().embed(pkg, b'meta', slot=slot)
+    fromstring(pkg.parts['docProps/custom.xml'])
+    record = MceChannel().embed(pkg, b'mce', slot=slot)
+    assert MceChannel().extract(pkg, record) == b'mce'
+
+
+def test_kdf_rejects_malformed_and_excessive_scrypt_parameters():
+    with pytest.raises(ValueError, match='malformed scrypt'):
+        crypto._derive('pw', b's' * 16, crypto.KDF_SCRYPT, b'')
+    with pytest.raises(ValueError, match='outside accepted'):
+        crypto._derive('pw', b's' * 16, crypto.KDF_SCRYPT, bytes([15, 65, 1]))
+    with pytest.raises(ValueError, match='malformed PBKDF2'):
+        crypto._derive('pw', b's' * 16, crypto.KDF_PBKDF2, b'')
+
+
+def test_truncated_multi_recipient_envelope_fails_closed():
+    _, pub = generate_recipient_key()
+    envelope = crypto.seal_multi(b'x', [pub])
+    with pytest.raises(ValueError, match='truncated'):
+        crypto.unseal_multi(envelope[:8], generate_recipient_key()[0])
+
+
+# -- v0.7.0: the signature binds the part graph, not a list of filenames ------
+#
+# The signed surface used to be selected by name prefix. OPC decides which part a
+# consumer renders through the officeDocument *relationship*, so an attacker could
+# add a second document part, repoint that relationship, leave every signed byte
+# untouched, and still get verify_provenance(pinned_key) == True.
+
+
+def _signed_docx():
+    import crypto
+    from container import DocxPlusBuilder
+
+    priv, pub = crypto.generate_signing_key()
+    builder = DocxPlusBuilder(paragraphs=["Alice agrees to pay Bob 100 USD."])
+    builder.add_module("data", "package_part", b"payload").sign(priv)
+    return builder.build(), pub
+
+
+def _reverifies(mutate) -> bool:
+    from container import DocxPlusReader
+    from opc import read_package
+
+    signed, pub = _signed_docx()
+    pkg = read_package(signed)
+    mutate(pkg)
+    return DocxPlusReader.from_bytes(pkg.to_bytes()).verify_provenance(expected_public_key=pub)
+
+
+def test_honest_document_still_verifies():
+    from container import DocxPlusReader
+
+    signed, pub = _signed_docx()
+    assert DocxPlusReader.from_bytes(signed).verify_provenance(expected_public_key=pub) is True
+
+
+def test_document_swap_via_relationship_is_caught():
+    """The forgery that motivated the fix: repoint the main story, touch no signed byte."""
+    import wordml
+    from opc import Relationship
+
+    def mutate(pkg):
+        evil = pkg.parts["word/document.xml"].replace(b"100 USD", b"100000 USD")
+        pkg.add_part("word/document2.xml", evil, wordml.CT_DOCUMENT)
+        pkg.override_types["word/document.xml"] = "application/xml"
+        for rels in pkg.relationships.values():
+            for i, r in enumerate(rels):
+                if r.target.endswith("document.xml") and "officeDocument" in r.type:
+                    rels[i] = Relationship(r.id, r.type, "word/document2.xml")
+
+    assert _reverifies(mutate) is False
+
+
+def test_adding_an_unsigned_part_is_caught():
+    assert _reverifies(lambda p: p.add_part("word/extra.xml", b"<x/>", "application/xml")) is False
+
+
+def test_retyping_a_part_is_caught():
+    """Content types decide what a part *is*, so they are inside the signature."""
+    assert _reverifies(
+        lambda p: p.override_types.__setitem__("word/document.xml", "application/xml")
+    ) is False
+
+
+def test_adding_a_default_content_type_is_caught():
+    assert _reverifies(lambda p: p.default_types.__setitem__("bin", "application/octet-stream")) is False
+
+
+def test_adding_a_stray_relationship_is_caught():
+    """The relationship graph decides what a consumer follows, so it is signed too."""
+    from opc import Relationship
+
+    assert _reverifies(
+        lambda p: p.add_relationship(
+            Relationship("rIdX", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+                         "word/document.xml"),
+            source_part="",
+        )
+    ) is False
+
+
+def test_adding_a_header_part_is_caught():
+    assert _reverifies(lambda p: p.add_part("word/header1.xml", b"<h/>", "application/xml")) is False
+
+
+def test_odt_surface_digest_also_binds_the_whole_package():
+    import crypto
+    from odt import OdtPackage
+    from odt_container import OdtPlusBuilder, OdtPlusReader
+
+    priv, pub = crypto.generate_signing_key()
+    builder = OdtPlusBuilder(paragraphs=["Amount: $10,000."])
+    builder.add_module("m", b"payload").sign(priv)
+    signed = builder.build()
+    assert OdtPlusReader.from_bytes(signed).verify_provenance(expected_public_key=pub) is True
+
+    pkg = OdtPackage.from_bytes(signed)
+    pkg.add_part("Pictures/extra.png", b"\x89PNG", "image/png")
+    assert OdtPlusReader.from_bytes(pkg.to_bytes()).verify_provenance(expected_public_key=pub) is False
+
+
+def test_odt_rejects_duplicate_and_colliding_entry_names():
+    """A second content.xml stream lets a signed .odt render bytes it never signed."""
+    import io
+    import zipfile
+
+    import pytest as _pytest
+    from odt import MIMETYPE_ODT
+    from opc import OpcError
+
+    def build(names_and_data):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("mimetype", MIMETYPE_ODT)
+            for name, data in names_and_data:
+                zf.writestr(name, data)
+        return buf.getvalue()
+
+    from odt import OdtPackage
+
+    with _pytest.raises(OpcError, match="duplicate ZIP entry names"):
+        OdtPackage.from_bytes(build([("content.xml", b"<a/>"), ("content.xml", b"<b/>")]))
+
+    with _pytest.raises(OpcError, match="colliding ODT entry names"):
+        OdtPackage.from_bytes(build([("content.xml", b"<a/>"), ("./content.xml", b"<b/>")]))
+
+
+# -- v1.0.0 release-gate fixes ------------------------------------------------
+
+
+def test_argon2id_is_reachable_from_the_builder():
+    """The docs list three KDF lineages; before this, only one could be produced.
+
+    `crypto.encrypt` took a `kdf=` argument that nothing above it ever passed, so no
+    document the tool emitted had ever used Argon2id.
+    """
+    import crypto
+    from container import DocxPlusBuilder, DocxPlusReader, _iter_frames
+
+    expected = {"scrypt": crypto.KDF_SCRYPT, "argon2id": crypto.KDF_ARGON2ID,
+                "pbkdf2": crypto.KDF_PBKDF2}
+    for name, kdf_id in expected.items():
+        builder = DocxPlusBuilder(paragraphs=["x"])
+        builder.add_module("m", "package_part", b"secret", password="pw", kdf=name)
+        reader = DocxPlusReader.from_bytes(builder.build())
+        frame = next(_iter_frames(reader.package.parts["intelligence/payload1.dxp"]))
+        assert crypto.EncryptedPayload.from_bytes(frame).kdf_id == kdf_id, name
+        assert reader.extract("m", password="pw") == b"secret"
+
+
+def test_argon2id_is_reachable_from_the_odt_builder():
+    import crypto
+    from container import _iter_frames
+    from odt_container import OdtPlusBuilder, OdtPlusReader
+
+    builder = OdtPlusBuilder(paragraphs=["x"])
+    builder.add_module("m", b"secret", password="pw", kdf="argon2id")
+    reader = OdtPlusReader.from_bytes(builder.build())
+    frame = next(_iter_frames(reader.package.parts["intelligence/payload1.dxp"]))
+    assert crypto.EncryptedPayload.from_bytes(frame).kdf_id == crypto.KDF_ARGON2ID
+    assert reader.extract("m", password="pw") == b"secret"
+
+
+def test_builder_never_emits_a_package_its_own_reader_rejects():
+    """A highly compressible payload used to trip the reader's inflate-ratio guard."""
+    import validate
+    from container import DocxPlusBuilder, DocxPlusReader
+
+    for payload in (b"\x00" * (2 * 1024 * 1024), b'{"seq":1,"v":"x"}' * 200_000):
+        builder = DocxPlusBuilder(paragraphs=["x"])
+        builder.add_module("d", "package_part", payload)
+        data = builder.build()
+        assert validate.validate_bytes(data).ok, "builder emitted an unreadable package"
+        assert DocxPlusReader.from_bytes(data).extract("d") == payload
+
+
+def test_stego_carrier_is_actually_displayed():
+    """The channel's premise is a figure the document *shows*, not a spare part."""
+    import re
+
+    import pytest as _pytest
+
+    _pytest.importorskip("PIL")
+    from container import DocxPlusBuilder, DocxPlusReader
+    from opc import read_package
+
+    builder = DocxPlusBuilder(paragraphs=["visible prose"])
+    builder.add_module("fig", "stego_media", b"hidden payload", backend="python_lsb")
+    data = builder.build()
+
+    doc = read_package(data).parts["word/document.xml"].decode("utf-8")
+    assert "<w:drawing>" in doc
+    embed = re.search(r'r:embed="(rId\d+)"', doc)
+    assert embed, "the drawing must reference the carrier by relationship id"
+    rels = read_package(data).relationships.get("word/document.xml", [])
+    assert any(r.id == embed.group(1) and "image" in r.type for r in rels)
+    assert DocxPlusReader.from_bytes(data).extract("fig") == b"hidden payload"
+
+
+def test_verify_reproduction_is_not_verified_without_an_attestation():
+    """A module carrying no attestation must not report `verified: True`."""
+    import crypto
+    from container import DocxPlusBuilder, DocxPlusReader
+
+    priv, pub = crypto.generate_signing_key()
+    builder = DocxPlusBuilder(paragraphs=["x"])
+    builder.add_module("plain", "package_part", b"no attestation here").sign(priv)
+    reader = DocxPlusReader.from_bytes(builder.build())
+
+    info = reader.verify_reproduction("plain", expected_public_key=pub)
+    assert info["attested"] is False
+    assert info["verified"] is False
+
+
+def test_nesting_depth_is_carried_across_the_profile_boundary():
+    """One ODT hop must not reset a matryoshka budget the OPC reader was counting."""
+    import crypto
+    from container import ContainerError, DocxPlusBuilder
+    from odt_container import OdtPlusBuilder, OdtPlusReader
+
+    priv, _pub = crypto.generate_signing_key()
+    inner = DocxPlusBuilder(paragraphs=["inner"])
+    inner.add_module("m", "package_part", b"x").sign(priv)
+
+    outer = OdtPlusBuilder(paragraphs=["outer"])
+    outer.add_nested("inner", inner.build())
+    reader = OdtPlusReader.from_bytes(outer.build())
+
+    nested = reader.open_nested("inner")
+    assert nested._nest_depth == 1
+
+    reader._nest_depth = reader.MAX_NEST_DEPTH if hasattr(reader, "MAX_NEST_DEPTH") else 32
+    with pytest.raises(ContainerError, match="nesting deeper"):
+        reader.open_nested("inner")
+
+
+def test_open_nested_refuses_a_module_that_is_not_a_document():
+    from container import ContainerError
+    from odt_container import OdtPlusBuilder, OdtPlusReader
+
+    builder = OdtPlusBuilder(paragraphs=["x"]).add_module("notadoc", b"just bytes")
+    reader = OdtPlusReader.from_bytes(builder.build())
+    with pytest.raises(ContainerError, match="not a nested document"):
+        reader.open_nested("notadoc")
+
+
+def test_chaff_is_randomly_sized_so_module_size_implies_no_payload_length():
+    """Deniability has a size dimension the frame-count tests do not cover.
+
+    Two frames of fixed overhead would make a module's stored size a direct readout
+    of its payload length, and an adversary who can read the payload length off the
+    package can test a guess about what is in it. The chaff frame is randomly sized
+    to break that link. Measured rather than assumed, because a chaff generator that
+    silently became fixed-length would leave every other deniability test passing.
+    """
+    sizes = set()
+    for _ in range(12):
+        doc = DocxPlusBuilder().add_module("s", "package_part", b"P" * 64, password="a").build()
+        sizes.add(DocxPlusReader.from_bytes(doc).describe("s")["size"])
+    assert len(sizes) > 1, f"chaff is fixed-length; module size now leaks payload length: {sizes}"
+
+
+def test_a_decoy_module_size_falls_inside_the_ordinary_module_range():
+    """The size distributions must overlap, or size alone separates the two cases.
+
+    A decoy carries two real payloads, so its size is deterministic given their
+    lengths; an ordinary module's is randomised by chaff. What deniability needs is
+    that an observed decoy size is one an ordinary module could equally have
+    produced, which is what this asserts. The scope documented in
+    `docs/security-model.md` is exactly this — one document, payload lengths unknown
+    — and not indistinguishability under a distributional attack.
+    """
+    payload = b"X" * 64
+    ordinary = [
+        DocxPlusReader.from_bytes(
+            DocxPlusBuilder().add_module("s", "package_part", payload, password="a").build()
+        ).describe("s")["size"]
+        for _ in range(24)
+    ]
+    decoy_doc = (
+        DocxPlusBuilder()
+        .add_decoy("s", real=payload, real_password="a", decoy=payload, decoy_password="b")
+        .build()
+    )
+    decoy_size = DocxPlusReader.from_bytes(decoy_doc).describe("s")["size"]
+    assert min(ordinary) <= decoy_size <= max(ordinary), (
+        f"decoy size {decoy_size} sits outside the ordinary-module range "
+        f"[{min(ordinary)}, {max(ordinary)}]; size alone would separate the two cases"
+    )

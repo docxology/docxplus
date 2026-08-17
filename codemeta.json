@@ -1,13 +1,13 @@
 {
   "@context": "https://doi.org/10.5063/schema/codemeta-2.0",
   "@type": "SoftwareSourceCode",
-  "name": "DOCX+ — the Intelligent Document Container",
+  "name": "docxplus \u2014 the Intelligent Document Container",
   "description": "A byte-valid OOXML .docx that also carries a modular, signed, encrypted intelligence layer through spec-sanctioned side-channels, with an optional steganographer signed-packet media backend.",
-  "version": "0.6.0",
+  "version": "1.0.0",
   "programmingLanguage": "Python",
   "runtimePlatform": "Python 3.10+",
   "license": "https://spdx.org/licenses/MIT",
-  "codeRepository": "https://github.com/docxology/docx",
+  "codeRepository": "https://github.com/docxology/docxplus",
   "keywords": [
     "OOXML",
     "DOCX",
@@ -22,7 +22,10 @@
       "givenName": "Daniel Ari",
       "familyName": "Friedman",
       "@id": "https://orcid.org/0000-0001-6232-9096",
-      "affiliation": { "@type": "Organization", "name": "Active Inference Institute" }
+      "affiliation": {
+        "@type": "Organization",
+        "name": "Active Inference Institute"
+      }
     }
   ]
 }

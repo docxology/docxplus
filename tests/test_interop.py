@@ -16,7 +16,7 @@ def test_libreoffice_headless_convert_docx():
     bin_name = shutil.which("soffice") or shutil.which("libreoffice")
     with tempfile.TemporaryDirectory() as td:
         docx_path = Path(td) / "test_doc.docx"
-        b = DocxPlusBuilder(paragraphs=["Hello from DOCX+ interop test."])
+        b = DocxPlusBuilder(paragraphs=["Hello from docxplus interop test."])
         b.add_module("m1", "custom_xml", b"payload1")
         b.add_module("m2", "mce", b"mce payload")
         docx_path.write_bytes(b.build())

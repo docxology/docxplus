@@ -1,6 +1,6 @@
-# AGENTS.md — DOCX+ working guide
+# AGENTS.md — docxplus working guide
 
-Standalone research repo implementing **DOCX+**, an intelligent OOXML document
+Standalone research repo implementing **docxplus**, an intelligent OOXML document
 container. Follows the docxology `template_code_project` paradigm (tested `src/`,
 thin `scripts/`, no-mocks tests, ≥90% coverage) but does **not** import the
 template's shared `infrastructure/` layer — it is self-contained.
@@ -9,7 +9,7 @@ template's shared `infrastructure/` layer — it is self-contained.
 
 ```bash
 uv venv && uv pip install -e '.[dev,media]'     # figures extra adds matplotlib
-./run.sh                        # preflight -> tests -> build example -> roundtrip
+./run.sh                        # preflight, tests, example, dossier, round trips, manuscript
 .venv/bin/python -m pytest --cov=src -q          # tests + 90% gate
 uv run docxplus --help                           # the CLI
 ```

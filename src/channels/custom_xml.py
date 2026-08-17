@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import base64
 
+from xml.sax.saxutils import quoteattr
+
 from defusedxml.ElementTree import fromstring as _safe_fromstring
 
 from channels.base import ChannelRecord
@@ -33,7 +35,7 @@ class CustomXmlChannel:
         encoded = base64.b64encode(payload).decode("ascii")
         xml = (
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-            f'<dx:payload xmlns:dx="{NS_DXPLUS}" slot="{slot}" encoding="base64">'
+            f'<dx:payload xmlns:dx="{NS_DXPLUS}" slot={quoteattr(slot)} encoding="base64">'
             f"{encoded}</dx:payload>"
         ).encode()
         pkg.add_part(part_name, xml, CT_CUSTOM_XML)

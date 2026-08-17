@@ -1,4 +1,4 @@
-# manuscript/ — the DOCX+ format write-up
+# manuscript/ — the docxplus format write-up
 
 Modular, token-driven sections (00–04) plus `config.yaml`. See `README.md` for the
 render pipeline. Result claims must match the regenerated artifacts under `output/`.

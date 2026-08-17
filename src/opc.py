@@ -1,11 +1,11 @@
-"""Open Packaging Conventions (OPC) primitives for DOCX+ containers.
+"""Open Packaging Conventions (OPC) primitives for docxplus containers.
 
 Grounded in ISO/IEC 29500-2 / ECMA-376 Part 2 as summarised in the DOCX/ODT
 standards report (§2.1): an OPC package is a ZIP whose mandatory index parts are
 ``[Content_Types].xml`` and ``_rels/.rels``; every part must be reachable by
 following relationships; duplicate ZIP entry names are a corruption class.
 
-This module is deliberately dependency-free (stdlib ``zipfile`` only) so a DOCX+
+This module is deliberately dependency-free (stdlib ``zipfile`` only) so a docxplus
 package can be produced and inspected without any Office toolchain. Output is
 *deterministic*: entries are written with a fixed timestamp and stable order, per
 the Reproducible Builds guidance the report cites (§2.3, §10).
@@ -14,9 +14,12 @@ the Reproducible Builds guidance the report cites (§2.3, §10).
 from __future__ import annotations
 
 import posixpath
+import re
 import zipfile
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+
+from xml.sax.saxutils import quoteattr
 
 from defusedxml.ElementTree import fromstring as _safe_fromstring
 
@@ -118,7 +121,7 @@ class OpcPackage:
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             for name in ordered:
                 info = zipfile.ZipInfo(name, date_time=_FIXED_ZIP_TIME)
-                info.compress_type = zipfile.ZIP_DEFLATED
+                info.compress_type = _compression_for(rendered[name])
                 info.external_attr = 0o600 << 16
                 zf.writestr(info, rendered[name])
         return buf.getvalue()
@@ -136,12 +139,15 @@ class OpcPackage:
             f'<Types xmlns="{NS_CONTENT_TYPES}">',
         ]
         for ext in sorted(self.default_types):
-            lines.append(f'<Default Extension="{ext}" ContentType="{self.default_types[ext]}"/>')
+            lines.append(f'<Default Extension={quoteattr(ext)} ContentType={quoteattr(self.default_types[ext])}/>')
         for part in sorted(self.override_types):
             ct = self.override_types[part]
-            lines.append(f'<Override PartName="/{part}" ContentType="{ct}"/>')
+            lines.append(f'<Override PartName={quoteattr("/" + part)} ContentType={quoteattr(ct)}/>')
         lines.append("</Types>")
         return "".join(lines).encode("utf-8")
+
+
+_DRIVE_LETTER = re.compile(r"^[A-Za-z]:")
 
 
 def _normalize_part_name(name: str) -> str:
@@ -150,6 +156,38 @@ def _normalize_part_name(name: str) -> str:
     if norm.startswith("..") or norm == ".":
         raise OpcError(f"illegal part name: {name!r}")
     return norm
+
+
+def _reject_noncanonical_entry_name(name: str) -> None:
+    """Refuse a ZIP entry name that is not already the part name it denotes.
+
+    ``_normalize_part_name`` exists to canonicalise names this library constructs.
+    Applying it to *untrusted* entry names turns it into a silent rewriter, and a
+    rewriter is a smuggling vector: this reader stored ``/abs/x.xml`` as
+    ``abs/x.xml`` and ``a/../b.xml`` as ``b.xml``, so the part it operated on had a
+    different name from the one any other consumer — a word processor, a scanner,
+    an archive lister — reads off the entry. Disagreement about *which part this is*
+    is the same class of defect as the case-folding collision already closed above.
+
+    The rule is canonical-form-or-refuse rather than a list of bad prefixes,
+    deliberately. A check that named ``/`` and ``..`` would still have admitted the
+    drive-letter and NUL forms below, and would admit whatever the next variant is.
+    """
+    if not name or name.endswith("/"):
+        return
+    if "\\" in name or any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in name):
+        raise OpcError(f"illegal characters in entry name: {name!r}")
+    if _DRIVE_LETTER.match(name):
+        raise OpcError(f"drive-qualified entry name: {name!r}")
+    try:
+        canonical = _normalize_part_name(name)
+    except OpcError:
+        raise OpcError(f"illegal part name: {name!r}") from None
+    if canonical != name:
+        raise OpcError(
+            f"non-canonical entry name {name!r} (denotes {canonical!r}); OPC entry "
+            "names must be relative and already normalised"
+        )
 
 
 def _rels_part_for(source_part: str) -> str:
@@ -167,7 +205,7 @@ def _render_relationships(rels: Iterable[Relationship]) -> bytes:
     for r in sorted(rels, key=lambda x: x.id):
         mode = ' TargetMode="External"' if r.mode == "External" else ""
         lines.append(
-            f'<Relationship Id="{r.id}" Type="{r.type}" Target="{r.target}"{mode}/>'
+            f'<Relationship Id={quoteattr(r.id)} Type={quoteattr(r.type)} Target={quoteattr(r.target)}{mode}/>'
         )
     lines.append("</Relationships>")
     return "".join(lines).encode("utf-8")
@@ -195,10 +233,8 @@ def read_package(data: bytes) -> OpcPackage:
         for name in names:
             if name.endswith("/"):
                 continue
-            try:
-                key = _normalize_part_name(name).casefold()
-            except OpcError:
-                continue
+            _reject_noncanonical_entry_name(name)
+            key = _normalize_part_name(name).casefold()
             if key in seen and seen[key] != name:
                 raise OpcError(f"colliding part names: {seen[key]!r} and {name!r}")
             seen[key] = name
@@ -221,6 +257,30 @@ MAX_ENTRY_BYTES = 256 * 1024 * 1024        # per-part inflated size
 MAX_TOTAL_BYTES = 1024 * 1024 * 1024       # whole-package inflated size
 MAX_INFLATE_RATIO = 200                     # inflated/compressed per entry
 MAX_ENTRIES = 4096                          # pathological part-graph cap (checked pre-read)
+
+
+def _compression_for(data: bytes) -> int:
+    """Choose a compression method the *reader's* bomb guard will accept.
+
+    A writer must never emit a package its own reader refuses. Deflating a highly
+    compressible payload — a sparse buffer, a zero-filled block — trips the
+    inflate-ratio heuristic, and the tool produced documents that then failed
+    `validate` and could not be extracted through the public API at all.
+
+    The ratio test is a hostile-input heuristic, not a size bound: memory is already
+    bounded by the absolute per-entry and total caps, which apply either way. Storing
+    such an entry uncompressed keeps the ratio at 1 and costs space only for payloads
+    that would have compressed suspiciously well. The choice is a pure function of
+    the bytes, so determinism is unaffected.
+    """
+    import zlib
+
+    if len(data) <= 1_000_000:
+        return zipfile.ZIP_DEFLATED
+    compressed = max(len(zlib.compress(data, 9)), 1)
+    if len(data) / compressed > MAX_INFLATE_RATIO:
+        return zipfile.ZIP_STORED
+    return zipfile.ZIP_DEFLATED
 
 
 def _guard_zip_bomb(infos, compressed_len: int) -> None:

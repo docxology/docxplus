@@ -1,4 +1,4 @@
-"""DOCX+ — a byte-valid OOXML .docx that also carries a modular, signed,
+"""docxplus — a byte-valid OOXML .docx that also carries a modular, signed,
 encrypted intelligence layer through spec-sanctioned side-channels.
 
 Public surface:

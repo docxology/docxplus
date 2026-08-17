@@ -1,4 +1,4 @@
-# src/ — DOCX+ domain modules
+# src/ — docxplus domain modules
 
 All business logic lives here. Modules are imported flat (pyproject `pythonpath`
 includes `src`): `import opc`, `import container`, `import channels`.

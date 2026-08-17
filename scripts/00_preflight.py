@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Preflight: report which DOCX+ capabilities are available in this environment.
+"""Preflight: report which docxplus capabilities are available in this environment.
 
 Thin orchestrator — all checks live in ``src``. Never masks an absent tool as a
 pass; it reports each capability's real status and exits 0 (informational).
@@ -16,7 +16,7 @@ import steg_bridge
 
 
 def main() -> int:
-    print("DOCX+ preflight")
+    print("docxplus preflight")
     print("  core (opc/crypto/channels): available")
 
     try:

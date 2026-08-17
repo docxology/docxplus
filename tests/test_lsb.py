@@ -7,6 +7,7 @@ import pytest
 pytest.importorskip("PIL")
 
 import lsb
+from conftest import pixels
 
 
 def test_capacity_matches_formula():
@@ -30,9 +31,9 @@ def test_carrier_visually_close_to_original(tmp_path):
     from PIL import Image
 
     carrier = lsb.make_carrier(tmp_path / "carrier.png", (64, 64))
-    orig = list(Image.open(carrier).convert("RGB").getdata())
+    orig = pixels(Image.open(carrier).convert("RGB"))
     stego = lsb.embed(carrier, b"secret payload", tmp_path / "stego.png")
-    changed = list(Image.open(stego).convert("RGB").getdata())
+    changed = pixels(Image.open(stego).convert("RGB"))
     # LSB flips differ by at most 1 per channel.
     assert all(abs(a - b) <= 1 for po, pn in zip(orig, changed) for a, b in zip(po, pn))
 

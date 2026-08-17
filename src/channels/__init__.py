@@ -1,4 +1,4 @@
-"""DOCX+ intelligence channels and the channel registry."""
+"""docxplus intelligence channels and the channel registry."""
 
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a demonstration DOCX+ carrying intelligence across every pure channel.
+"""Build a demonstration docxplus carrying intelligence across every pure channel.
 
 Emits a real ``.docx`` to ``output/documents/`` that opens as an ordinary Word
 document yet carries a signed manifest and several payload modules. Prints the
@@ -54,8 +54,25 @@ def main() -> int:
     except ImportError:
         pass
 
-    out.write_bytes(builder.build())
-    print(str(out))
+    from fileext import write_document
+
+    for w in write_document(builder.build(), out):
+        print(str(w))
+
+    # The ODT sibling, built from the same primitives. Shipping one proves the
+    # profile end to end in the artifact set rather than only in the test suite.
+    from odt_container import OdtPlusBuilder
+
+    odt_out = out.parent / "example_docxplus.odt"
+    odt = OdtPlusBuilder(
+        paragraphs=["This is an ordinary OpenDocument text file."],
+        title="docxplus ODT example",
+    )
+    odt.add_module("brief", brief)  # `brief` is already packed bytes
+    odt.add_module("secret", b"eyes-only payload", password="correct horse")
+    odt.sign(priv)
+    for w in write_document(odt.build(), odt_out):
+        print(str(w))
     return 0
 
 

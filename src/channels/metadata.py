@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 
+from xml.sax.saxutils import escape, quoteattr
 from defusedxml.ElementTree import fromstring as _safe_fromstring
 
 from channels.base import ChannelRecord
@@ -80,8 +81,8 @@ def _store_props(pkg: OpcPackage, props: dict[str, str]) -> None:
     entries = []
     for pid, (name, value) in enumerate(sorted(props.items()), start=2):
         entries.append(
-            f'<property fmtid="{_FMTID}" pid="{pid}" name="{name}">'
-            f'<vt:lpwstr>{value}</vt:lpwstr></property>'
+            f'<property fmtid="{_FMTID}" pid="{pid}" name={quoteattr(name)}>'
+            f'<vt:lpwstr>{escape(value)}</vt:lpwstr></property>'
         )
     xml = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'

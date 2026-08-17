@@ -115,3 +115,88 @@ def test_validate_mce_channel():
 
     report = validate_package(pkg)
     assert report.ok is True
+
+
+# -- OPC whole-package signature coverage (docs/opc-signatures.md) -------------
+#
+# The rule exists before any signing support does, on purpose: a package signature
+# that covers only the conventional Word parts would render as valid in a desktop
+# office suite over a document whose intelligence layer had been stripped.
+
+
+_SIG_NS = "http://www.w3.org/2000/09/xmldsig#"
+
+
+def _signature_part(uris: list[str]) -> bytes:
+    refs = "".join(f'<Reference URI="{u}"/>' for u in uris)
+    return (
+        f'<Signature xmlns="{_SIG_NS}"><SignedInfo>{refs}</SignedInfo></Signature>'
+    ).encode("utf-8")
+
+
+def _docx_with_signature(uris: list[str]) -> tuple:
+    import crypto
+    from container import DocxPlusBuilder
+    from opc import read_package
+    from validate import ValidationReport, check_opc_signature_coverage
+
+    priv, _pub = crypto.generate_signing_key()
+    builder = DocxPlusBuilder(paragraphs=["surface"])
+    builder.add_module("brief", "package_part", b"payload")
+    builder.sign(priv)
+    pkg = read_package(builder.build())
+    pkg.parts["_xmlsignatures/origin.sigs"] = b""
+    pkg.parts["_xmlsignatures/sig1.xml"] = _signature_part(uris)
+    report = ValidationReport()
+    check_opc_signature_coverage(pkg, report)
+    return pkg, report
+
+
+def test_opc_signature_covering_only_word_parts_is_rejected():
+    """The trust-laundering case: a valid-looking signature over a stripped payload set."""
+    _pkg, report = _docx_with_signature(["/word/document.xml", "/[Content_Types].xml"])
+    assert not report.ok
+    joined = " ".join(report.intelligence_errors)
+    assert "does not cover intelligence parts" in joined
+    assert "intelligence/manifest.json" in joined
+
+
+def test_opc_signature_covering_every_manifest_part_is_accepted():
+    from manifest import MANIFEST_PART
+
+    _pkg, report = _docx_with_signature(
+        [f"/{MANIFEST_PART}", "/intelligence/payload1.dxp", "/word/document.xml"]
+    )
+    assert report.ok, report.to_dict()
+
+
+def test_signature_reference_uris_are_matched_ignoring_the_content_type_query():
+    """OPC references carry ?ContentType=…; stripping it is required, not cosmetic."""
+    from manifest import MANIFEST_PART
+
+    _pkg, report = _docx_with_signature([
+        f"/{MANIFEST_PART}?ContentType=application/vnd.docxplus.manifest%2Bjson",
+        "/intelligence/payload1.dxp?ContentType=application/vnd.docxplus.payload",
+    ])
+    assert report.ok, report.to_dict()
+
+
+def test_package_without_an_opc_signature_is_unaffected():
+    import crypto
+    from container import DocxPlusBuilder
+    from opc import read_package
+    from validate import ValidationReport, check_opc_signature_coverage
+
+    priv, _pub = crypto.generate_signing_key()
+    builder = DocxPlusBuilder(paragraphs=["surface"])
+    builder.add_module("brief", "package_part", b"payload")
+    builder.sign(priv)
+    report = ValidationReport()
+    check_opc_signature_coverage(read_package(builder.build()), report)
+    assert report.ok
+
+
+def test_malformed_signature_part_covers_nothing_and_fails_closed():
+    _pkg, report = _docx_with_signature([])
+    # An unparseable or empty signature must not be read as covering everything.
+    assert not report.ok

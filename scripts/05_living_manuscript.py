@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""The Living Manuscript — carry the real template_code_project, attest reproduction.
+"""The Living Manuscript — a document that carries and reproduces its own source.
 
-Builds a single signed .docx that carries the whole docxology/template_code_project
-exemplar plus a reproduction attestation binding source → a deterministic output
-digest. Then it demonstrates both trust paths from the Council synthesis:
+Builds a single signed .docx carrying the whole docxplus repository as a `project`
+module, together with a signed reproduction attestation over it. A reader can then:
 
-  * verify_reproduction() — cryptographic, executes nothing (the default).
+  * verify_reproduction(slot) — cryptographic, executes nothing (the default path);
   * reproduce(allow_execution=True) — opt-in, re-runs the attested command in a
-    hermetic sandbox and confirms the output digest matches.
+    confined sandbox and compares digests.
 
-This is template_code_project fully integrated as the exemplar a document carries,
-reproduces, and proves.
+The carried tree is resolved from the repository root, so the claim "this paper
+carries its own source" is true wherever the script runs. It previously pointed at
+an external exemplar on one machine, which made the claim false everywhere else and
+broke `run.sh` on any other checkout.
 """
 
 from __future__ import annotations
@@ -24,13 +25,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import crypto
 from container import DocxPlusBuilder, DocxPlusReader
-from project_paths import ensure_output_dirs
+from project_paths import ensure_output_dirs, project_root
 from reproduce import ReproSpec
 from validate import validate_bytes
 
-TEMPLATE = Path(
-    "/Users/4d/Documents/GitHub/template/projects/templates/template_code_project"
-)
+# The document carries *this* repository. That is the whole claim, so the source is
+# resolved from the repo itself rather than from a path on one machine: the previous
+# hardcoded absolute path pointed at an unrelated external exemplar, which made the
+# manuscript's "carries its own source" statement false everywhere and made `run.sh`
+# fail on every machine but one.
+CARRIED_PROJECT = project_root()
+CARRIED_SLOT = "docxplus_source"
 
 # A dependency-free, deterministic reproduction: digest every .py file in the tree
 # and write it out. Re-running yields the same digest; a one-byte source change
@@ -47,8 +52,8 @@ _SNIPPET = (
 
 
 def main() -> int:
-    if not TEMPLATE.is_dir():
-        sys.stderr.write(f"template_code_project not found at {TEMPLATE}\n")
+    if not CARRIED_PROJECT.is_dir():
+        sys.stderr.write(f"repository root not found at {CARRIED_PROJECT}\n")
         return 1
     dirs = ensure_output_dirs()
     priv, _ = crypto.generate_signing_key()
@@ -59,7 +64,7 @@ def main() -> int:
             paragraphs=["The Living Manuscript", "This paper carries and reproduces its own source."],
             title="The Living Manuscript",
         )
-        .add_project("template_code_project", TEMPLATE, password="reproduce", reproduce=spec)
+        .add_project(CARRIED_SLOT, CARRIED_PROJECT, password="reproduce", reproduce=spec)
         .sign(priv)
         .build()
     )
@@ -67,10 +72,10 @@ def main() -> int:
     out.write_bytes(data)
 
     reader = DocxPlusReader.from_bytes(data)
-    verified = reader.verify_reproduction("template_code_project")
+    verified = reader.verify_reproduction(CARRIED_SLOT)
     with tempfile.TemporaryDirectory() as td:
         run = reader.reproduce(
-            "template_code_project", Path(td) / "src", allow_execution=True, password="reproduce"
+            CARRIED_SLOT, Path(td) / "src", allow_execution=True, password="reproduce"
         )
 
     report = {

@@ -1,4 +1,4 @@
-"""DOCX+ container: compose typed, sealed, provenance-bound modules into a valid
+"""docxplus container: compose typed, sealed, provenance-bound modules into a valid
 .docx, and read them back.
 
 v0.2 capabilities (see docs/design-rationale.md, docs/cookbook.md):
@@ -48,6 +48,66 @@ class _Pending:
     decoy: tuple[object, str, object, str] | None  # (real, real_pw, decoy, decoy_pw)
     channel_kwargs: dict
     reproduction: dict = None  # type: ignore[assignment]  # attestation for project modules
+    #: Password-KDF for this module. Selectable because the format documents three
+    #: lineages; before this was threaded through, Argon2id was reachable only by
+    #: calling `crypto.encrypt` directly, so no document the tool produced ever used it.
+    kdf: str = "scrypt"
+    #: Raise the apparent recipient count to this many slots. The envelope carries
+    #: one wrap per recipient, so its length reveals how many there are even though
+    #: the manifest records neither identities nor count. Padding to a fixed bucket
+    #: closes that channel; 0 leaves the true count visible.
+    recipient_padding: int = 0
+
+
+def _compute_surface_digest(pkg: OpcPackage) -> str:
+    """Digest everything a consumer could render or follow, except the manifest itself.
+
+    **This binds the part graph, not a list of filenames.** The previous version
+    selected parts by name prefix (`word/document.xml`, `word/header*`, and so on),
+    which put a naming convention in the trust path and left a forgery open: OPC
+    decides which part is the main story through the *officeDocument relationship*,
+    not the filename. An attacker could add `word/document2.xml` carrying different
+    text, repoint that relationship at it, and leave every signed byte untouched.
+    `verify_provenance(expected_public_key=trusted)` returned True while a renderer
+    displayed the attacker's text — the signature answered "did the key-holder attest
+    these bytes under this filename", which is not the question any reader is asking.
+
+    So the digest now covers, in sorted order:
+
+    * every part in the package and its bytes;
+    * the content-type map, which decides what each part *is*;
+    * the relationship graph, which decides which part a consumer actually follows.
+
+    Only ``intelligence/manifest.json`` and the relationship pointing at it are
+    excluded, because the manifest carries this digest and cannot contain itself.
+    Payload parts are covered too; that overlaps the Merkle root harmlessly, and
+    "everything except one named exception" is a rule that survives a new channel
+    being added, which a prefix list demonstrably did not.
+    """
+    from manifest import MANIFEST_PART
+
+    chunks: list[bytes] = []
+    for name in sorted(pkg.parts):
+        if name == MANIFEST_PART:
+            continue
+        chunks.append(b"P\x00" + name.encode("utf-8") + b"\x00" + pkg.parts[name])
+
+    for ext, ctype in sorted(pkg.default_types.items()):
+        chunks.append(b"D\x00" + ext.encode("utf-8") + b"\x00" + ctype.encode("utf-8"))
+    for part, ctype in sorted(pkg.override_types.items()):
+        if part.lstrip("/") == MANIFEST_PART:
+            continue
+        chunks.append(b"O\x00" + part.encode("utf-8") + b"\x00" + ctype.encode("utf-8"))
+
+    for source in sorted(pkg.relationships):
+        for rel in sorted(pkg.relationships[source], key=lambda r: (r.type, r.target, r.id)):
+            if rel.target.lstrip("/") == MANIFEST_PART:
+                continue
+            chunks.append(
+                b"R\x00" + source.encode("utf-8") + b"\x00" + rel.type.encode("utf-8")
+                + b"\x00" + rel.target.encode("utf-8") + b"\x00" + rel.mode.encode("utf-8")
+            )
+    return crypto.digest(b"\x00".join(chunks))
 
 
 @dataclass
@@ -56,7 +116,7 @@ class DocxPlusBuilder:
 
     paragraphs: list[str] = field(default_factory=lambda: ["This is an ordinary document."])
     title: str = "Document"
-    creator: str = "DOCX+"
+    creator: str = "docxplus"
     base_package: OpcPackage | None = None
     _pending: list[_Pending] = field(default_factory=list)
     _private_key: bytes | None = None
@@ -76,6 +136,8 @@ class DocxPlusBuilder:
         password: str | None = None,
         recipients: list[bytes] | None = None,
         threshold: tuple[int, int] | None = None,
+        kdf: str = "scrypt",
+        recipient_padding: int = 0,
         **channel_kwargs,
     ) -> DocxPlusBuilder:
         """Queue a typed payload on ``channel_id`` under manifest ``slot``.
@@ -92,7 +154,7 @@ class DocxPlusBuilder:
         payloads.get_type(payload_type)  # validate early
         self._pending.append(
             _Pending(slot, channel_id, obj, payload_type, password, recipients,
-                     threshold, None, channel_kwargs)
+                     threshold, None, channel_kwargs, kdf=kdf, recipient_padding=recipient_padding)
         )
         return self
 
@@ -103,6 +165,7 @@ class DocxPlusBuilder:
         *,
         channel_id: str = "package_part",
         reproduce: object | bool | None = None,
+        follow_symlinks: bool = False,
         **seal,
     ) -> DocxPlusBuilder:
         """Pack an entire directory tree and carry it as a ``project`` module.
@@ -113,7 +176,7 @@ class DocxPlusBuilder:
         signed attestation travels in the manifest. Nothing is executed on read.
         """
         project_dir = Path(project_dir)
-        blob = payloads.pack_project(project_dir)
+        blob = payloads.pack_project(project_dir, follow_symlinks=follow_symlinks)
         self.add_module(slot, channel_id, blob, payload_type="project", **seal)
         if reproduce is not None and reproduce is not False:
             import tempfile
@@ -136,7 +199,7 @@ class DocxPlusBuilder:
     def add_nested(
         self, slot: str, inner_docx: bytes, *, channel_id: str = "package_part", **seal
     ) -> DocxPlusBuilder:
-        """Carry a whole DOCX+ document as a nested ``docxplus`` module."""
+        """Carry a whole docxplus document as a nested ``docxplus`` module."""
         return self.add_module(slot, channel_id, inner_docx, payload_type="docxplus", **seal)
 
     def add_threshold(
@@ -151,6 +214,7 @@ class DocxPlusBuilder:
     def add_decoy(
         self, slot: str, *, real: object, real_password: str, decoy: object,
         decoy_password: str, channel_id: str = "package_part", payload_type: str = "bytes",
+        kdf: str = "scrypt",
     ) -> DocxPlusBuilder:
         """Two payloads under two passwords; neither reveals the other."""
         if channel_id not in channel_registry.available_channels():
@@ -160,7 +224,7 @@ class DocxPlusBuilder:
         payloads.get_type(payload_type)
         self._pending.append(
             _Pending(slot, channel_id, None, payload_type, None, None, None,
-                     (real, real_password, decoy, decoy_password), {})
+                     (real, real_password, decoy, decoy_password), {}, kdf=kdf)
         )
         return self
 
@@ -191,10 +255,9 @@ class DocxPlusBuilder:
             record = self._place(pkg, m)
             manifest.add(record)
 
-        # Bind the visible document text into the signed body: a signature over the
-        # manifest otherwise says nothing about the paragraphs a reader sees.
-        doc_part = pkg.parts.get("word/document.xml", b"")
-        manifest.surface_digest = crypto.digest(doc_part)
+        # Bind all visible document text and story parts into the signed body:
+        # covers document.xml, headers, footers, footnotes, endnotes, and comments.
+        manifest.surface_digest = _compute_surface_digest(pkg)
 
         body = manifest.canonical_body()
         if self._private_key is not None and self._public_key is not None:
@@ -213,45 +276,8 @@ class DocxPlusBuilder:
         return pkg.to_bytes()
 
     def _place(self, pkg: OpcPackage, m: _Pending):
-        ptype = payloads.get_type(m.payload_type)
         channel = channel_registry.get_channel(m.channel_id, **m.channel_kwargs)
-        aad = m.slot.encode("utf-8")  # bind every ciphertext to its module slot
-
-        if m.decoy is not None:
-            # A decoy is a password module carrying two envelopes; the manifest
-            # records mode "password" so it is indistinguishable from an ordinary
-            # encrypted module (the old "decoy" label advertised the hidden payload).
-            real, real_pw, decoy, decoy_pw = m.decoy
-            sealed = _frame_seq([
-                crypto.encrypt(ptype.pack(real), real_pw, aad=aad),
-                crypto.encrypt(ptype.pack(decoy), decoy_pw, aad=aad),
-            ])
-            sealing = {"mode": "password"}
-        else:
-            plaintext = ptype.pack(m.obj)
-            if m.password is not None:
-                # Pad with an undecryptable chaff frame so an ordinary password
-                # module carries exactly two frames, byte-indistinguishable from a
-                # decoy module. An observer cannot prove the second frame is (or is
-                # not) a hidden payload — that is the deniability the format offers.
-                sealed = _frame_seq([crypto.encrypt(plaintext, m.password, aad=aad), _chaff(aad)])
-                sealing = {"mode": "password"}
-            elif m.recipients is not None:
-                sealed = crypto.seal_multi(plaintext, m.recipients, aad=aad)
-                # Record neither identities nor count — the manifest must not leak
-                # the recipient set of a blind-review packet. The DXE2 envelope
-                # already carries everything extraction needs.
-                sealing = {"mode": "recipients"}
-            elif m.threshold is not None:
-                k, n = m.threshold
-                content_key = _random_key()
-                sealed = crypto.encrypt_with_key(plaintext, content_key, aad=aad)
-                self.threshold_shares[m.slot] = shamir.split(content_key, k, n)
-                sealing = {"mode": "threshold", "k": k, "n": n}
-            else:
-                sealed = plaintext
-                sealing = {"mode": "plain"}
-
+        sealed, sealing = seal_module(m, self.threshold_shares)
         record = channel.embed(pkg, sealed, slot=m.slot)
         record.payload_type = m.payload_type
         record.encrypted = sealing["mode"] != "plain"
@@ -263,6 +289,62 @@ class DocxPlusBuilder:
         return record
 
 
+def seal_module(m: _Pending, shares_sink: dict[str, list[bytes]]) -> tuple[bytes, dict]:
+    """Pack and seal one pending module → ``(stored_bytes, sealing_metadata)``.
+
+    Deliberately independent of the container format. The sealing lineages are a
+    property of docxplus the *specification*, not of OPC the packaging, so the ODT
+    profile reuses this verbatim rather than growing a parallel implementation
+    that could drift on exactly the security-relevant details below.
+
+    ``shares_sink`` receives threshold shares by slot; the caller owns returning
+    them to the user, since only the builder knows how it wants to hand them over.
+    """
+    ptype = payloads.get_type(m.payload_type)
+    aad = m.slot.encode("utf-8")  # bind every ciphertext to its module slot
+
+    if m.decoy is not None:
+        # A decoy is a password module carrying two envelopes; the manifest
+        # records mode "password" so it is indistinguishable from an ordinary
+        # encrypted module (the old "decoy" label advertised the hidden payload).
+        real, real_pw, decoy, decoy_pw = m.decoy
+        sealed = _frame_seq([
+            crypto.encrypt(ptype.pack(real), real_pw, aad=aad, kdf=m.kdf),
+            crypto.encrypt(ptype.pack(decoy), decoy_pw, aad=aad, kdf=m.kdf),
+        ])
+        return sealed, {"mode": "password"}
+
+    plaintext = ptype.pack(m.obj)
+    if m.password is not None:
+        # Pad with an undecryptable chaff frame so an ordinary password module
+        # carries exactly two frames, byte-indistinguishable from a decoy module.
+        # An observer cannot prove the second frame is (or is not) a hidden
+        # payload — that is the deniability the format offers.
+        return _frame_seq([
+            crypto.encrypt(plaintext, m.password, aad=aad, kdf=m.kdf), _chaff(aad)
+        ]), {"mode": "password"}
+    if m.recipients is not None:
+        # Record neither identities nor count — the manifest must not leak the
+        # recipient set of a blind-review packet. The DXE2 envelope already
+        # carries everything extraction needs.
+        return (
+            crypto.seal_multi(
+                plaintext, m.recipients, aad=aad, pad_to=m.recipient_padding
+            ),
+            {"mode": "recipients"},
+        )
+    if m.threshold is not None:
+        k, n = m.threshold
+        content_key = _random_key()
+        sealed = crypto.encrypt_with_key(plaintext, content_key, aad=aad)
+        # Issue VSS-tagged shares and record that fact in the manifest. The
+        # manifest is signed, so `vss` cannot be flipped off to force the reader
+        # to accept a header-stripped (downgraded) share.
+        shares_sink[m.slot] = shamir.split(content_key, k, n, verifiable=True)
+        return sealed, {"mode": "threshold", "k": k, "n": n, "vss": True}
+    return plaintext, {"mode": "plain"}
+
+
 def _random_key() -> bytes:
     import os
 
@@ -271,7 +353,7 @@ def _random_key() -> bytes:
 
 @dataclass
 class DocxPlusReader:
-    """Reads typed, sealed modules back out of a DOCX+ package."""
+    """Reads typed, sealed modules back out of a docxplus package."""
 
     package: OpcPackage
     manifest: Manifest
@@ -320,13 +402,18 @@ class DocxPlusReader:
         if mode == "plain":
             plaintext = sealed
         else:
-            plaintext = self._unseal(slot, mode, sealed, aad, password, private_key, shares)
+            plaintext = self._unseal(
+                slot, mode, sealed, aad, password, private_key, shares,
+                require_vss=bool(record.sealing.get("vss", False)),
+            )
 
         if as_object:
             return payloads.get_type(record.payload_type).unpack(plaintext)
         return plaintext
 
-    def _unseal(self, slot, mode, sealed, aad, password, private_key, shares) -> bytes:
+    def _unseal(
+        self, slot, mode, sealed, aad, password, private_key, shares, *, require_vss=False
+    ) -> bytes:
         """Decrypt a sealed module, converting any crypto failure to ContainerError.
 
         Plaintext integrity comes from the AEAD tag here, not a separate digest.
@@ -343,7 +430,8 @@ class DocxPlusReader:
             if mode == "recipients":
                 return crypto.unseal_multi(sealed, private_key, aad=aad)
             if mode == "threshold":
-                return crypto.decrypt_with_key(sealed, shamir.combine(shares), aad=aad)
+                key = shamir.combine(shares, require_verifiable=require_vss)
+                return crypto.decrypt_with_key(sealed, key, aad=aad)
         except ContainerError:
             raise
         except Exception as exc:
@@ -360,6 +448,16 @@ class DocxPlusReader:
 
     #: Guards against a maliciously deep matryoshka chain exhausting resources.
     MAX_NEST_DEPTH = 32
+
+    def _stored_bytes(self, record) -> bytes:
+        """The bytes a module actually occupies in the package.
+
+        A seam, not an abstraction for its own sake: the ODF profile stores payloads
+        as package entries rather than through the OPC channel registry, and shares
+        the verification logic above. Reaching for the registry directly here would
+        make every shared method silently OPC-only.
+        """
+        return channel_registry.get_channel(record.channel).extract(self.package, record)
 
     def verify_reproduction(self, slot: str, expected_public_key: bytes | None = None) -> dict:
         """Cryptographically verify a project module's reproduction attestation —
@@ -379,12 +477,13 @@ class DocxPlusReader:
         # record.digest, but the stored bytes could have been swapped post-signing —
         # in which case the signature would already fail, but confirm it here so a
         # "verified" verdict never rides on unread bytes.
-        stored_ok = crypto.digest(
-            channel_registry.get_channel(record.channel).extract(self.package, record)
-        ) == record.digest
+        stored_ok = crypto.digest(self._stored_bytes(record)) == record.digest
         verified = bool(signed and stored_ok)
         if not att:
-            return {"attested": False, "signed": signed, "verified": verified}
+            # "verified" must never read as true for a module carrying no attestation:
+            # a caller checking that field alone would conclude a reproduction claim
+            # was validated when none was ever made.
+            return {"attested": False, "signed": signed, "verified": False}
         result = {
             "attested": True,
             "signed": signed,
@@ -485,12 +584,10 @@ class DocxPlusReader:
             self.manifest.public_key, expected_public_key
         ):
             return False
-        doc_part = self.package.parts.get("word/document.xml", b"")
-        return crypto.digest(doc_part) == self.manifest.surface_digest
+        return self._surface_matches()
 
     def _surface_matches(self) -> bool:
-        doc_part = self.package.parts.get("word/document.xml", b"")
-        return crypto.digest(doc_part) == self.manifest.surface_digest
+        return _compute_surface_digest(self.package) == self.manifest.surface_digest
 
     def cosigners(self) -> list[str]:
         """Hex public keys that have added a valid detached co-signature.
@@ -566,14 +663,36 @@ def _iter_frames(blob: bytes):
 
 
 def _open_password_frames(sealed: bytes, password: str, aad: bytes) -> bytes:
-    """Try each framed envelope with ``password``; return the first that opens.
+    """Try **every** framed envelope with ``password``; return the one that opens.
 
-    A single-secret module has one frame; a decoy has two (a real payload and a
-    cover story under different passwords). Both look identical in the manifest.
+    A single-secret module has two frames — a real payload and undecryptable chaff —
+    and a decoy has two real ones under different passwords. They are identical in
+    the manifest and their sizes are drawn from overlapping ranges, so nothing static
+    separates them.
+
+    Returning at the first success used to separate them dynamically. The builder
+    writes the real payload into frame 1 and the decoy into frame 2, so supplying the
+    real password cost one key derivation and supplying the decoy cost two: 154 ms
+    against 307 ms measured here, a clean factor of two on a scrypt derivation nobody
+    can make cheap. Under the one threat this lineage exists for — an adversary who
+    has compelled a password and wants to know whether it was the whole story — a
+    stopwatch answered the question. The chaff frame, the shared manifest record and
+    the overlapping sizes were all defeated by the wall clock.
+
+    Every frame is therefore attempted whichever one matches, so the work is the same
+    for the real password, the decoy password, and a wrong one. The cost of opening
+    any password-sealed module is now the cost of deriving a key once per frame, and
+    that is the price of the property the format claims rather than an inefficiency
+    to optimise away.
     """
+    opened: bytes | None = None
     for env in _iter_frames(sealed):
         try:
-            return crypto.decrypt(env, password, aad=aad)
-        except Exception:  # noqa: BLE001,S112 - wrong frame for this password; try next
+            candidate = crypto.decrypt(env, password, aad=aad)
+        except Exception:  # noqa: BLE001,S112 - wrong frame for this password; keep going
             continue
-    raise ContainerError("no envelope opened with this password")
+        if opened is None:
+            opened = candidate
+    if opened is None:
+        raise ContainerError("no envelope opened with this password")
+    return opened

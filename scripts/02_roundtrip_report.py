@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read back the example DOCX+, verify every module, emit a JSON report.
+"""Read back the example docxplus, verify every module, emit a JSON report.
 
 Proves the round trip end-to-end: OPC validity, manifest signature, and per-module
 digest match. Writes ``output/reports/roundtrip.json`` and prints its path.

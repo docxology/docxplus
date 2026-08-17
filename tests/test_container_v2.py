@@ -1,4 +1,4 @@
-"""DOCX+ v0.2: typed payloads, advanced sealing, nesting, provenance."""
+"""docxplus v0.2: typed payloads, advanced sealing, nesting, provenance."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def test_project_payload_roundtrip(tmp_path):
     assert (dest / "README.md").read_text() == "# mini\n"
 
 
-# -- matryoshka: a nested DOCX+ inside a DOCX+ ------------------------------
+# -- matryoshka: a nested docxplus inside a docxplus ------------------------------
 def test_nested_document():
     inner = (
         DocxPlusBuilder(paragraphs=["Inner sealed memo."])
