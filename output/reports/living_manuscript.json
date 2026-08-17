@@ -1,0 +1,17 @@
+{
+  "document": "/Users/4d/Documents/GitHub/projects/ongoing/DAF/docxplus/output/documents/living_manuscript.docx",
+  "size_bytes": 524467,
+  "opc_valid": true,
+  "verify_reproduction": {
+    "attested": true,
+    "signed": true,
+    "verified": true
+  },
+  "attested_output_digest": "164310562a6f912b\u2026",
+  "reproduced_match": true,
+  "toolchain": {
+    "python": "3.12.13",
+    "implementation": "CPython",
+    "platform": "macOS-26.6.1-arm64-arm-64bit"
+  }
+}

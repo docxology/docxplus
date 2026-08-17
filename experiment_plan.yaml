@@ -1,0 +1,42 @@
+conditions:
+  - name: plain_document
+    role: reference
+    description: "A base .docx with no intelligence layer — must validate as ordinary OOXML."
+  - name: single_channel
+    role: proposed
+    description: "One payload per channel; verify round-trip and OPC conformance."
+  - name: composed_signed_encrypted
+    role: variant
+    description: "Multiple channels + encryption + a signed manifest in one document."
+metrics:
+  primary:
+    name: roundtrip_integrity
+    direction: maximize        # all modules recover with matching digests
+protocol: >-
+  For each condition, build a document, re-read it, validate OPC + intelligence
+  conformance, and verify every module's plaintext digest and the manifest
+  signature. Outputs are deterministic for unencrypted/unsigned builds.
+expected_artifacts:
+  - output/documents/example_docxplus.docx
+  - output/reports/roundtrip.json
+expected_figures:
+  - fig:capacity
+baselines:
+  - plain_document
+ablations:
+  - single_channel
+
+# Reproduction attestation experiment (docs/reproduction-design.md, tests/test_reproduce.py).
+reproduction_experiment:
+  goal: "A reader can trust that a carried project reproduces its sealed outputs without trusting the author's word."
+  hypotheses:
+    - id: H1
+      claim: "Re-running the carried project's declared command in a clean sandbox yields the sealed output digest."
+    - id: H2
+      role: negative_control
+      claim: "A tampered source produces a different output digest — reproduction MUST fail."
+    - id: H3
+      claim: "Two independent clean reproductions of the untouched source yield the same digest."
+  deterministic_outputs: "seeded, timestamp-free files only; the exemplar attests a digest computed over its own source tree"
+  pass_criterion: "H1 and H3 hold and H2 fires; empty/absent outputs are rejected as vacuous"
+  exemplar: "projects/templates/template_code_project via scripts/05_living_manuscript.py"

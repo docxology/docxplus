@@ -1,0 +1,79 @@
+paper:
+  title: "docxplus: An Intelligent Document Container over Standards-Conforming OOXML"
+  subtitle: "Carrying signed, encrypted, modular, self-verifying payloads inside an ordinary .docx"
+  version: "{{VERSION}}"
+  date: "{{DOC_DATE}}"
+
+authors:
+  - name: "Daniel Ari Friedman"
+    orcid: "0000-0001-6232-9096"
+    email: "daniel@activeinference.institute"
+    affiliation: "Active Inference Institute"
+    corresponding: true
+
+keywords:
+  - OOXML
+  - Open Packaging Conventions
+  - document steganography
+  - authenticated encryption
+  - structured documents
+  - reproducible research
+
+metadata:
+  license: "MIT"
+  language: "en"
+
+# pandoc-crossref: make figure/section references hyperlinks, so they are navigable
+# and pick up the link colour like the formalism references already do.
+linkReferences: true
+nameInLink: true
+
+# -- formalism.lua ------------------------------------------------------------
+# The Lua filter reads these from document metadata, so adding a numbered
+# environment is a config change rather than a filter edit. Declare the class
+# here, write `::: {.axiom #ax:name title="..."}` in a section, and reference it
+# with [@ax:name]; numbering and back-references follow automatically.
+formalism_kinds:
+  definition: Definition
+  proposition: Proposition
+  theorem: Theorem
+  lemma: Lemma
+  corollary: Corollary
+  remark: Remark
+  axiom: Axiom
+  claim: Claim
+  example: Example
+# 0 never resets counters. A collected volume would set 1 so numbering restarts
+# per reproduced work; a standalone paper leaves it at 0, because here a level-1
+# header is an ordinary section.
+formalism_reset_level: 0
+
+# -- render pipeline ----------------------------------------------------------
+# Read by scripts/render_manuscript.py. Kept here so the toolchain, the link
+# colour, and above all the diagnostic gate are configurable without editing
+# Python.
+render:
+  pdf_engine: xelatex
+  number_sections: true
+  # Defined in preamble.tex via xcolor and referenced by name.
+  link_color: docxplusred
+
+  # A pandoc run that emits a diagnostic and still exits 0 used to ship the
+  # defect: a mistyped [@thm:label] reached the PDF as literal "[@thm:label]"
+  # text with no failure anywhere in the pipeline. These patterns are matched
+  # against every stderr line and fail the build. They name *classes* of
+  # diagnostic, never one known-bad message, so a new instance of the same class
+  # is caught rather than a repeat of the one already fixed.
+  fatal_diagnostics:
+    - "^formalism\\.lua:"
+    - "^\\[WARNING\\]"
+    - "^\\[ERROR\\]"
+    - "^pandoc-crossref:"
+    - "(?i)citeproc.*not found"
+    - "(?i)reference .* not found"
+    - "(?i)undefined (control sequence|reference)"
+
+  # Exemptions from the gate above. Every entry states a reason, because an
+  # unexplained exemption is how a gate quietly stops being one. Empty is the
+  # correct state: add an entry only when a diagnostic is genuinely benign.
+  benign_diagnostics: []

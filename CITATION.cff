@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: If you use this software, please cite it using the metadata from this file.
+title: "docxplus — the Intelligent Document Container"
+abstract: >-
+  A standards-first reference implementation of a byte-valid OOXML .docx that also
+  carries a modular, Ed25519-signed, AES-256-GCM-encrypted intelligence layer through
+  spec-sanctioned side-channels (custom XML parts, additional package parts, custom
+  document properties, and LSB steganography in embedded media), with an optional
+  bridge to the docxology/steganographer signed-packet backend.
+authors:
+  - family-names: Friedman
+    given-names: Daniel Ari
+    orcid: "0000-0001-6232-9096"
+    affiliation: Active Inference Institute
+keywords:
+  - OOXML
+  - DOCX
+  - Open Packaging Conventions
+  - steganography
+  - document security
+  - structured documents
+  - reproducible research
+license: MIT
+repository-code: "https://github.com/docxology/docxplus"
+doi: "10.5281/zenodo.21983949"
+version: "1.0.0"
+date-released: "2026-08-17"

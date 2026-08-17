@@ -1,0 +1,53 @@
+% Preamble for the docxplus manuscript
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsfonts}
+\usepackage{amsthm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{hyperref}
+% Defined here, applied via pandoc's -V linkcolor/citecolor/urlcolor. A \hypersetup
+% in this file would be dead code: pandoc emits its own after the -H injection.
+\definecolor{docxplusred}{HTML}{B00020}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{microtype}
+\usepackage{geometry}
+% Tighter margins: the figures are wide, and a 1in frame forced several of them
+% to scale down past the point where their 7pt labels stayed legible in print.
+\geometry{top=0.75in, bottom=0.85in, left=0.85in, right=0.85in}
+
+% Theorem environments
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}{Lemma}[section]
+\newtheorem{corollary}{Corollary}[section]
+\newtheorem{remark}{Remark}[section]
+\newtheorem{example}{Example}[section]
+
+% Float placement. LaTeX's defaults are tuned for narrow single-column journals and
+% will exile a wide figure to a page of its own with 80% whitespace. These bounds
+% let a figure share a page with the text that discusses it, which is the point of
+% placing it there.
+\renewcommand{\topfraction}{0.90}
+\renewcommand{\bottomfraction}{0.75}
+\renewcommand{\textfraction}{0.08}
+\renewcommand{\floatpagefraction}{0.75}
+\setcounter{topnumber}{2}
+\setcounter{bottomnumber}{2}
+\setcounter{totalnumber}{3}
+
+% Captions: smaller than body text and clearly labelled, so a caption that carries
+% real explanation still reads as apparatus rather than as prose.
+\captionsetup{
+  font=small,
+  labelfont=bf,
+  labelsep=period,
+  width=0.95\textwidth,
+  justification=justified,
+  singlelinecheck=false,
+  skip=8pt
+}

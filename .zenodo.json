@@ -1,0 +1,23 @@
+{
+  "title": "docxplus \u2014 the Intelligent Document Container",
+  "description": "A standards-first reference implementation of a byte-valid OOXML .docx that also carries a modular, Ed25519-signed, AES-256-GCM-encrypted intelligence layer through spec-sanctioned side-channels, with an optional bridge to the docxology/steganographer signed-packet backend.",
+  "upload_type": "software",
+  "license": "MIT",
+  "keywords": [
+    "OOXML",
+    "DOCX",
+    "Open Packaging Conventions",
+    "steganography",
+    "document security",
+    "reproducible research"
+  ],
+  "creators": [
+    {
+      "name": "Friedman, Daniel Ari",
+      "orcid": "0000-0001-6232-9096",
+      "affiliation": "Active Inference Institute"
+    }
+  ],
+  "version": "1.0.0",
+  "doi": "10.5281/zenodo.21983949"
+}

@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Virtual environment
+.venv/
+venv/
+
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
+
+# Generated outputs are TRACKED: the documents and reports under output/ are the
+# evidence for the claims in the manuscript, so a reader must be able to fetch the
+# repository and inspect the artefacts rather than take the numbers on trust.
+# Only genuinely disposable intermediates are ignored.
+output/roundtrip/
+output/data/
+
+# OS
+.DS_Store
+
+# The steganographer premium backend is a sibling checkout, not vendored here.
+# Keys are never committed.
+*.hex
+keys/

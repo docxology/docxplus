@@ -1,0 +1,21 @@
+{
+  "document": "/Users/4d/Documents/GitHub/projects/ongoing/DAF/docxplus/output/documents/dossier.docx",
+  "modules": [
+    "annex",
+    "notes",
+    "review",
+    "source",
+    "vault"
+  ],
+  "checks": {
+    "opc_valid": true,
+    "provenance": true,
+    "merkle_root": "5d8773057593522d\u2026",
+    "project_reproduced": true,
+    "nested_opened": true,
+    "multi_recipient": true,
+    "threshold_3of5": true,
+    "decoy_real": true,
+    "decoy_cover": true
+  }
+}

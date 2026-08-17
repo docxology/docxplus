@@ -1,0 +1,26 @@
+domain: document_engineering
+display_name: docxplus Intelligent Document Container
+required_packages:
+  - cryptography
+  - defusedxml
+  - pyyaml
+optional_packages:
+  - pillow          # pure-Python LSB media backend
+  - matplotlib      # capacity figure
+external_tools:
+  - name: steganographer
+    repo: https://github.com/docxology/steganographer
+    role: premium media-stego backend (BLAKE3 + Ed25519 signed packets)
+    required: false
+validation_gates:
+  - opc_conformance
+  - intelligence_manifest
+  - digest_binding
+  - signature_verification
+citation_policy: official_or_scholarly
+source_policy: "Ground every structural claim in ISO/IEC 29500 / ECMA-376 / ODF text as summarised in docs/standards-report.md; never invent spec behavior."
+artifact_expectations:
+  - output/documents/example_docxplus.docx
+  - output/reports/roundtrip.json
+  - output/figures/capacity.png
+llm_prompt_guidance: "Use the produced documents, manifest, and roundtrip report as the evidence source; do not invent capacities or spec citations."

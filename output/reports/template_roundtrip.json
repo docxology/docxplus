@@ -1,0 +1,120 @@
+{
+  "checks": [
+    {
+      "detail": "",
+      "name": "docx.writes_both_names",
+      "ok": true
+    },
+    {
+      "detail": "",
+      "name": "docx.names_are_byte_identical",
+      "ok": true
+    },
+    {
+      "detail": "",
+      "name": "docx.validates",
+      "ok": true
+    },
+    {
+      "detail": "",
+      "name": "docxplus.provenance_pinned",
+      "ok": true
+    },
+    {
+      "detail": "{\"files_compared\": 126, \"missing\": [], \"unexpected\": [], \"content_mismatches\": [], \"executable_bit_mismatches\": [], \"identical\": true}",
+      "name": "docxplus.roundtrip_identical",
+      "ok": true
+    },
+    {
+      "detail": "",
+      "name": "odt.writes_both_names",
+      "ok": true
+    },
+    {
+      "detail": "",
+      "name": "odt.names_are_byte_identical",
+      "ok": true
+    },
+    {
+      "detail": "",
+      "name": "odt.validates",
+      "ok": true
+    },
+    {
+      "detail": "",
+      "name": "odtplus.provenance_pinned",
+      "ok": true
+    },
+    {
+      "detail": "{\"files_compared\": 126, \"missing\": [], \"unexpected\": [], \"content_mismatches\": [], \"executable_bit_mismatches\": [], \"identical\": true}",
+      "name": "odtplus.roundtrip_identical",
+      "ok": true
+    },
+    {
+      "detail": "",
+      "name": "cross.same_project_bytes",
+      "ok": true
+    },
+    {
+      "detail": "template_code_project.docx -> DocxPlusReader",
+      "name": "dispatch.docx",
+      "ok": true
+    },
+    {
+      "detail": "template_code_project.docxplus -> DocxPlusReader",
+      "name": "dispatch.docxplus",
+      "ok": true
+    },
+    {
+      "detail": "template_code_project.odt -> OdtPlusReader",
+      "name": "dispatch.odt",
+      "ok": true
+    },
+    {
+      "detail": "template_code_project.odtplus -> OdtPlusReader",
+      "name": "dispatch.odtplus",
+      "ok": true
+    }
+  ],
+  "failures": [],
+  "formats": {
+    "docx": {
+      "bytes": 257290,
+      "comparison": {
+        "content_mismatches": [],
+        "executable_bit_mismatches": [],
+        "files_compared": 126,
+        "identical": true,
+        "missing": [],
+        "unexpected": []
+      },
+      "paths": [
+        "/Users/4d/Documents/GitHub/projects/ongoing/DAF/docxplus/output/documents/template_code_project.docx",
+        "/Users/4d/Documents/GitHub/projects/ongoing/DAF/docxplus/output/documents/template_code_project.docxplus"
+      ]
+    },
+    "odt": {
+      "bytes": 256884,
+      "comparison": {
+        "content_mismatches": [],
+        "executable_bit_mismatches": [],
+        "files_compared": 126,
+        "identical": true,
+        "missing": [],
+        "unexpected": []
+      },
+      "paths": [
+        "/Users/4d/Documents/GitHub/projects/ongoing/DAF/docxplus/output/documents/template_code_project.odt",
+        "/Users/4d/Documents/GitHub/projects/ongoing/DAF/docxplus/output/documents/template_code_project.odtplus"
+      ]
+    }
+  },
+  "ok": true,
+  "project": {
+    "directories": 15,
+    "files_carried": 126,
+    "has_executable": true
+  },
+  "project_payload_digest": "485de178e77f56f07b9a73bde2ecc6dc172d6559b19e0e612be391dd3ca90afa",
+  "source": "/Users/4d/Documents/GitHub/template/projects/templates/template_code_project"
+}

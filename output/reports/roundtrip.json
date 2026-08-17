@@ -1,0 +1,42 @@
+{
+  "document": "/Users/4d/Documents/GitHub/projects/ongoing/DAF/docxplus/output/documents/example_docxplus.docx",
+  "opc_valid": true,
+  "signature": "valid",
+  "modules": [
+    {
+      "slot": "brief",
+      "channel": "custom_xml",
+      "encrypted": false,
+      "status": "ok",
+      "recovered_bytes": 73
+    },
+    {
+      "slot": "dossier",
+      "channel": "package_part",
+      "encrypted": false,
+      "status": "ok",
+      "recovered_bytes": 25
+    },
+    {
+      "slot": "figure",
+      "channel": "stego_media",
+      "encrypted": false,
+      "status": "ok",
+      "recovered_bytes": 37
+    },
+    {
+      "slot": "routing",
+      "channel": "metadata",
+      "encrypted": false,
+      "status": "ok",
+      "recovered_bytes": 20
+    },
+    {
+      "slot": "secret",
+      "channel": "package_part",
+      "encrypted": true,
+      "status": "ok",
+      "recovered_bytes": 17
+    }
+  ]
+}

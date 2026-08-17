@@ -1,0 +1,216 @@
+{
+  "checks": [
+    {
+      "detail": "",
+      "name": "docx.validates",
+      "ok": true
+    },
+    {
+      "detail": "",
+      "name": "docx.provenance_pinned_key",
+      "ok": true
+    },
+    {
+      "detail": "",
+      "name": "docx.rejects_wrong_key",
+      "ok": true
+    },
+    {
+      "detail": "{\"files_compared\": 12, \"missing_files\": [], \"unexpected_files\": [], \"content_mismatches\": [], \"executable_bit_mismatches\": [], \"lost_empty_directories\": [], \"identical\": true}",
+      "name": "docx.roundtrip_identical",
+      "ok": true
+    },
+    {
+      "detail": "",
+      "name": "docx.excludes_junk",
+      "ok": true
+    },
+    {
+      "detail": "{\"attested\": true, \"signed\": true, \"verified\": true, \"attestation\": {\"output_digest\": \"40997aec9d445275db49e456285057487043fae6e1cd8067689054b9d254b7f1\", \"command\": [\"/Users/4d/Documents/GitHub/projects/ongoing/DAF/docxplus/.venv/bin/python\", \"compute.py\"], \"toolchain\": {\"implementation\": \"CPython\", \"platform\": \"macOS-26.6.1-arm64-arm-64bit\", \"python\": \"3.12.13\"}}}",
+      "name": "docx.attestation_verified",
+      "ok": true
+    },
+    {
+      "detail": "",
+      "name": "odt.validates",
+      "ok": true
+    },
+    {
+      "detail": "",
+      "name": "odt.provenance_pinned_key",
+      "ok": true
+    },
+    {
+      "detail": "",
+      "name": "odt.rejects_wrong_key",
+      "ok": true
+    },
+    {
+      "detail": "{\"files_compared\": 12, \"missing_files\": [], \"unexpected_files\": [], \"content_mismatches\": [], \"executable_bit_mismatches\": [], \"lost_empty_directories\": [], \"identical\": true}",
+      "name": "odt.roundtrip_identical",
+      "ok": true
+    },
+    {
+      "detail": "",
+      "name": "odt.excludes_junk",
+      "ok": true
+    },
+    {
+      "detail": "{\"attested\": true, \"signed\": true, \"verified\": true, \"attestation\": {\"output_digest\": \"40997aec9d445275db49e456285057487043fae6e1cd8067689054b9d254b7f1\", \"command\": [\"/Users/4d/Documents/GitHub/projects/ongoing/DAF/docxplus/.venv/bin/python\", \"compute.py\"], \"toolchain\": {\"implementation\": \"CPython\", \"platform\": \"macOS-26.6.1-arm64-arm-64bit\", \"python\": \"3.12.13\"}}}",
+      "name": "odt.attestation_verified",
+      "ok": true
+    },
+    {
+      "detail": "the same tree must pack to identical bytes in both containers",
+      "name": "cross.same_project_bytes",
+      "ok": true
+    },
+    {
+      "detail": "dispatched to DocxPlusReader",
+      "name": "cross.nested_docx_in_odt",
+      "ok": true
+    },
+    {
+      "detail": "",
+      "name": "cross.nested_inner_provenance",
+      "ok": true
+    },
+    {
+      "detail": "{\"files_compared\": 12, \"missing_files\": [], \"unexpected_files\": [], \"content_mismatches\": [], \"executable_bit_mismatches\": [], \"lost_empty_directories\": [], \"identical\": true}",
+      "name": "cross.nested_roundtrip_identical",
+      "ok": true
+    },
+    {
+      "detail": "",
+      "name": "cross.dispatch_docx",
+      "ok": true
+    },
+    {
+      "detail": "",
+      "name": "cross.dispatch_odt",
+      "ok": true
+    }
+  ],
+  "cross_profile": {
+    "nested": {
+      "content_mismatches": [],
+      "executable_bit_mismatches": [],
+      "files_compared": 12,
+      "identical": true,
+      "lost_empty_directories": [],
+      "missing_files": [],
+      "unexpected_files": []
+    },
+    "project_payload_digest": "c129a072da71f789fbff6e9400000b60eb7592cc5af237411d80469543a03efb"
+  },
+  "failures": [],
+  "fidelity_boundary": {
+    "excluded_by_policy": [
+      ".git",
+      ".mypy_cache",
+      ".pytest_cache",
+      ".ruff_cache",
+      ".venv",
+      "__pycache__",
+      "build",
+      "dist",
+      "htmlcov",
+      "node_modules",
+      "output",
+      "venv"
+    ],
+    "normalised_by_design": [
+      "mtimes",
+      "uid/gid",
+      "non-execute mode bits"
+    ],
+    "preserved": [
+      "file contents",
+      "executable bit",
+      "empty directories",
+      "directory structure",
+      "non-ASCII and spaced filenames",
+      "zero-byte files"
+    ],
+    "refused": [
+      "symlinks (their targets would be embedded; opt in explicitly)"
+    ]
+  },
+  "ok": true,
+  "profiles": {
+    "docx": {
+      "attestation": {
+        "attestation": {
+          "command": [
+            "/Users/4d/Documents/GitHub/projects/ongoing/DAF/docxplus/.venv/bin/python",
+            "compute.py"
+          ],
+          "output_digest": "40997aec9d445275db49e456285057487043fae6e1cd8067689054b9d254b7f1",
+          "toolchain": {
+            "implementation": "CPython",
+            "platform": "macOS-26.6.1-arm64-arm-64bit",
+            "python": "3.12.13"
+          }
+        },
+        "attested": true,
+        "signed": true,
+        "verified": true
+      },
+      "bytes": 4354,
+      "comparison": {
+        "content_mismatches": [],
+        "executable_bit_mismatches": [],
+        "files_compared": 12,
+        "identical": true,
+        "lost_empty_directories": [],
+        "missing_files": [],
+        "unexpected_files": []
+      },
+      "modules": [
+        "notes",
+        "source"
+      ]
+    },
+    "odt": {
+      "attestation": {
+        "attestation": {
+          "command": [
+            "/Users/4d/Documents/GitHub/projects/ongoing/DAF/docxplus/.venv/bin/python",
+            "compute.py"
+          ],
+          "output_digest": "40997aec9d445275db49e456285057487043fae6e1cd8067689054b9d254b7f1",
+          "toolchain": {
+            "implementation": "CPython",
+            "platform": "macOS-26.6.1-arm64-arm-64bit",
+            "python": "3.12.13"
+          }
+        },
+        "attested": true,
+        "signed": true,
+        "verified": true
+      },
+      "bytes": 3685,
+      "comparison": {
+        "content_mismatches": [],
+        "executable_bit_mismatches": [],
+        "files_compared": 12,
+        "identical": true,
+        "lost_empty_directories": [],
+        "missing_files": [],
+        "unexpected_files": []
+      },
+      "modules": [
+        "notes",
+        "source"
+      ]
+    }
+  },
+  "project": {
+    "directories": 9,
+    "files": 14,
+    "has_empty_dir": true,
+    "has_executable": true,
+    "has_non_ascii_name": true,
+    "has_zero_byte_file": true
+  }
+}

@@ -1,0 +1,74 @@
+# docxplus — Intelligent Document Container
+# Standalone research project following the docxology/template_code_project paradigm.
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "docxplus"
+version = "1.0.0"
+license = { text = "MIT" }
+description = "docxplus — a byte-valid OOXML .docx that also carries a modular, signed, encrypted intelligence layer through spec-sanctioned side-channels."
+authors = [
+    { name = "Daniel Ari Friedman", email = "daniel@activeinference.institute" },
+]
+requires-python = ">=3.10"
+dependencies = [
+    "cryptography>=43.0.0",
+    "defusedxml>=0.7.1",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+media = [
+    # LSB stego channel writes/reads PNG carriers; Pillow builds them deterministically.
+    "pillow>=10.0.0",
+]
+figures = [
+    "matplotlib>=3.7.0",
+]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+]
+
+[project.scripts]
+docxplus = "docxplus_cli:main"
+
+[tool.pytest.ini_options]
+pythonpath = [".", "src"]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short --strict-markers"
+markers = [
+    "requires_steganographer: real integration against the docxology/steganographer Rust CLI",
+    "requires_pillow: needs the optional Pillow dependency for PNG carriers",
+    "slow: full build/round-trip integration checks",
+]
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+omit = ["tests/*", "*/__init__.py", "*/test_*.py"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+precision = 2
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.setuptools]
+py-modules = ["docxplus_cli"]
+
+[tool.uv]
+package = false
