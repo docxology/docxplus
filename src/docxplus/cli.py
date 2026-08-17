@@ -21,13 +21,13 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
-import crypto
-from container import DocxPlusBuilder, DocxPlusReader
-from fileext import write_document
-from secure_io import SecretExistsError, write_secret
-from validate import validate_bytes
+
+from . import crypto
+from .container import DocxPlusBuilder, DocxPlusReader
+from .fileext import write_document
+from .secure_io import SecretExistsError, write_secret
+from .validate import validate_bytes
 
 
 def _cmd_build(args: argparse.Namespace) -> int:
@@ -154,8 +154,8 @@ def _cmd_verify_transparency(args: argparse.Namespace) -> int:
     requested check that does not pass returns nonzero, and an unanchored log (no
     ``--sth``) is reported as *unauthenticated* however clean its chain is.
     """
-    from provenance import verify_inclusion
-    from transparency import TransparencyLog
+    from .provenance import verify_inclusion
+    from .transparency import TransparencyLog
 
     report: dict = {"log": str(args.log)}
     try:
@@ -231,7 +231,7 @@ def _cmd_verify_transparency(args: argparse.Namespace) -> int:
 
 def _cmd_odt_build(args: argparse.Namespace) -> int:
     """Build an .odt carrying the same signed intelligence layer as the .docx profile."""
-    from odt_container import OdtPlusBuilder
+    from .odt_container import OdtPlusBuilder
 
     builder = OdtPlusBuilder(paragraphs=[args.text], title=args.title)
     recipients = [bytes.fromhex(h) for h in (args.recipient or [])]
@@ -270,7 +270,7 @@ def _cmd_odt_build(args: argparse.Namespace) -> int:
 
 
 def _cmd_odt_inspect(args: argparse.Namespace) -> int:
-    from odt_container import OdtPlusReader
+    from .odt_container import OdtPlusReader
 
     reader = OdtPlusReader.from_bytes(Path(args.odt).read_bytes())
     print(json.dumps({
@@ -283,7 +283,7 @@ def _cmd_odt_inspect(args: argparse.Namespace) -> int:
 
 
 def _cmd_odt_extract(args: argparse.Namespace) -> int:
-    from odt_container import OdtPlusReader
+    from .odt_container import OdtPlusReader
 
     reader = OdtPlusReader.from_bytes(Path(args.odt).read_bytes())
     creds = {}
@@ -303,7 +303,7 @@ def _cmd_odt_extract(args: argparse.Namespace) -> int:
 
 
 def _cmd_odt_validate(args: argparse.Namespace) -> int:
-    from validate import validate_odt_bytes
+    from .validate import validate_odt_bytes
 
     report = validate_odt_bytes(Path(args.odt).read_bytes())
     print(json.dumps(report.to_dict(), indent=2))
@@ -312,7 +312,7 @@ def _cmd_odt_validate(args: argparse.Namespace) -> int:
 
 def _cmd_odt_scan(args: argparse.Namespace) -> int:
     """Threat-scan an untrusted .odt. Executes nothing."""
-    import intake
+    from . import intake
 
     policy = intake.IntakePolicy(strict=args.strict)
     try:
@@ -330,7 +330,7 @@ def _cmd_analyze_carrier(args: argparse.Namespace) -> int:
     The security model tells readers to check their own carriers before an
     adversary does; without a command that is advice with no way to follow it.
     """
-    import steg_bridge
+    from . import steg_bridge
 
     report = steg_bridge.steganalysis_report(Path(args.image), steps=args.steps)
     print(json.dumps(report, indent=2))
@@ -344,7 +344,7 @@ def _cmd_transparency_append(args: argparse.Namespace) -> int:
     `verify-transparency` had no producer in the tool, so a log could be checked
     but never built by it.
     """
-    from transparency import TransparencyLog
+    from .transparency import TransparencyLog
 
     log_path = Path(args.log)
     log = TransparencyLog.from_json(log_path.read_text()) if log_path.exists() else TransparencyLog()
@@ -379,7 +379,7 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     command for it, the strongest check the library offers had no way to be run
     from a shell, and `inspect` printing "valid" was the closest thing on offer.
     """
-    from odt_container import open_document
+    from .odt_container import open_document
 
     data = Path(args.document).read_bytes()
     reader = open_document(data)
@@ -423,7 +423,7 @@ def _cmd_validate(args: argparse.Namespace) -> int:
 
 
 def _cmd_scan(args: argparse.Namespace) -> int:
-    import intake
+    from . import intake
 
     policy = intake.IntakePolicy(strict=args.strict)
     try:

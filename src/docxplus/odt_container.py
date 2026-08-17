@@ -28,12 +28,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import crypto
-import payloads
-from container import ContainerError, _Pending, seal_module
-from container import DocxPlusReader as DocxPlusReaderDepth
-from manifest import Manifest
-from odt import MIMETYPE_ODT, OdtPackage, new_base_odt
+from . import crypto
+from . import payloads
+from .container import ContainerError, _Pending, seal_module
+from .container import DocxPlusReader as DocxPlusReaderDepth
+from .manifest import Manifest
+from .odt import MIMETYPE_ODT, OdtPackage, new_base_odt
 
 #: Where the intelligence manifest lives inside an ODT package.
 ODT_MANIFEST_PART = "intelligence/manifest.json"
@@ -141,7 +141,7 @@ class OdtPlusBuilder:
         if reproduce is not None and reproduce is not False:
             import tempfile
 
-            import reproduce as _repro
+            from . import reproduce as _repro
 
             spec = _repro.load_recipe(project_dir) if reproduce is True else reproduce
             if spec is None:
@@ -182,7 +182,7 @@ class OdtPlusBuilder:
             part = f"intelligence/payload{index}.dxp"
             pkg.add_part(part, sealed, CT_PAYLOAD)
 
-            from channels.base import ChannelRecord
+            from .channels.base import ChannelRecord
 
             record = ChannelRecord(
                 channel="odt_package_part",
@@ -256,7 +256,7 @@ class OdtPlusReader:
         as_object: bool = False,
     ) -> object:
         """Recover one module's payload, verifying the stored bytes first."""
-        from container import DocxPlusReader
+        from .container import DocxPlusReader
 
         record = self._record(slot)
         sealed = self._stored_bytes(record)
@@ -292,13 +292,13 @@ class OdtPlusReader:
 
     def verify_reproduction(self, slot: str, expected_public_key: bytes | None = None) -> dict:
         """Cryptographically verify a carried attestation. Executes nothing."""
-        from container import DocxPlusReader
+        from .container import DocxPlusReader
 
         return DocxPlusReader.verify_reproduction(self, slot, expected_public_key)
 
     def reproduce(self, slot: str, dest: str | Path, *, allow_execution: bool = False, **creds) -> dict:
         """OPT-IN: re-run the attested command in a sandbox and compare digests."""
-        from container import DocxPlusReader
+        from .container import DocxPlusReader
 
         return DocxPlusReader.reproduce(self, slot, dest, allow_execution=allow_execution, **creds)
 
@@ -335,27 +335,27 @@ class OdtPlusReader:
         return compute_odt_surface_digest(self.package) == self.manifest.surface_digest
 
     def signature_status(self, expected_public_key: bytes | None = None) -> str:
-        from container import DocxPlusReader
+        from .container import DocxPlusReader
 
         return DocxPlusReader.signature_status(self, expected_public_key)
 
     def verify_provenance(self, expected_public_key: bytes | None = None) -> bool:
-        from container import DocxPlusReader
+        from .container import DocxPlusReader
 
         return DocxPlusReader.verify_provenance(self, expected_public_key)
 
     def cosigners(self) -> list[str]:
-        from container import DocxPlusReader
+        from .container import DocxPlusReader
 
         return DocxPlusReader.cosigners(self)
 
     def verify_cosigners(self, expected_public_keys: list[bytes]) -> bool:
-        from container import DocxPlusReader
+        from .container import DocxPlusReader
 
         return DocxPlusReader.verify_cosigners(self, expected_public_keys)
 
     def inclusion_proof(self, slot: str) -> dict:
-        from container import DocxPlusReader
+        from .container import DocxPlusReader
 
         return DocxPlusReader.inclusion_proof(self, slot)
 
@@ -371,7 +371,7 @@ def open_document(data: bytes):
     import io
     import zipfile
 
-    from container import DocxPlusReader
+    from .container import DocxPlusReader
 
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as zf:

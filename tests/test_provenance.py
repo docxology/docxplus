@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import provenance
+from docxplus import provenance
 
 
 def test_empty_root_is_sentinel():

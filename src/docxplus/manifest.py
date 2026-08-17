@@ -15,9 +15,9 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 
-from channels.base import ChannelRecord
-from crypto import verify as _verify
-from opc import OpcPackage, Relationship
+from .channels.base import ChannelRecord
+from .crypto import verify as _verify
+from .opc import OpcPackage, Relationship
 
 MANIFEST_PART = "intelligence/manifest.json"
 CT_MANIFEST = "application/vnd.docxplus.manifest+json"
@@ -62,7 +62,7 @@ class Manifest:
 
     def merkle_root(self) -> str:
         """Merkle root over the module set — binds the collection, not just parts."""
-        from provenance import merkle_root as _root
+        from .provenance import merkle_root as _root
 
         return _root([(r.slot, r.digest) for r in self.records])
 

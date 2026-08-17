@@ -19,13 +19,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import channels as channel_registry
-import crypto
-import payloads
-import shamir
-from manifest import Manifest, read_manifest, write_manifest
-from opc import OpcPackage, read_package
-from wordml import new_base_document
+from . import channels as channel_registry
+from . import crypto
+from . import payloads
+from . import shamir
+from .manifest import Manifest, read_manifest, write_manifest
+from .opc import OpcPackage, read_package
+from .wordml import new_base_document
 
 #: The sealing lineages a module can use (decoy is recorded as ``password`` so it is
 #: indistinguishable). Single source of truth for docs/manuscript generation.
@@ -84,7 +84,7 @@ def _compute_surface_digest(pkg: OpcPackage) -> str:
     "everything except one named exception" is a rule that survives a new channel
     being added, which a prefix list demonstrably did not.
     """
-    from manifest import MANIFEST_PART
+    from .manifest import MANIFEST_PART
 
     chunks: list[bytes] = []
     for name in sorted(pkg.parts):
@@ -181,7 +181,7 @@ class DocxPlusBuilder:
         if reproduce is not None and reproduce is not False:
             import tempfile
 
-            import reproduce as _repro
+            from . import reproduce as _repro
 
             spec = _repro.load_recipe(project_dir) if reproduce is True else reproduce
             if spec is None:
@@ -518,7 +518,7 @@ class DocxPlusReader:
         if not att:
             raise ContainerError(f"module {slot!r} carries no reproduction attestation")
         project_dir = self.extract_project(slot, dest, **creds)
-        import reproduce as _repro
+        from . import reproduce as _repro
 
         return _repro.reproduce_and_compare(project_dir, att)
 
@@ -617,7 +617,7 @@ class DocxPlusReader:
     def inclusion_proof(self, slot: str) -> dict:
         """A Merkle inclusion proof that ``slot`` belongs to this document's signed
         module set — verifiable by a third party without the other modules."""
-        from provenance import inclusion_proof as _proof
+        from .provenance import inclusion_proof as _proof
 
         self._record(slot)  # KeyError→ContainerError if absent
         return _proof([(r.slot, r.digest) for r in self.manifest.records], slot)

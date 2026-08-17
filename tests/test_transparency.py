@@ -4,9 +4,9 @@ import json
 
 import pytest
 
-import transparency as transparency_module
-from provenance import verify_inclusion
-from transparency import LogEntry, TransparencyLog
+from docxplus import transparency as transparency_module
+from docxplus.provenance import verify_inclusion
+from docxplus.transparency import LogEntry, TransparencyLog
 
 
 def test_transparency_log_append_and_verify_chain():
@@ -61,7 +61,7 @@ def _log_with(n: int) -> TransparencyLog:
 
 
 def test_signed_tree_head_verifies_against_its_own_log():
-    import crypto
+    from docxplus import crypto
 
     log = _log_with(4)
     priv, pub = crypto.generate_signing_key()
@@ -75,7 +75,7 @@ def test_signed_tree_head_verifies_against_its_own_log():
 
 def test_signed_tree_head_rejects_a_different_signer():
     """Pinning is the whole point: an authentic-but-unexpected signer must fail."""
-    import crypto
+    from docxplus import crypto
 
     log = _log_with(3)
     priv, _pub = crypto.generate_signing_key()
@@ -88,7 +88,7 @@ def test_signed_tree_head_rejects_a_different_signer():
 
 def test_signed_tree_head_does_not_validate_a_longer_log():
     """An old STH must not describe a log that has since grown (truncation replay)."""
-    import crypto
+    from docxplus import crypto
 
     log = _log_with(3)
     priv, pub = crypto.generate_signing_key()
@@ -105,7 +105,7 @@ def test_signed_tree_head_detects_in_place_tip_edit():
     Nothing in the chain references the last entry's hash, so editing it in place
     leaves the chain perfectly self-consistent. Only the root commitment catches it.
     """
-    import crypto
+    from docxplus import crypto
 
     log = _log_with(3)
     priv, pub = crypto.generate_signing_key()
@@ -130,7 +130,7 @@ def test_signed_tree_head_detects_in_place_tip_edit():
 
 
 def test_signed_tree_head_rejects_malformed_input():
-    import crypto
+    from docxplus import crypto
 
     log = _log_with(2)
     priv, _pub = crypto.generate_signing_key()
@@ -148,7 +148,7 @@ def test_signed_tree_head_rejects_malformed_input():
 
 def test_signed_tree_head_signature_is_domain_separated():
     """An STH signature must not be replayable as a bare-body signature."""
-    import crypto
+    from docxplus import crypto
 
     log = _log_with(2)
     priv, pub = crypto.generate_signing_key()

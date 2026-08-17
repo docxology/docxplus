@@ -10,9 +10,9 @@ processors. This is the natural home for encrypted or steganography-bound blobs.
 
 from __future__ import annotations
 
-from channels.base import ChannelRecord
-from crypto import digest as _digest
-from opc import OpcPackage, Relationship
+from .base import ChannelRecord
+from ..crypto import digest as _digest
+from ..opc import OpcPackage, Relationship
 
 CT_INTELLIGENCE_BLOB = "application/vnd.docxplus.payload"
 REL_INTELLIGENCE = "urn:docxplus:intelligence:1.0/payload"

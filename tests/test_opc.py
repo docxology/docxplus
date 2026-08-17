@@ -7,7 +7,7 @@ from io import BytesIO
 
 import pytest
 
-from opc import (
+from docxplus.opc import (
     CONTENT_TYPES_PART,
     ROOT_RELS_PART,
     OpcError,

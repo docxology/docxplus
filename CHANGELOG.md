@@ -66,9 +66,9 @@ publication gate; see `docs/redteam-audit.md` v1.0.0 for the ten findings.
 ### Added
 
 - `.docxplus` / `.odtplus` extensions. Every export writes the document under both its surface
-  and its docxplus name, byte-identical (`src/fileext.py`).
+  and its docxplus name, byte-identical (`src/docxplus/fileext.py`).
 - ODT intelligence layer parity: `add_project`, `add_nested`, `verify_reproduction`, `reproduce`,
-  and `open_document` profile dispatch (`src/odt_container.py`).
+  and `open_document` profile dispatch (`src/docxplus/odt_container.py`).
 - ODF threat intake: `intake.scan_odt` / `safe_open_odt`, CLI `docxplus odt-scan`.
 - `scripts/06_project_roundtrip.py` — 18 invariants carrying a project through both containers.
 - CLI: `odt-build`, `odt-inspect`, `odt-extract`, `odt-validate`, `odt-scan`, `analyze-carrier`,

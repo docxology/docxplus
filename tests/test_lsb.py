@@ -6,7 +6,7 @@ import pytest
 
 pytest.importorskip("PIL")
 
-import lsb
+from docxplus import lsb
 from conftest import pixels
 
 

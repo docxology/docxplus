@@ -2,9 +2,9 @@
 
 import pytest
 
-from channels.mce import NS_DXP_MCE, NS_MC, MceChannel
-from container import DocxPlusBuilder, DocxPlusReader
-from wordml import new_base_document
+from docxplus.channels.mce import NS_DXP_MCE, NS_MC, MceChannel
+from docxplus.container import DocxPlusBuilder, DocxPlusReader
+from docxplus.wordml import new_base_document
 
 
 def test_mce_channel_embed_and_extract_direct():
@@ -75,7 +75,7 @@ def test_mce_missing_part_or_slot_raises():
 def _body_children(docx_bytes: bytes) -> list[str]:
     import re
 
-    from opc import read_package
+    from docxplus.opc import read_package
 
     doc = read_package(docx_bytes).parts["word/document.xml"].decode("utf-8")
     body = doc[doc.index("<w:body>"):doc.index("</w:body>")]
@@ -90,7 +90,7 @@ def test_sectpr_remains_the_last_body_child():
     part. Word validates document.xml on load and offers repair, which is the loudest
     possible way to break the surface contract.
     """
-    from container import DocxPlusBuilder
+    from docxplus.container import DocxPlusBuilder
 
     builder = DocxPlusBuilder(paragraphs=["visible"])
     builder.add_module("a", "mce", b"payload-a")
@@ -104,7 +104,7 @@ def test_sectpr_remains_the_last_body_child():
 
 def test_concealing_a_module_adds_no_visible_paragraph():
     """Dual-contract independence: the rendered surface must not change."""
-    from container import DocxPlusBuilder
+    from docxplus.container import DocxPlusBuilder
 
     plain = _body_children(DocxPlusBuilder(paragraphs=["visible"]).build())
     with_mce = _body_children(
@@ -115,7 +115,7 @@ def test_concealing_a_module_adds_no_visible_paragraph():
 
 def test_a_section_break_inside_a_paragraph_is_not_mistaken_for_the_body_sectpr():
     """Only a body-level sectPr terminates the body; a `w:pPr` one is a section break."""
-    from channels.mce import _body_insertion_point
+    from docxplus.channels.mce import _body_insertion_point
 
     doc = (
         "<w:body><w:p><w:pPr><w:sectPr><w:type/></w:sectPr></w:pPr></w:p>"

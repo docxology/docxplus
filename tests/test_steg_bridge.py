@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-import steg_bridge
+from docxplus import steg_bridge
 
 
 def _make_exe(path: Path) -> Path:
@@ -84,7 +84,7 @@ def test_real_tool_roundtrip(tmp_path):
     if not steg_bridge.available():
         pytest.skip("steganographer CLI not built")
     pytest.importorskip("PIL")
-    import lsb
+    from docxplus import lsb
 
     carrier = lsb.make_carrier(tmp_path / "c.png", (128, 128))
     out = tmp_path / "s.png"
@@ -97,7 +97,7 @@ def test_real_tool_analyze(tmp_path):
     if not steg_bridge.available():
         pytest.skip("steganographer CLI not built")
     pytest.importorskip("PIL")
-    import lsb
+    from docxplus import lsb
 
     carrier = lsb.make_carrier(tmp_path / "c.png", (128, 128))
     out = tmp_path / "s.png"
@@ -168,7 +168,7 @@ def test_fully_embedded_carrier_is_flagged(tmp_path):
     pytest.importorskip("PIL")
     import os
 
-    import lsb
+    from docxplus import lsb
 
     carrier = _textured_carrier(tmp_path / "clean.png")
     payload = os.urandom(lsb.capacity_bytes(96, 96))
@@ -184,7 +184,7 @@ def test_sweep_localizes_partial_sequential_embedding(tmp_path):
     pytest.importorskip("PIL")
     import os
 
-    import lsb
+    from docxplus import lsb
 
     carrier = _textured_carrier(tmp_path / "clean.png")
     payload = os.urandom(lsb.capacity_bytes(96, 96) // 2)
@@ -215,7 +215,7 @@ def test_sweep_detection_grows_with_payload_size(tmp_path):
     pytest.importorskip("PIL")
     import os
 
-    import lsb
+    from docxplus import lsb
 
     capacity = lsb.capacity_bytes(96, 96)
     estimates = []
@@ -244,7 +244,7 @@ def test_steganalysis_report_runs_without_the_rust_toolchain(tmp_path, monkeypat
     pytest.importorskip("PIL")
     import os
 
-    import lsb
+    from docxplus import lsb
 
     monkeypatch.setattr(steg_bridge, "locate", lambda repo=None: None)
     carrier = _textured_carrier(tmp_path / "c.png")

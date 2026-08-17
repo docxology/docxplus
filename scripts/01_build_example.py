@@ -12,11 +12,17 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+# Installed, `docxplus` is a real package and this is a no-op. Run out of a checkout
+# the package lives under src/ and nothing has put it on the path yet. Importing
+# first keeps an installed copy authoritative instead of being shadowed.
+try:  # pragma: no cover - one branch or the other, trivially
+    import docxplus as _docxplus  # noqa: F401
+except ModuleNotFoundError:  # pragma: no cover
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-import crypto
-from container import DocxPlusBuilder
-from project_paths import ensure_output_dirs
+from docxplus import crypto
+from docxplus.container import DocxPlusBuilder
+from docxplus.project_paths import ensure_output_dirs
 
 
 def main() -> int:
@@ -54,14 +60,14 @@ def main() -> int:
     except ImportError:
         pass
 
-    from fileext import write_document
+    from docxplus.fileext import write_document
 
     for w in write_document(builder.build(), out):
         print(str(w))
 
     # The ODT sibling, built from the same primitives. Shipping one proves the
     # profile end to end in the artifact set rather than only in the test suite.
-    from odt_container import OdtPlusBuilder
+    from docxplus.odt_container import OdtPlusBuilder
 
     odt_out = out.parent / "example_docxplus.odt"
     odt = OdtPlusBuilder(

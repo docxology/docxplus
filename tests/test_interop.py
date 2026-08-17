@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from container import DocxPlusBuilder
+from docxplus.container import DocxPlusBuilder
 
 
 @pytest.mark.skipif(shutil.which("soffice") is None and shutil.which("libreoffice") is None,

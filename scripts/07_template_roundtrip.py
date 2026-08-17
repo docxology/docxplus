@@ -24,15 +24,21 @@ import stat
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+# Installed, `docxplus` is a real package and this is a no-op. Run out of a checkout
+# the package lives under src/ and nothing has put it on the path yet. Importing
+# first keeps an installed copy authoritative instead of being shadowed.
+try:  # pragma: no cover - one branch or the other, trivially
+    import docxplus as _docxplus  # noqa: F401
+except ModuleNotFoundError:  # pragma: no cover
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-import crypto
-import payloads
-from container import DocxPlusBuilder, DocxPlusReader
-from fileext import PLUS_EXTENSION, write_document
-from odt_container import OdtPlusBuilder, OdtPlusReader, open_document
-from project_paths import ensure_output_dirs
-from validate import validate_bytes, validate_odt_bytes
+from docxplus import crypto
+from docxplus import payloads
+from docxplus.container import DocxPlusBuilder, DocxPlusReader
+from docxplus.fileext import write_document
+from docxplus.odt_container import OdtPlusBuilder, OdtPlusReader, open_document
+from docxplus.project_paths import ensure_output_dirs
+from docxplus.validate import validate_bytes, validate_odt_bytes
 
 #: The exemplar carried. Overridable so the script is not welded to one checkout.
 DEFAULT_TEMPLATE = Path(

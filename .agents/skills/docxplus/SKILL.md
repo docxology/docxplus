@@ -28,7 +28,7 @@ this skill carries the entry points and the contracts, not the module map.
 ```bash
 uv venv && uv pip install -e '.[dev,media,figures]'   # all three extras; see AGENTS.md
 ./run.sh                                    # preflight, tests, build, dossier, round trips, render, living
-uvx ruff check src scripts docxplus_cli.py  # CI's first gate
+uvx ruff check src scripts src/docxplus/cli.py  # CI's first gate
 .venv/bin/python -m pytest --cov=src -q     # 90% gate
 
 # .docx profile

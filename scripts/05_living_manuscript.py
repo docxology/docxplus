@@ -21,13 +21,19 @@ import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+# Installed, `docxplus` is a real package and this is a no-op. Run out of a checkout
+# the package lives under src/ and nothing has put it on the path yet. Importing
+# first keeps an installed copy authoritative instead of being shadowed.
+try:  # pragma: no cover - one branch or the other, trivially
+    import docxplus as _docxplus  # noqa: F401
+except ModuleNotFoundError:  # pragma: no cover
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-import crypto
-from container import DocxPlusBuilder, DocxPlusReader
-from project_paths import ensure_output_dirs, project_root
-from reproduce import ReproSpec
-from validate import validate_bytes
+from docxplus import crypto
+from docxplus.container import DocxPlusBuilder, DocxPlusReader
+from docxplus.project_paths import ensure_output_dirs, project_root
+from docxplus.reproduce import ReproSpec
+from docxplus.validate import validate_bytes
 
 # The document carries *this* repository. That is the whole claim, so the source is
 # resolved from the repo itself rather than from a path on one machine: the previous

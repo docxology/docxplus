@@ -21,9 +21,15 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+# Installed, `docxplus` is a real package and this is a no-op. Run out of a checkout
+# the package lives under src/ and nothing has put it on the path yet. Importing
+# first keeps an installed copy authoritative instead of being shadowed.
+try:  # pragma: no cover - one branch or the other, trivially
+    import docxplus as _docxplus  # noqa: F401
+except ModuleNotFoundError:  # pragma: no cover
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from project_paths import ensure_output_dirs
+from docxplus.project_paths import ensure_output_dirs
 
 try:
     import matplotlib
@@ -36,7 +42,7 @@ except ImportError:
     sys.stderr.write("matplotlib not installed; skipping figure generation\n")
     sys.exit(0)
 
-import manuscript_vars
+from docxplus import manuscript_vars
 
 # -- shared visual language ---------------------------------------------------
 INK = "#0F172A"      # primary text

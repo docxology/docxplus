@@ -21,9 +21,9 @@ from xml.sax.saxutils import quoteattr
 
 from defusedxml.ElementTree import fromstring as _safe_fromstring
 
-from channels.base import ChannelRecord
-from crypto import digest as _digest
-from opc import OpcPackage
+from .base import ChannelRecord
+from ..crypto import digest as _digest
+from ..opc import OpcPackage
 
 NS_MC = "http://schemas.openxmlformats.org/markup-compatibility/2006"
 NS_DXP_MCE = "urn:docxplus:mce:1.0"

@@ -23,8 +23,8 @@ from dataclasses import dataclass, field
 
 from defusedxml.ElementTree import fromstring as _safe_fromstring
 
-from manifest import read_manifest
-from opc import OpcPackage, read_package
+from .manifest import read_manifest
+from .opc import OpcPackage, read_package
 
 _MACRO_MARKERS = ("vbaproject.bin",)  # compared case-folded
 _MACRO_CT_HINTS = ("macroenabled", "ms-word.vbaproject", "ms-office.vbaproject")
@@ -138,7 +138,7 @@ def safe_open(data: bytes, *, policy: IntakePolicy = DEFAULT_POLICY):
     policy, a non-clean report raises :class:`IntakeError`. The returned reader is a
     ``DocxPlusReader`` when the file carries an intelligence manifest, else ``None``.
     """
-    from container import DocxPlusReader  # local import to avoid a cycle
+    from .container import DocxPlusReader  # local import to avoid a cycle
 
     pkg = read_package(data)  # caps + defused XML; may raise OpcError
     report = scan(pkg, policy)
@@ -234,8 +234,8 @@ def safe_open_odt(data: bytes, *, policy: IntakePolicy = DEFAULT_POLICY):
     package actually carries an intelligence layer; a plain `.odt` yields ``None``,
     which is a fact about the document rather than a failure.
     """
-    from odt import OdtPackage
-    from odt_container import ODT_MANIFEST_PART, OdtPlusReader
+    from .odt import OdtPackage
+    from .odt_container import ODT_MANIFEST_PART, OdtPlusReader
 
     pkg = OdtPackage.from_bytes(data)  # enforces entry, bomb, and traversal caps
     report = scan_odt(pkg, policy)

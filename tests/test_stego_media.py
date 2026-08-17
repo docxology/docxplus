@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from channels import get_channel
-from opc import read_package
-from wordml import new_base_document
+from docxplus.channels import get_channel
+from docxplus.opc import read_package
+from docxplus.wordml import new_base_document
 
 pytest.importorskip("PIL")
 
@@ -23,8 +23,8 @@ def test_python_lsb_channel_roundtrip(sample_payload):
 
 
 def test_full_container_with_media_channel(sample_payload):
-    from container import DocxPlusBuilder, DocxPlusReader
-    from validate import validate_bytes
+    from docxplus.container import DocxPlusBuilder, DocxPlusReader
+    from docxplus.validate import validate_bytes
 
     data = (
         DocxPlusBuilder(paragraphs=["Quarterly summary."])
@@ -37,7 +37,7 @@ def test_full_container_with_media_channel(sample_payload):
 
 
 def test_encrypted_media_channel(sample_payload):
-    from container import DocxPlusBuilder, DocxPlusReader
+    from docxplus.container import DocxPlusBuilder, DocxPlusReader
 
     data = (
         DocxPlusBuilder(paragraphs=["x"])
@@ -60,11 +60,11 @@ def test_capacity_reports_lsb_bound():
 
 @pytest.mark.requires_steganographer
 def test_steganographer_backend_roundtrip(sample_payload):
-    import steg_bridge
+    from docxplus import steg_bridge
 
     if not steg_bridge.available():
         pytest.skip("steganographer CLI not built")
-    from container import DocxPlusBuilder, DocxPlusReader
+    from docxplus.container import DocxPlusBuilder, DocxPlusReader
 
     data = (
         DocxPlusBuilder(paragraphs=["Signed carrier."])

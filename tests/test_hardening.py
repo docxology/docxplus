@@ -6,11 +6,11 @@ import json
 
 import pytest
 
-import crypto
-from container import ContainerError, DocxPlusBuilder, DocxPlusReader
-from crypto import generate_recipient_key, generate_signing_key
-from opc import read_package
-from provenance import verify_inclusion
+from docxplus import crypto
+from docxplus.container import ContainerError, DocxPlusBuilder, DocxPlusReader
+from docxplus.crypto import generate_recipient_key, generate_signing_key
+from docxplus.opc import read_package
+from docxplus.provenance import verify_inclusion
 
 
 # -- deniability: the manifest must not advertise a decoy ------------------
@@ -34,7 +34,7 @@ def test_decoy_is_indistinguishable_from_password_module():
 def test_password_and_decoy_have_the_same_frame_count():
     """A password module and a decoy module must both carry two envelope frames,
     so frame-counting cannot distinguish 'has a hidden payload' from 'does not'."""
-    from container import _iter_frames
+    from docxplus.container import _iter_frames
 
     pw_doc = DocxPlusBuilder().add_module("s", "package_part", b"only", password="a").build()
     decoy_doc = (
@@ -44,7 +44,7 @@ def test_password_and_decoy_have_the_same_frame_count():
     )
     pw_reader = DocxPlusReader.from_bytes(pw_doc)
     decoy_reader = DocxPlusReader.from_bytes(decoy_doc)
-    import channels as reg
+    from docxplus import channels as reg
 
     pw_bytes = reg.get_channel("package_part").extract(pw_reader.package, pw_reader.manifest.slot("s"))
     decoy_bytes = reg.get_channel("package_part").extract(decoy_reader.package, decoy_reader.manifest.slot("s"))
@@ -93,7 +93,7 @@ def test_tampered_encrypted_bytes_detected_without_key():
     pkg = read_package(data)
     part = next(p for p in pkg.parts if p.startswith("intelligence/payload"))
     pkg.parts[part] = pkg.parts[part][:-1] + bytes([pkg.parts[part][-1] ^ 0xFF])
-    reader = DocxPlusReader(package=pkg, manifest=__import__("manifest").read_manifest(pkg))
+    reader = DocxPlusReader(package=pkg, manifest=__import__("docxplus.manifest", fromlist=["x"]).read_manifest(pkg))
     with pytest.raises(ContainerError, match="stored bytes altered"):
         reader.extract("s", password="pw")
 
@@ -109,7 +109,7 @@ def test_signature_binds_visible_document_text():
     pkg.parts["word/document.xml"] = pkg.parts["word/document.xml"].replace(
         b"Genuine text.", b"Forged text!!"
     )
-    reader = DocxPlusReader(package=pkg, manifest=__import__("manifest").read_manifest(pkg))
+    reader = DocxPlusReader(package=pkg, manifest=__import__("docxplus.manifest", fromlist=["x"]).read_manifest(pkg))
     assert reader.manifest.verify_signature() is True  # manifest itself intact
     assert reader.verify_provenance() is False  # but the surface no longer matches
 
@@ -144,7 +144,7 @@ def test_inclusion_proof_verifies_and_rejects_tamper():
 
 # -- resource safety -------------------------------------------------------
 def test_project_decompression_bomb_capped(tmp_path):
-    import payloads
+    from docxplus import payloads
 
     proj = tmp_path / "p"
     proj.mkdir()
@@ -158,7 +158,7 @@ def test_project_rejects_symlink_member(tmp_path):
     import io
     import tarfile
 
-    import payloads
+    from docxplus import payloads
 
     raw = io.BytesIO()
     with tarfile.open(fileobj=raw, mode="w:gz") as tar:
@@ -171,7 +171,7 @@ def test_project_rejects_symlink_member(tmp_path):
 
 
 def test_unsigned_document_warns():
-    from validate import validate_bytes
+    from docxplus.validate import validate_bytes
 
     data = DocxPlusBuilder().add_module("a", "custom_xml", b"x").build()
     report = validate_bytes(data)
@@ -182,7 +182,7 @@ def test_unsigned_document_warns():
 def test_signed_document_no_unsigned_warning():
     priv, _ = generate_signing_key()
     data = DocxPlusBuilder().add_module("a", "custom_xml", b"x").sign(priv).build()
-    from validate import validate_bytes
+    from docxplus.validate import validate_bytes
 
     report = validate_bytes(data)
     assert not any("unsigned" in n for n in report.notes)
@@ -216,7 +216,7 @@ def test_forged_signature_is_not_authentic_without_pinned_key():
 def test_verify_reproduction_marks_unsigned_attestation_unverified(tmp_path):
     import json as _json
 
-    import reproduce
+    from docxplus import reproduce
     (tmp_path / "p" / "src").mkdir(parents=True)
     (tmp_path / "p" / "src" / "c.py").write_text(
         "import json,os;os.makedirs('output',exist_ok=True);json.dump({'x':1},open('output/r.json','w'))\n"
@@ -235,7 +235,7 @@ def test_verify_reproduction_marks_unsigned_attestation_unverified(tmp_path):
 def test_opc_zip_bomb_guard_rejects_high_ratio():
     import zipfile
 
-    import opc
+    from docxplus import opc
 
     info = zipfile.ZipInfo("word/document.xml")
     info.file_size = 500_000_000
@@ -247,7 +247,7 @@ def test_opc_zip_bomb_guard_rejects_high_ratio():
 def test_opc_zip_bomb_guard_rejects_total():
     import zipfile
 
-    import opc
+    from docxplus import opc
 
     infos = []
     for i in range(6):
@@ -280,9 +280,9 @@ def test_hostile_pbkdf2_iterations_rejected():
 
 # -- root-anchored reachability: an orphan chain must not pass --------------
 def test_orphan_relationship_chain_is_unreachable():
-    from opc import OpcPackage, Relationship
-    from validate import validate_package
-    from wordml import CT_DOCUMENT
+    from docxplus.opc import OpcPackage, Relationship
+    from docxplus.validate import validate_package
+    from docxplus.wordml import CT_DOCUMENT
 
     pkg = OpcPackage()
     pkg.set_default_type("xml", "application/xml")
@@ -311,7 +311,7 @@ def test_nested_depth_cap_enforced():
 
 # -- stored merkle_root is live --------------------------------------------
 def test_tampered_stored_merkle_root_detected():
-    from validate import validate_bytes
+    from docxplus.validate import validate_bytes
 
     data = DocxPlusBuilder().add_module("a", "custom_xml", b"one").build()
     pkg = read_package(data)
@@ -329,7 +329,7 @@ def test_surface_digest_binds_headers_and_footers():
     priv, _ = generate_signing_key()
     b = DocxPlusBuilder(paragraphs=["Main body text."]).sign(priv)
     # Manually add a header part to base_package
-    pkg = b.base_package or __import__("wordml").new_base_document(b.paragraphs, title=b.title, creator=b.creator)
+    pkg = b.base_package or __import__("docxplus.wordml", fromlist=["x"]).new_base_document(b.paragraphs, title=b.title, creator=b.creator)
     pkg.add_part("word/header1.xml", b"<w:hdr><w:p><w:r><w:t>Confidential Disclaimer</w:t></w:r></w:p></w:hdr>", "application/xml")
     b.base_package = pkg
     data = b.add_module("m1", "custom_xml", b"payload").build()
@@ -340,7 +340,7 @@ def test_surface_digest_binds_headers_and_footers():
     # Tampering with header invalidates provenance
     pkg_tampered = read_package(data)
     pkg_tampered.parts["word/header1.xml"] = b"<w:hdr><w:p><w:r><w:t>Forged Disclaimer</w:t></w:r></w:p></w:hdr>"
-    reader_tampered = DocxPlusReader(package=pkg_tampered, manifest=__import__("manifest").read_manifest(pkg_tampered))
+    reader_tampered = DocxPlusReader(package=pkg_tampered, manifest=__import__("docxplus.manifest", fromlist=["x"]).read_manifest(pkg_tampered))
     assert reader_tampered.verify_provenance() is False
 
 
@@ -348,8 +348,8 @@ def test_surface_digest_binds_headers_and_footers():
 def test_odt_zip_bomb_guard_rejects_high_ratio():
     import io
     import zipfile
-    from odt import OdtPackage
-    import opc
+    from docxplus.odt import OdtPackage
+    from docxplus import opc
 
     large_zeros = b"\x00" * (5 * 1024 * 1024)
     buf = io.BytesIO()
@@ -362,7 +362,7 @@ def test_odt_zip_bomb_guard_rejects_high_ratio():
 
 # -- TransparencyLog deterministic timestamp and SOURCE_DATE_EPOCH --
 def test_transparency_log_source_date_epoch_and_explicit_timestamp(monkeypatch):
-    from transparency import TransparencyLog
+    from docxplus.transparency import TransparencyLog
 
     monkeypatch.setenv("SOURCE_DATE_EPOCH", "1700000000")
     log1 = TransparencyLog()
@@ -376,7 +376,7 @@ def test_transparency_log_source_date_epoch_and_explicit_timestamp(monkeypatch):
 
 # -- Reproduce scrubbed env includes python and temp isolation --
 def test_reproduce_scrubbed_env_isolation():
-    from reproduce import _scrubbed_env
+    from docxplus.reproduce import _scrubbed_env
     env = _scrubbed_env()
     assert env["PYTHONPATH"] == ""
     assert env["PYTHONHOME"] == ""
@@ -386,11 +386,11 @@ def test_reproduce_scrubbed_env_isolation():
 
 
 def test_xml_attribute_values_are_escaped_and_round_trip():
-    from channels.custom_xml import CustomXmlChannel
-    from channels.metadata import MetadataChannel
-    from channels.mce import MceChannel
+    from docxplus.channels.custom_xml import CustomXmlChannel
+    from docxplus.channels.metadata import MetadataChannel
+    from docxplus.channels.mce import MceChannel
     from defusedxml.ElementTree import fromstring
-    from wordml import new_base_document
+    from docxplus.wordml import new_base_document
 
     slot = 'q" & < >'
     pkg = new_base_document()
@@ -427,8 +427,8 @@ def test_truncated_multi_recipient_envelope_fails_closed():
 
 
 def _signed_docx():
-    import crypto
-    from container import DocxPlusBuilder
+    from docxplus import crypto
+    from docxplus.container import DocxPlusBuilder
 
     priv, pub = crypto.generate_signing_key()
     builder = DocxPlusBuilder(paragraphs=["Alice agrees to pay Bob 100 USD."])
@@ -437,8 +437,8 @@ def _signed_docx():
 
 
 def _reverifies(mutate) -> bool:
-    from container import DocxPlusReader
-    from opc import read_package
+    from docxplus.container import DocxPlusReader
+    from docxplus.opc import read_package
 
     signed, pub = _signed_docx()
     pkg = read_package(signed)
@@ -447,7 +447,7 @@ def _reverifies(mutate) -> bool:
 
 
 def test_honest_document_still_verifies():
-    from container import DocxPlusReader
+    from docxplus.container import DocxPlusReader
 
     signed, pub = _signed_docx()
     assert DocxPlusReader.from_bytes(signed).verify_provenance(expected_public_key=pub) is True
@@ -455,8 +455,8 @@ def test_honest_document_still_verifies():
 
 def test_document_swap_via_relationship_is_caught():
     """The forgery that motivated the fix: repoint the main story, touch no signed byte."""
-    import wordml
-    from opc import Relationship
+    from docxplus import wordml
+    from docxplus.opc import Relationship
 
     def mutate(pkg):
         evil = pkg.parts["word/document.xml"].replace(b"100 USD", b"100000 USD")
@@ -487,7 +487,7 @@ def test_adding_a_default_content_type_is_caught():
 
 def test_adding_a_stray_relationship_is_caught():
     """The relationship graph decides what a consumer follows, so it is signed too."""
-    from opc import Relationship
+    from docxplus.opc import Relationship
 
     assert _reverifies(
         lambda p: p.add_relationship(
@@ -503,9 +503,9 @@ def test_adding_a_header_part_is_caught():
 
 
 def test_odt_surface_digest_also_binds_the_whole_package():
-    import crypto
-    from odt import OdtPackage
-    from odt_container import OdtPlusBuilder, OdtPlusReader
+    from docxplus import crypto
+    from docxplus.odt import OdtPackage
+    from docxplus.odt_container import OdtPlusBuilder, OdtPlusReader
 
     priv, pub = crypto.generate_signing_key()
     builder = OdtPlusBuilder(paragraphs=["Amount: $10,000."])
@@ -524,8 +524,8 @@ def test_odt_rejects_duplicate_and_colliding_entry_names():
     import zipfile
 
     import pytest as _pytest
-    from odt import MIMETYPE_ODT
-    from opc import OpcError
+    from docxplus.odt import MIMETYPE_ODT
+    from docxplus.opc import OpcError
 
     def build(names_and_data):
         buf = io.BytesIO()
@@ -535,7 +535,7 @@ def test_odt_rejects_duplicate_and_colliding_entry_names():
                 zf.writestr(name, data)
         return buf.getvalue()
 
-    from odt import OdtPackage
+    from docxplus.odt import OdtPackage
 
     with _pytest.raises(OpcError, match="duplicate ZIP entry names"):
         OdtPackage.from_bytes(build([("content.xml", b"<a/>"), ("content.xml", b"<b/>")]))
@@ -553,8 +553,8 @@ def test_argon2id_is_reachable_from_the_builder():
     `crypto.encrypt` took a `kdf=` argument that nothing above it ever passed, so no
     document the tool emitted had ever used Argon2id.
     """
-    import crypto
-    from container import DocxPlusBuilder, DocxPlusReader, _iter_frames
+    from docxplus import crypto
+    from docxplus.container import DocxPlusBuilder, DocxPlusReader, _iter_frames
 
     expected = {"scrypt": crypto.KDF_SCRYPT, "argon2id": crypto.KDF_ARGON2ID,
                 "pbkdf2": crypto.KDF_PBKDF2}
@@ -568,9 +568,9 @@ def test_argon2id_is_reachable_from_the_builder():
 
 
 def test_argon2id_is_reachable_from_the_odt_builder():
-    import crypto
-    from container import _iter_frames
-    from odt_container import OdtPlusBuilder, OdtPlusReader
+    from docxplus import crypto
+    from docxplus.container import _iter_frames
+    from docxplus.odt_container import OdtPlusBuilder, OdtPlusReader
 
     builder = OdtPlusBuilder(paragraphs=["x"])
     builder.add_module("m", b"secret", password="pw", kdf="argon2id")
@@ -582,8 +582,8 @@ def test_argon2id_is_reachable_from_the_odt_builder():
 
 def test_builder_never_emits_a_package_its_own_reader_rejects():
     """A highly compressible payload used to trip the reader's inflate-ratio guard."""
-    import validate
-    from container import DocxPlusBuilder, DocxPlusReader
+    from docxplus import validate
+    from docxplus.container import DocxPlusBuilder, DocxPlusReader
 
     for payload in (b"\x00" * (2 * 1024 * 1024), b'{"seq":1,"v":"x"}' * 200_000):
         builder = DocxPlusBuilder(paragraphs=["x"])
@@ -600,8 +600,8 @@ def test_stego_carrier_is_actually_displayed():
     import pytest as _pytest
 
     _pytest.importorskip("PIL")
-    from container import DocxPlusBuilder, DocxPlusReader
-    from opc import read_package
+    from docxplus.container import DocxPlusBuilder, DocxPlusReader
+    from docxplus.opc import read_package
 
     builder = DocxPlusBuilder(paragraphs=["visible prose"])
     builder.add_module("fig", "stego_media", b"hidden payload", backend="python_lsb")
@@ -618,8 +618,8 @@ def test_stego_carrier_is_actually_displayed():
 
 def test_verify_reproduction_is_not_verified_without_an_attestation():
     """A module carrying no attestation must not report `verified: True`."""
-    import crypto
-    from container import DocxPlusBuilder, DocxPlusReader
+    from docxplus import crypto
+    from docxplus.container import DocxPlusBuilder, DocxPlusReader
 
     priv, pub = crypto.generate_signing_key()
     builder = DocxPlusBuilder(paragraphs=["x"])
@@ -633,9 +633,9 @@ def test_verify_reproduction_is_not_verified_without_an_attestation():
 
 def test_nesting_depth_is_carried_across_the_profile_boundary():
     """One ODT hop must not reset a matryoshka budget the OPC reader was counting."""
-    import crypto
-    from container import ContainerError, DocxPlusBuilder
-    from odt_container import OdtPlusBuilder, OdtPlusReader
+    from docxplus import crypto
+    from docxplus.container import ContainerError, DocxPlusBuilder
+    from docxplus.odt_container import OdtPlusBuilder, OdtPlusReader
 
     priv, _pub = crypto.generate_signing_key()
     inner = DocxPlusBuilder(paragraphs=["inner"])
@@ -654,8 +654,8 @@ def test_nesting_depth_is_carried_across_the_profile_boundary():
 
 
 def test_open_nested_refuses_a_module_that_is_not_a_document():
-    from container import ContainerError
-    from odt_container import OdtPlusBuilder, OdtPlusReader
+    from docxplus.container import ContainerError
+    from docxplus.odt_container import OdtPlusBuilder, OdtPlusReader
 
     builder = OdtPlusBuilder(paragraphs=["x"]).add_module("notadoc", b"just bytes")
     reader = OdtPlusReader.from_bytes(builder.build())

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from channels import available_channels, get_channel
-from channels.metadata import MAX_PAYLOAD
-from wordml import new_base_document
+from docxplus.channels import available_channels, get_channel
+from docxplus.channels.metadata import MAX_PAYLOAD
+from docxplus.wordml import new_base_document
 
 
 @pytest.mark.parametrize("channel_id", ["custom_xml", "package_part", "metadata"])
@@ -17,7 +17,7 @@ def test_channel_roundtrip(channel_id, sample_payload):
     assert record.channel == channel_id
     assert record.size == len(sample_payload)
     # Serialise + re-read so extraction works against parsed bytes, not the live obj.
-    from opc import read_package
+    from docxplus.opc import read_package
 
     reparsed = read_package(pkg.to_bytes())
     assert channel.extract(reparsed, record) == sample_payload
@@ -50,7 +50,7 @@ def test_metadata_multiple_properties_coexist():
     ch = get_channel("metadata")
     ch.embed(pkg, b"first", slot="a")
     r2 = ch.embed(pkg, b"second", slot="b")
-    from opc import read_package
+    from docxplus.opc import read_package
 
     reparsed = read_package(pkg.to_bytes())
     assert ch.extract(reparsed, r2) == b"second"

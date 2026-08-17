@@ -174,7 +174,7 @@ kept in full, including the two occasions when an earlier fix turned out to be
 incomplete, and one negative result: a sample-pair steganalysis estimator that was
 built, measured, found mis-calibrated, and withdrawn rather than shipped.
 
-Those two counts are not typed by hand. `src/manuscript_vars.py` derives them from
+Those two counts are not typed by hand. `src/docxplus/manuscript_vars.py` derives them from
 the audit record itself, and `tests/test_docs.py` fails the build if this paragraph
 disagrees with the live value — the same rule the manuscript follows.
 
@@ -218,8 +218,8 @@ human or agent — editing it.
 
 | Directory | What lives there | Guides |
 | --- | --- | --- |
-| [`src/`](src/README.md) | the 21 tested domain modules plus `channels/`; all business logic | [README](src/README.md) · [AGENTS](src/AGENTS.md) |
-| [`src/channels/`](src/channels/README.md) | the five side-channels behind one `Channel` protocol | [README](src/channels/README.md) · [AGENTS](src/channels/AGENTS.md) |
+| [`src/`](src/docxplus/README.md) | the 21 tested domain modules plus `channels/`; all business logic | [README](src/docxplus/README.md) · [AGENTS](src/docxplus/AGENTS.md) |
+| [`src/docxplus/channels/`](src/docxplus/channels/README.md) | the five side-channels behind one `Channel` protocol | [README](src/docxplus/channels/README.md) · [AGENTS](src/docxplus/channels/AGENTS.md) |
 | [`scripts/`](scripts/README.md) | 11 thin orchestrators; the stages `run.sh` drives | [README](scripts/README.md) · [AGENTS](scripts/AGENTS.md) |
 | [`tests/`](tests/README.md) | the real-data, no-mocks suite behind the 90% gate | [README](tests/README.md) · [AGENTS](tests/AGENTS.md) |
 | [`docs/`](docs/README.md) | spec, architecture, security model, cookbook, audit | [README](docs/README.md) · [AGENTS](docs/AGENTS.md) |
@@ -229,7 +229,7 @@ human or agent — editing it.
 | [`.github/`](.github/README.md) | the CI gates, in the order they fail | [README](.github/README.md) · [AGENTS](.github/AGENTS.md) |
 | [`.agents/`](.agents/README.md) | the project-scoped agent skill | [README](.agents/README.md) · [AGENTS](.agents/AGENTS.md) |
 
-Top-level files: `docxplus_cli.py` (the CLI, 19 subcommands — see
+Top-level files: `src/docxplus/cli.py` (the CLI, 19 subcommands — see
 [`docs/cli.md`](docs/cli.md)), `run.sh` (the pipeline driver, `./run.sh help` for the
 stages), `pyproject.toml`, `CHANGELOG.md`, and the citation metadata
 (`CITATION.cff`, `codemeta.json`, `.zenodo.json`).

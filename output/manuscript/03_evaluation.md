@@ -1,13 +1,13 @@
 # Evaluation {#sec:evaluation}
 
 > Every quantity in this section is substituted at render time from live code constants via
-> `scripts/render_manuscript.py` and `src/manuscript_vars.py`. The manuscript sources contain no hardcoded
+> `scripts/render_manuscript.py` and `src/docxplus/manuscript_vars.py`. The manuscript sources contain no hardcoded
 > metrics, so a claim here cannot drift from the implementation without the render failing. The figures draw
 > from the same source.
 
 ## Round-Trip Integrity Across Every Sealing Mode {#sec:eval-roundtrip}
 
-The reference dossier (`src/reference_docs.py`, `scripts/04_dossier.py`) carries 5
+The reference dossier (`src/docxplus/reference_docs.py`, `scripts/04_dossier.py`) carries 5
 heterogeneous modules in a single archive, covering all 4 sealing lineages
 (`password`, `plain`, `recipients`, `threshold`) across 2 of the 5 transport channels
 (`custom_xml`, `package_part`). Sealing is what the dossier is for; the remaining channels are exercised by the
@@ -75,8 +75,8 @@ back file by file, byte by byte, and mode by mode.
 Over a 14-file, 9-directory tree, all 18 of 18 invariants hold.
 Both profiles validate against their own conformance rules; both verify provenance under a pinned key and
 refuse a wrong one; both extract 12 files identical to the originals; both carry and
-cryptographically verify a reproduction attestation. The sealed `.docx` is 4,354 bytes and the
-`.odt` 3,685 bytes, and the packed project payload is *byte-identical between them* — parity that
+cryptographically verify a reproduction attestation. The sealed `.docx` is 4,401 bytes and the
+`.odt` 3,529 bytes, and the packed project payload is *byte-identical between them* — parity that
 holds because the two profiles share the packing code rather than agreeing by inspection.
 
 ![A real project tree carried into a container and diffed against what came back. The through-line is what survives byte for byte, including the executable bit — a carried entrypoint that returns non-executable is not carried software. Three diversions leave that line at the point they occur: metadata normalised because determinism is worth more than an mtime, symlinks refused outright because packing one would embed its target, and build directories never packed at all. Counts are read from the harness output at render time, so a fidelity regression changes this figure rather than merely failing a test.](../output/figures/roundtrip_fidelity.png){#fig:fidelity width=95%}

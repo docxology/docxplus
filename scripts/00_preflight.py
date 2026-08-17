@@ -10,9 +10,15 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+# Installed, `docxplus` is a real package and this is a no-op. Run out of a checkout
+# the package lives under src/ and nothing has put it on the path yet. Importing
+# first keeps an installed copy authoritative instead of being shadowed.
+try:  # pragma: no cover - one branch or the other, trivially
+    import docxplus as _docxplus  # noqa: F401
+except ModuleNotFoundError:  # pragma: no cover
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-import steg_bridge
+from docxplus import steg_bridge
 
 
 def main() -> int:

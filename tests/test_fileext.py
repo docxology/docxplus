@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-import fileext
+from docxplus import fileext
 
 
 def test_every_export_writes_both_names(tmp_path):
@@ -59,9 +59,9 @@ def test_every_extension_declares_a_media_type():
 
 def test_a_built_document_validates_under_either_name(tmp_path):
     """The claim the .docxplus name makes is checkable, and it checks out."""
-    import crypto
-    from container import DocxPlusBuilder
-    from validate import validate_bytes
+    from docxplus import crypto
+    from docxplus.container import DocxPlusBuilder
+    from docxplus.validate import validate_bytes
 
     priv, _pub = crypto.generate_signing_key()
     builder = DocxPlusBuilder(paragraphs=["surface"])

@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import re
 
-import channels
-import container
-import crypto
-import lsb
-import manuscript_vars
-import opc
-import payloads
-from channels.metadata import MAX_PAYLOAD
-from project_paths import project_root
+from docxplus import channels
+from docxplus import container
+from docxplus import crypto
+from docxplus import lsb
+from docxplus import manuscript_vars
+from docxplus import opc
+from docxplus import payloads
+from docxplus.channels.metadata import MAX_PAYLOAD
+from docxplus.project_paths import project_root
 
 _SECTIONS = sorted(
     p for p in (project_root() / "manuscript").glob("*.md")
@@ -95,7 +95,7 @@ def test_parity_caption_matches_the_figure_it_describes():
     import ast
     import re
 
-    from project_paths import project_root
+    from docxplus.project_paths import project_root
 
     root = project_root()
     tree = ast.parse((root / "scripts" / "build_figures.py").read_text())
@@ -142,7 +142,7 @@ def test_release_metadata_versions_all_agree():
     import json
     import re
 
-    from project_paths import project_root
+    from docxplus.project_paths import project_root
 
     root = project_root()
     pyproject = re.search(r'^version = "([^"]+)"', (root / "pyproject.toml").read_text(), re.M)
@@ -166,7 +166,7 @@ def test_no_absolute_home_paths_in_tracked_sources():
     """
     import re
 
-    from project_paths import project_root
+    from docxplus.project_paths import project_root
 
     root = project_root()
     offenders = []
@@ -188,7 +188,7 @@ def test_no_absolute_home_paths_in_tracked_sources():
 
 def test_living_manuscript_carries_this_repository():
     """The flagship claim must be enforced, not merely asserted in prose."""
-    from project_paths import project_root
+    from docxplus.project_paths import project_root
 
     src = (project_root() / "scripts" / "05_living_manuscript.py").read_text()
     assert "CARRIED_PROJECT = project_root()" in src, (
@@ -208,8 +208,8 @@ def test_the_test_count_token_is_described_as_what_it_counts():
     import inspect
     import re
 
-    import manuscript_vars
-    from project_paths import project_root
+    from docxplus import manuscript_vars
+    from docxplus.project_paths import project_root
 
     source = inspect.getsource(manuscript_vars._count_test_functions)
     assert "def test" in source, (
@@ -242,7 +242,7 @@ def test_surface_digest_prose_matches_the_package_graph():
     outside the signature. This guard fails on that wording, and requires the
     definition to name the relationship graph so the two cannot drift apart again.
     """
-    from project_paths import project_root
+    from docxplus.project_paths import project_root
 
     blob = "\n".join(
         p.read_text()

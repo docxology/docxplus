@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from xml.sax.saxutils import escape
 
-from opc import OpcPackage, Relationship
+from .opc import OpcPackage, Relationship
 
 NS_WORDML = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 NS_OFFICE_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"

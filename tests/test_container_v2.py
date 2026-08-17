@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from container import ContainerError, DocxPlusBuilder, DocxPlusReader
-from crypto import generate_recipient_key, generate_signing_key
-from validate import validate_bytes
+from docxplus.container import ContainerError, DocxPlusBuilder, DocxPlusReader
+from docxplus.crypto import generate_recipient_key, generate_signing_key
+from docxplus.validate import validate_bytes
 
 
 # -- typed payloads --------------------------------------------------------
@@ -144,7 +144,7 @@ def test_signed_provenance_binds_module_set():
 def test_tampering_a_module_digest_breaks_signature():
     priv, _ = generate_signing_key()
     data = DocxPlusBuilder().add_module("a", "custom_xml", b"one").sign(priv).build()
-    from opc import read_package
+    from docxplus.opc import read_package
 
     pkg = read_package(data)
     manifest = pkg.parts["intelligence/manifest.json"].replace(b'"one"', b'"one"')
@@ -153,7 +153,7 @@ def test_tampering_a_module_digest_breaks_signature():
 
     manifest = re.sub(rb'"digest": "[0-9a-f]+"', b'"digest": "00"', manifest, count=1)
     pkg.parts["intelligence/manifest.json"] = manifest
-    reader = DocxPlusReader(package=pkg, manifest=__import__("manifest").read_manifest(pkg))
+    reader = DocxPlusReader(package=pkg, manifest=__import__("docxplus.manifest", fromlist=["x"]).read_manifest(pkg))
     assert reader.verify_provenance() is False
 
 

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-import shamir
-from shamir import combine, split, verify_share
+from docxplus import shamir
+from docxplus.shamir import combine, split, verify_share
 
 
 def test_split_combine_roundtrip():
@@ -144,7 +144,7 @@ def test_long_legacy_shares_are_never_misparsed_as_verifiable():
 
 def test_container_threshold_shares_are_verifiable_and_required(tmp_path):
     """The shipped path must actually issue VSS shares and demand them on read."""
-    from container import ContainerError, DocxPlusBuilder, DocxPlusReader
+    from docxplus.container import ContainerError, DocxPlusBuilder, DocxPlusReader
 
     builder = DocxPlusBuilder(paragraphs=["threshold"])
     builder.add_threshold("secret", b"classified payload", k=2, n=3)

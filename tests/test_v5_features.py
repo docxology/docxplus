@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from container import DocxPlusBuilder, DocxPlusReader
-from crypto import generate_signing_key
-from opc import OpcPackage, Relationship, read_package
-from wordml import CT_DOCUMENT, new_base_document
+from docxplus.container import DocxPlusBuilder, DocxPlusReader
+from docxplus.crypto import generate_signing_key
+from docxplus.opc import OpcPackage, Relationship, read_package
+from docxplus.wordml import CT_DOCUMENT, new_base_document
 
 
 # -- detached co-signatures ------------------------------------------------
@@ -49,7 +49,7 @@ def test_cosignatures_bind_the_visible_document():
         b"1,000,000", b"10,000,000"
     )
     assert pkg.parts["intelligence/manifest.json"] == manifest_before  # manifest untouched
-    reader = DocxPlusReader(package=pkg, manifest=__import__("manifest").read_manifest(pkg))
+    reader = DocxPlusReader(package=pkg, manifest=__import__("docxplus.manifest", fromlist=["x"]).read_manifest(pkg))
     # The institution must NOT be shown as vouching for text it never signed.
     assert reader.cosigners() == []
     assert reader.verify_cosigners([author_pub, inst_pub]) is False
@@ -81,13 +81,13 @@ def test_tampered_cosignature_rejected():
 
     blob = re.sub(rb'"value": "[0-9a-f]{128}"', b'"value": "' + b"0" * 128 + b'"', blob)
     pkg.parts["intelligence/manifest.json"] = blob
-    reader = DocxPlusReader(package=pkg, manifest=__import__("manifest").read_manifest(pkg))
+    reader = DocxPlusReader(package=pkg, manifest=__import__("docxplus.manifest", fromlist=["x"]).read_manifest(pkg))
     assert all(not ok for ok in reader.manifest.verify_cosignatures().values())
 
 
 # -- hardened intake -------------------------------------------------------
 def test_intake_clean_document():
-    import intake
+    from docxplus import intake
 
     data = DocxPlusBuilder().add_module("a", "custom_xml", b"x").build()
     report, reader = intake.safe_open(data)
@@ -96,7 +96,7 @@ def test_intake_clean_document():
 
 
 def test_intake_flags_external_relationship():
-    import intake
+    from docxplus import intake
 
     pkg = new_base_document(["surface"])
     pkg.add_relationship(
@@ -109,7 +109,7 @@ def test_intake_flags_external_relationship():
 
 
 def test_intake_flags_macro_part():
-    import intake
+    from docxplus import intake
 
     pkg = new_base_document(["surface"])
     pkg.set_default_type("bin", "application/vnd.ms-office.vbaProject")
@@ -133,7 +133,7 @@ def _doc_with_altchunk(part_name="word/document.xml"):
 
 
 def test_intake_flags_altchunk_import():
-    import intake
+    from docxplus import intake
 
     report = intake.scan(_doc_with_altchunk())
     assert "word/document.xml" in report.altchunk_imports
@@ -142,7 +142,7 @@ def test_intake_flags_altchunk_import():
 def test_intake_altchunk_not_evadable_by_non_xml_part_name():
     """A main document part named .dat (typed as WordprocessingML) must still be
     caught — detection is by content type + parsing, not filename extension."""
-    import intake
+    from docxplus import intake
 
     report = intake.scan(_doc_with_altchunk("word/document.dat"))
     assert "word/document.dat" in report.altchunk_imports
@@ -150,7 +150,7 @@ def test_intake_altchunk_not_evadable_by_non_xml_part_name():
 
 def test_intake_altchunk_no_false_positive_on_prose():
     """Benign text mentioning altChunk must not be flagged (parse, not substring)."""
-    import intake
+    from docxplus import intake
 
     pkg = OpcPackage()
     pkg.set_default_type("xml", "application/xml")
@@ -163,7 +163,7 @@ def test_intake_altchunk_no_false_positive_on_prose():
 
 
 def test_intake_macro_detection_is_case_insensitive():
-    import intake
+    from docxplus import intake
 
     pkg = new_base_document(["x"])
     pkg.set_default_type("bin", "application/octet-stream")
@@ -173,7 +173,7 @@ def test_intake_macro_detection_is_case_insensitive():
 
 
 def test_intake_strict_raises():
-    import intake
+    from docxplus import intake
 
     pkg = new_base_document(["x"])
     pkg.add_relationship(
@@ -185,7 +185,7 @@ def test_intake_strict_raises():
 
 
 def test_intake_policy_can_allow():
-    import intake
+    from docxplus import intake
 
     pkg = new_base_document(["x"])
     pkg.add_relationship(
@@ -200,7 +200,7 @@ def test_opc_rejects_too_many_entries():
     import io
     import zipfile
 
-    import opc
+    from docxplus import opc
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
@@ -230,7 +230,7 @@ def test_opc_rejects_a_noncanonical_entry_name_outright():
     normalises it silently operates on a part whose name no other consumer agrees
     with. Refusing only the *pair* left the single smuggled entry admissible.
     """
-    import opc
+    from docxplus import opc
 
     with pytest.raises(opc.OpcError, match="non-canonical entry name"):
         opc.read_package(_package_with(("word//document.xml", b"smuggled")))
@@ -255,7 +255,7 @@ def test_opc_refuses_every_shape_of_noncanonical_name(name):
     control-character forms admissible, each silently rewritten into some other
     part name on the way in.
     """
-    import opc
+    from docxplus import opc
 
     with pytest.raises(opc.OpcError):
         opc.read_package(_package_with((name, b"x")))
@@ -267,7 +267,7 @@ def test_opc_still_rejects_a_case_folding_collision():
     Canonical-form checking cannot catch this pair — both names are already
     canonical — so the collision check remains load-bearing and is exercised here.
     """
-    import opc
+    from docxplus import opc
 
     with pytest.raises(opc.OpcError, match="colliding part names"):
         opc.read_package(
@@ -285,14 +285,14 @@ def test_redundant_media_survives_losing_carriers():
         .build()
     )
     pkg = read_package(data)
-    record = __import__("manifest").read_manifest(pkg).slot("fig")
+    record = __import__("docxplus.manifest", fromlist=["x"]).read_manifest(pkg).slot("fig")
     parts = record.location["parts"]
     assert len(parts) == 3
 
     # Destroy two of the three carriers; the payload must still recover.
     for p in parts[:2]:
         del pkg.parts[p]
-    reader = DocxPlusReader(package=pkg, manifest=__import__("manifest").read_manifest(pkg))
+    reader = DocxPlusReader(package=pkg, manifest=__import__("docxplus.manifest", fromlist=["x"]).read_manifest(pkg))
     assert reader.extract("fig") == b"resilient payload"
 
 
@@ -300,19 +300,19 @@ def test_redundant_media_skips_corrupted_replica(tmp_path):
     """A replica that still decodes but to the wrong bytes must be skipped in favour
     of an intact one — never returned silently."""
     pytest.importorskip("PIL")
-    import lsb
+    from docxplus import lsb
 
     data = DocxPlusBuilder().add_module(
         "fig", "stego_media", b"the true payload", redundancy=2, carrier_size=(96, 96)
     ).build()
     pkg = read_package(data)
-    record = __import__("manifest").read_manifest(pkg).slot("fig")
+    record = __import__("docxplus.manifest", fromlist=["x"]).read_manifest(pkg).slot("fig")
     parts = record.location["parts"]
     # Overwrite the FIRST replica with a carrier holding different (decodable) bytes.
     carrier = lsb.make_carrier(tmp_path / "c.png", (96, 96))
     bad = lsb.embed(carrier, b"attacker-swapped bytes", tmp_path / "bad.png")
     pkg.parts[parts[0]] = bad.read_bytes()
-    reader = DocxPlusReader(package=pkg, manifest=__import__("manifest").read_manifest(pkg))
+    reader = DocxPlusReader(package=pkg, manifest=__import__("docxplus.manifest", fromlist=["x"]).read_manifest(pkg))
     assert reader.extract("fig") == b"the true payload"  # recovered from the intact replica
 
 
@@ -322,9 +322,9 @@ def test_redundant_media_all_lost_fails():
         "fig", "stego_media", b"x", redundancy=2, carrier_size=(64, 64)
     ).build()
     pkg = read_package(data)
-    record = __import__("manifest").read_manifest(pkg).slot("fig")
+    record = __import__("docxplus.manifest", fromlist=["x"]).read_manifest(pkg).slot("fig")
     for p in record.location["parts"]:
         del pkg.parts[p]
-    reader = DocxPlusReader(package=pkg, manifest=__import__("manifest").read_manifest(pkg))
+    reader = DocxPlusReader(package=pkg, manifest=__import__("docxplus.manifest", fromlist=["x"]).read_manifest(pkg))
     with pytest.raises(Exception, match="no surviving"):
         reader.extract("fig")

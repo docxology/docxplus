@@ -21,10 +21,10 @@ import zipfile
 
 import pytest
 
-import crypto
-from container import DocxPlusBuilder, DocxPlusReader
-from manifest import SIGNATURE_ALGORITHM, Manifest
-from secure_io import SecretExistsError, is_secret_mode, write_secret
+from docxplus import crypto
+from docxplus.container import DocxPlusBuilder, DocxPlusReader
+from docxplus.manifest import SIGNATURE_ALGORITHM, Manifest
+from docxplus.secure_io import SecretExistsError, is_secret_mode, write_secret
 
 
 # -- Finding 1: the tool's own secrets were world-readable --------------------
@@ -47,7 +47,7 @@ def test_the_permissive_window_never_exists(tmp_path):
     """
     import inspect
 
-    import secure_io
+    from docxplus import secure_io
 
     source = inspect.getsource(secure_io.write_secret)
     assert "os.open" in source and "SECRET_MODE" in source, (

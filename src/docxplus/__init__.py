@@ -3,10 +3,10 @@ encrypted intelligence layer through spec-sanctioned side-channels.
 
 Public surface:
 
-    from container import DocxPlusBuilder, DocxPlusReader
-    from validate import validate_bytes, assert_valid
-    from manifest import Manifest
-    import crypto, channels
+    from .container import DocxPlusBuilder, DocxPlusReader
+    from .validate import validate_bytes, assert_valid
+    from .manifest import Manifest
+    from . import channels, crypto
 """
 
 from __future__ import annotations

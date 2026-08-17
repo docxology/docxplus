@@ -22,7 +22,7 @@ stdout. They contain **no business logic**. The inventory is in
   anything a test or a reader will compare.
 - Print the paths you wrote. That output is the interface — `run.sh` composes stages,
   and a stage that writes silently is a stage nobody can verify.
-- Ruff clean: CI runs `uvx ruff check src scripts docxplus_cli.py` before the tests.
+- Ruff clean: CI runs `uvx ruff check src scripts src/docxplus/cli.py` before the tests.
 
 ## Adding a stage
 
@@ -36,6 +36,6 @@ stdout. They contain **no business logic**. The inventory is in
 ## The reports are evidence, not logs
 
 `output/reports/*.json` is where the manuscript's numbers are read from, through
-`src/manuscript_vars.py`. Changing a report's shape changes what the paper can claim,
+`src/docxplus/manuscript_vars.py`. Changing a report's shape changes what the paper can claim,
 so regenerate the artifacts and re-render before touching a result. Never hand-edit a
 report to make a claim true.

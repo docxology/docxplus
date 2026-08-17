@@ -130,7 +130,7 @@ them rather than implying coverage.
 
 ## Adding one
 
-Implement `embed` / `extract` / `capacity` in `src/channels/`, register it in
+Implement `embed` / `extract` / `capacity` in `src/docxplus/channels/`, register it in
 `channels/__init__.py`, and add a real round-trip test. The manifest records the
 channel id; a reader that does not recognise an id fails that module explicitly rather
 than silently. Two invariants any new channel must hold:

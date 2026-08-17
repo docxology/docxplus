@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from container import ContainerError, DocxPlusBuilder, DocxPlusReader
-from crypto import generate_signing_key
-from validate import validate_bytes
+from docxplus.container import ContainerError, DocxPlusBuilder, DocxPlusReader
+from docxplus.crypto import generate_signing_key
+from docxplus.validate import validate_bytes
 
 
 def test_build_and_read_single_module(sample_payload):
@@ -96,7 +96,7 @@ def test_unknown_channel_rejected():
 
 
 def test_reader_requires_manifest():
-    from wordml import new_base_document
+    from docxplus.wordml import new_base_document
 
     plain = new_base_document(["just a document"]).to_bytes()
     with pytest.raises(ContainerError, match="no intelligence manifest"):

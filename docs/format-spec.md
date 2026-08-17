@@ -150,7 +150,7 @@ it is written under two names:
 | `.odtplus` | `application/vnd.docxplus.document+odt` | the intelligence contract |
 
 The two files in a pair differ in nothing but the name. A name is a claim; readers
-resolve it with `validate` (`src/fileext.py`, `src/validate.py`). Consumers must accept
+resolve it with `validate` (`src/docxplus/fileext.py`, `src/docxplus/validate.py`). Consumers must accept
 either extension, and must never treat the plus name as evidence that the intelligence
 layer is present or valid.
 
@@ -350,7 +350,7 @@ the OPC reader — entry count, decompression ratio, and rejection of traversal 
 absolute entry names — because a second front door into the same container must not
 be the weaker one.
 
-The intelligence layer is implemented in `src/odt_container.py`
+The intelligence layer is implemented in `src/docxplus/odt_container.py`
 (`OdtPlusBuilder` / `OdtPlusReader`):
 
 * `intelligence/manifest.json` holds the same manifest structure as §2, declared as
@@ -381,7 +381,7 @@ Threshold modules therefore record `sealing.vss = true` in the *signed* manifest
 and the reader refuses any share lacking a valid tag — the requirement cannot itself
 be downgraded without breaking the signature.
 
-**Cryptographic transparency log.** `TransparencyLog` (`src/transparency.py`)
+**Cryptographic transparency log.** `TransparencyLog` (`src/docxplus/transparency.py`)
 maintains an append-only hash chain over reproduction attestations with Merkle
 inclusion proofs, so a third party can confirm one attestation belongs to the log
 without re-execution and without seeing the others. Chain verification establishes

@@ -32,7 +32,7 @@ Each document answers one question. Start with the one that matches yours.
 ## Conventions
 
 Numbers in the manuscript and in these docs derive from live code constants through
-`src/manuscript_vars.py`. Nothing drift-prone is typed by hand; a stale literal fails
+`src/docxplus/manuscript_vars.py`. Nothing drift-prone is typed by hand; a stale literal fails
 the test suite rather than reaching a reader.
 
 The same rule covers *numbering*: no figure, table, section, equation, or formalism

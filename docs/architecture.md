@@ -18,7 +18,7 @@ L3  composition   container  (DocxPlusBuilder / DocxPlusReader)
                   odt_container (OdtPlusBuilder / OdtPlusReader)
 L4  validation    validate
 L5  reference     reference_docs • manuscript_vars
-L6  orchestration docxplus_cli.py • scripts/*
+L6  orchestration src/docxplus/cli.py • scripts/*
 ```
 
 | Module | Layer | Responsibility |

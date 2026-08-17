@@ -5,12 +5,12 @@ from __future__ import annotations
 import io
 import zipfile
 
-from container import DocxPlusBuilder
-from crypto import generate_signing_key
-from opc import OpcPackage, Relationship, read_package
-from validate import assert_valid, validate_bytes, validate_package
-from wordml import new_base_document
-from channels.mce import MceChannel
+from docxplus.container import DocxPlusBuilder
+from docxplus.crypto import generate_signing_key
+from docxplus.opc import OpcPackage, Relationship, read_package
+from docxplus.validate import assert_valid, validate_bytes, validate_package
+from docxplus.wordml import new_base_document
+from docxplus.channels.mce import MceChannel
 
 
 def test_plain_document_validates_with_note():
@@ -108,7 +108,7 @@ def test_validate_mce_channel():
     rec = chan.embed(pkg, b"sample mce data", slot="slot_mce")
 
     # Check valid MCE channel in package
-    from manifest import Manifest, write_manifest
+    from docxplus.manifest import Manifest, write_manifest
     m = Manifest()
     m.add(rec)
     write_manifest(pkg, m)
@@ -135,10 +135,10 @@ def _signature_part(uris: list[str]) -> bytes:
 
 
 def _docx_with_signature(uris: list[str]) -> tuple:
-    import crypto
-    from container import DocxPlusBuilder
-    from opc import read_package
-    from validate import ValidationReport, check_opc_signature_coverage
+    from docxplus import crypto
+    from docxplus.container import DocxPlusBuilder
+    from docxplus.opc import read_package
+    from docxplus.validate import ValidationReport, check_opc_signature_coverage
 
     priv, _pub = crypto.generate_signing_key()
     builder = DocxPlusBuilder(paragraphs=["surface"])
@@ -162,7 +162,7 @@ def test_opc_signature_covering_only_word_parts_is_rejected():
 
 
 def test_opc_signature_covering_every_manifest_part_is_accepted():
-    from manifest import MANIFEST_PART
+    from docxplus.manifest import MANIFEST_PART
 
     _pkg, report = _docx_with_signature(
         [f"/{MANIFEST_PART}", "/intelligence/payload1.dxp", "/word/document.xml"]
@@ -172,7 +172,7 @@ def test_opc_signature_covering_every_manifest_part_is_accepted():
 
 def test_signature_reference_uris_are_matched_ignoring_the_content_type_query():
     """OPC references carry ?ContentType=…; stripping it is required, not cosmetic."""
-    from manifest import MANIFEST_PART
+    from docxplus.manifest import MANIFEST_PART
 
     _pkg, report = _docx_with_signature([
         f"/{MANIFEST_PART}?ContentType=application/vnd.docxplus.manifest%2Bjson",
@@ -182,10 +182,10 @@ def test_signature_reference_uris_are_matched_ignoring_the_content_type_query():
 
 
 def test_package_without_an_opc_signature_is_unaffected():
-    import crypto
-    from container import DocxPlusBuilder
-    from opc import read_package
-    from validate import ValidationReport, check_opc_signature_coverage
+    from docxplus import crypto
+    from docxplus.container import DocxPlusBuilder
+    from docxplus.opc import read_package
+    from docxplus.validate import ValidationReport, check_opc_signature_coverage
 
     priv, _pub = crypto.generate_signing_key()
     builder = DocxPlusBuilder(paragraphs=["surface"])

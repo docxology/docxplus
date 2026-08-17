@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import project_paths
+from docxplus import project_paths
 
 
 def test_project_root_is_directory():

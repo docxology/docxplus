@@ -16,16 +16,16 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import channels
-import container
-import crypto
-import lsb
-import opc
-import payloads
-import reproduce
-import shamir
-from channels.metadata import MAX_PAYLOAD as METADATA_MAX
-from project_paths import project_root
+from . import channels
+from . import container
+from . import crypto
+from . import lsb
+from . import opc
+from . import payloads
+from . import reproduce
+from . import shamir
+from .channels.metadata import MAX_PAYLOAD as METADATA_MAX
+from .project_paths import project_root
 
 TOKEN_RE = re.compile(r"\{\{([A-Z0-9_]+)\}\}")
 
@@ -100,7 +100,7 @@ def _cli_commands(root: Path) -> list[str]:
     # `\s*` matters: a subparser registered across several lines would otherwise be
     # skipped, silently under-reporting the command count in the manuscript — the
     # exact drift this module exists to prevent.
-    text = (root / "docxplus_cli.py").read_text()
+    text = (root / "src/docxplus/cli.py").read_text()
     return sorted(set(re.findall(r'add_parser\(\s*"([a-z-]+)"', text)))
 
 
@@ -152,7 +152,7 @@ def dossier_table() -> tuple[str, int]:
     The table is *generated from a real document*, so the manuscript's evaluation
     table can never disagree with what the code produces.
     """
-    from reference_docs import build_reference_dossier
+    from .reference_docs import build_reference_dossier
 
     reader = build_reference_dossier()
     rows = ["| Slot | Channel | Sealing |", "| --- | --- | --- |"]
@@ -244,7 +244,7 @@ def variables(include_dossier: bool = True) -> dict[str, str]:
         # Coverage is derived, so prose can never claim more than the table shows.
         # "exercises every operational mode" was written when it exercised every
         # sealing lineage but only two of the channels.
-        from reference_docs import build_reference_dossier
+        from .reference_docs import build_reference_dossier
 
         reader = build_reference_dossier()
         recs = [reader.manifest.slot(s) for s in reader.list_modules()]

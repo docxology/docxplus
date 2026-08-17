@@ -24,8 +24,8 @@ import os
 import pytest
 from PIL import Image
 
-import lsb
-import steg_bridge
+from docxplus import lsb
+from docxplus import steg_bridge
 from conftest import pixels
 
 #: Small enough to keep the suite fast, large enough that the chi-squared

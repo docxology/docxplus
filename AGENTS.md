@@ -11,7 +11,8 @@ This one holds only what is true everywhere.
 | Directory | Its rules | Its inventory |
 | --- | --- | --- |
 | `src/` | [`src/AGENTS.md`](src/AGENTS.md) | [`src/README.md`](src/README.md) |
-| `src/channels/` | [`src/channels/AGENTS.md`](src/channels/AGENTS.md) | [`src/channels/README.md`](src/channels/README.md) |
+| `src/docxplus/` | [`src/docxplus/AGENTS.md`](src/docxplus/AGENTS.md) | [`src/docxplus/README.md`](src/docxplus/README.md) |
+| `src/docxplus/channels/` | [`src/docxplus/channels/AGENTS.md`](src/docxplus/channels/AGENTS.md) | [`src/docxplus/channels/README.md`](src/docxplus/channels/README.md) |
 | `scripts/` | [`scripts/AGENTS.md`](scripts/AGENTS.md) | [`scripts/README.md`](scripts/README.md) |
 | `tests/` | [`tests/AGENTS.md`](tests/AGENTS.md) | [`tests/README.md`](tests/README.md) |
 | `docs/` | [`docs/AGENTS.md`](docs/AGENTS.md) | [`docs/README.md`](docs/README.md) |
@@ -27,7 +28,7 @@ This one holds only what is true everywhere.
 uv venv && uv pip install -e '.[dev,media,figures]'   # install all three extras
 ./run.sh                        # preflight, tests, build, dossier, round trips, render, living
 ./run.sh help                   # the stage list, generated from the driver itself
-uvx ruff check src scripts docxplus_cli.py            # CI's first gate — run it before committing
+uvx ruff check src scripts src/docxplus/cli.py            # CI's first gate — run it before committing
 .venv/bin/python -m pytest --cov=src -q               # tests + the 90% gate
 uv run docxplus --help                                # the CLI
 ```
@@ -45,7 +46,7 @@ marked `requires_steganographer` and skip gracefully when absent.
 
 ## Architecture (see [`docs/architecture.md`](docs/architecture.md))
 
-Business logic lives only in `src/`. Scripts and `docxplus_cli.py` are thin
+Business logic lives only in `src/docxplus/`. Scripts and `src/docxplus/cli.py` are thin
 orchestrators — they coordinate I/O and print output paths, never implement a channel
 or crypto primitive. Modules form a strict dependency stack (L0 foundations → L6
 orchestration); a lower layer never imports a higher one. The manifest
@@ -88,7 +89,7 @@ directory both guides, every internal link a live target.
 Two rules follow, and they are the ones that get broken:
 
 1. **Never type a drift-prone number.** Values come from
-   `src/manuscript_vars.variables()`, which reads live code constants and the repo. In
+   `src/docxplus/manuscript_vars.variables()`, which reads live code constants and the repo. In
    the manuscript they are `{{TOKENS}}`; in a README they are literals *pinned by a
    test*. A hand-typed count is how the root README came to claim eight audit cycles
    when the record held fourteen.
@@ -101,11 +102,11 @@ stale one.
 
 ## Adding a channel
 
-Implement the `Channel` protocol in `src/channels/` (`embed`/`extract`/`capacity`),
+Implement the `Channel` protocol in `src/docxplus/channels/` (`embed`/`extract`/`capacity`),
 register it in `channels/__init__.py`, and add a real round-trip test. The manifest
 records the channel id; unknown ids fail explicitly on read. Then document it in
 `docs/channels.md` and `docs/format-spec.md` — the suite requires both. Full recipe:
-[`src/channels/AGENTS.md`](src/channels/AGENTS.md).
+[`src/docxplus/channels/AGENTS.md`](src/docxplus/channels/AGENTS.md).
 
 ## Prose
 

@@ -13,11 +13,11 @@ import zipfile
 
 import pytest
 
-import crypto
-from container import ContainerError
-from odt import MIMETYPE_ODT
-from odt_container import OdtPlusBuilder, OdtPlusReader
-from validate import validate_odt_bytes
+from docxplus import crypto
+from docxplus.container import ContainerError
+from docxplus.odt import MIMETYPE_ODT
+from docxplus.odt_container import OdtPlusBuilder, OdtPlusReader
+from docxplus.validate import validate_odt_bytes
 
 
 def _signed(**kw):
@@ -62,7 +62,7 @@ def test_validator_accepts_a_well_formed_odt():
 
 
 def test_validator_reports_a_plain_odt_without_failing():
-    from odt import new_base_odt
+    from docxplus.odt import new_base_odt
 
     report = validate_odt_bytes(new_base_odt(["just text"]).to_bytes())
     assert report.ok
@@ -117,7 +117,7 @@ def test_multi_recipient_sealing_round_trip():
 
 
 def test_threshold_sealing_requires_quorum_and_verifiable_shares():
-    import shamir
+    from docxplus import shamir
 
     builder = OdtPlusBuilder().add_threshold("quorum", b"dead-man payload", k=2, n=3)
     data = builder.build()
@@ -196,7 +196,7 @@ def test_cosignatures_follow_the_opc_policy():
 
 
 def test_merkle_inclusion_proof_over_the_odt_module_set():
-    from provenance import verify_inclusion
+    from docxplus.provenance import verify_inclusion
 
     builder = OdtPlusBuilder()
     for i in range(4):
@@ -238,7 +238,7 @@ def test_missing_module_names_the_slot():
 
 
 def test_project_payload_round_trips_through_odt(tmp_path):
-    import payloads
+    from docxplus import payloads
 
     proj = tmp_path / "proj"
     (proj / "src").mkdir(parents=True)
@@ -302,7 +302,7 @@ def test_validator_reports_missing_structural_parts():
 
 def test_validator_reports_a_part_absent_from_the_odf_manifest():
     """An undeclared entry is unreachable to a conforming consumer."""
-    from odt import build_manifest_xml
+    from docxplus.odt import build_manifest_xml
 
     data = _raw_odt({
         "META-INF/manifest.xml": build_manifest_xml([("content.xml", "text/xml")]),
@@ -316,7 +316,7 @@ def test_validator_reports_a_part_absent_from_the_odf_manifest():
 
 def test_validator_reports_a_module_whose_part_is_missing():
     builder = OdtPlusBuilder(paragraphs=["x"]).add_module("m", b"payload")
-    from odt import OdtPackage
+    from docxplus.odt import OdtPackage
 
     pkg = OdtPackage.from_bytes(builder.build())
     del pkg.parts["intelligence/payload1.dxp"]
@@ -326,7 +326,7 @@ def test_validator_reports_a_module_whose_part_is_missing():
 
 
 def test_validator_reports_a_tampered_module_digest():
-    from odt import OdtPackage
+    from docxplus.odt import OdtPackage
 
     pkg = OdtPackage.from_bytes(OdtPlusBuilder(paragraphs=["x"]).add_module("m", b"payload").build())
     raw = bytearray(pkg.parts["intelligence/payload1.dxp"])
@@ -340,8 +340,8 @@ def test_validator_reports_a_tampered_module_digest():
 def test_validator_reports_an_invalid_signature():
     import json as _json
 
-    from odt import OdtPackage
-    from odt_container import ODT_MANIFEST_PART
+    from docxplus.odt import OdtPackage
+    from docxplus.odt_container import ODT_MANIFEST_PART
 
     builder, priv, _pub = _signed()
     builder.add_module("m", b"payload").sign(priv)
@@ -359,8 +359,8 @@ def test_validator_reports_an_invalid_signature():
 def test_validator_reports_a_merkle_root_that_disagrees_with_the_module_set():
     import json as _json
 
-    from odt import OdtPackage
-    from odt_container import ODT_MANIFEST_PART
+    from docxplus.odt import OdtPackage
+    from docxplus.odt_container import ODT_MANIFEST_PART
 
     pkg = OdtPackage.from_bytes(OdtPlusBuilder(paragraphs=["x"]).add_module("m", b"p").build())
     doc = _json.loads(pkg.parts[ODT_MANIFEST_PART])
@@ -383,7 +383,7 @@ def test_reader_refuses_a_package_that_is_not_opendocument_text():
 
 
 def test_reader_reports_absence_of_an_intelligence_layer():
-    from odt import new_base_odt
+    from docxplus.odt import new_base_odt
 
     reader = OdtPlusReader.from_bytes(new_base_odt(["plain"]).to_bytes())
     assert reader.has_intelligence() is False
@@ -394,7 +394,7 @@ def test_reader_reports_absence_of_an_intelligence_layer():
 
 
 def _hostile_odt(**extra_parts):
-    from odt import OdtPackage
+    from docxplus.odt import OdtPackage
 
     pkg = OdtPackage.from_bytes(OdtPlusBuilder(paragraphs=["ordinary"]).add_module("m", b"p").build())
     for name, data in extra_parts.items():
@@ -403,7 +403,7 @@ def _hostile_odt(**extra_parts):
 
 
 def test_clean_odt_scans_clean():
-    import intake
+    from docxplus import intake
 
     data = OdtPlusBuilder(paragraphs=["ordinary"]).add_module("m", b"payload").build()
     report, reader = intake.safe_open_odt(data)
@@ -413,9 +413,9 @@ def test_clean_odt_scans_clean():
 
 def test_plain_odt_yields_no_reader():
     """Absence of an intelligence layer is a fact about the document, not a failure."""
-    import intake
+    from docxplus import intake
 
-    from odt import new_base_odt
+    from docxplus.odt import new_base_odt
 
     report, reader = intake.safe_open_odt(new_base_odt(["plain"]).to_bytes())
     assert report.ok is True
@@ -423,7 +423,7 @@ def test_plain_odt_yields_no_reader():
 
 
 def test_scan_flags_odf_basic_macro_containers():
-    import intake
+    from docxplus import intake
 
     pkg = _hostile_odt(Basic__Standard__Module1_xml=b"<m/>")
     report, _ = intake.safe_open_odt(pkg.to_bytes())
@@ -432,7 +432,7 @@ def test_scan_flags_odf_basic_macro_containers():
 
 
 def test_scan_flags_off_package_xlink_targets():
-    import intake
+    from docxplus import intake
 
     pkg = _hostile_odt()
     pkg.parts["content.xml"] = pkg.parts["content.xml"].replace(
@@ -447,7 +447,7 @@ def test_scan_flags_off_package_xlink_targets():
 
 def test_scan_ignores_ordinary_in_package_links():
     """A relative or same-document href is normal; only a scheme means it dials out."""
-    import intake
+    from docxplus import intake
 
     pkg = _hostile_odt()
     pkg.parts["content.xml"] = pkg.parts["content.xml"].replace(
@@ -460,7 +460,7 @@ def test_scan_ignores_ordinary_in_package_links():
 
 
 def test_strict_policy_refuses_a_dirty_odt():
-    import intake
+    from docxplus import intake
     import pytest as _pytest
 
     pkg = _hostile_odt(Scripts__script_xml=b"<s/>")
@@ -469,7 +469,7 @@ def test_strict_policy_refuses_a_dirty_odt():
 
 
 def test_scan_caps_part_count():
-    import intake
+    from docxplus import intake
 
     data = OdtPlusBuilder(paragraphs=["x"]).add_module("m", b"p").build()
     report, _ = intake.safe_open_odt(data, policy=intake.IntakePolicy(max_parts=2))

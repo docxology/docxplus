@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from channels.base import ChannelRecord
-from crypto import generate_signing_key, sign
-from manifest import Manifest, read_manifest, write_manifest
-from wordml import new_base_document
+from docxplus.channels.base import ChannelRecord
+from docxplus.crypto import generate_signing_key, sign
+from docxplus.manifest import Manifest, read_manifest, write_manifest
+from docxplus.wordml import new_base_document
 
 
 def _record(slot: str) -> ChannelRecord:
@@ -81,7 +81,7 @@ def test_write_and_read_manifest_in_package():
     write_manifest(pkg, m)
     # Idempotent replace.
     write_manifest(pkg, m)
-    from opc import read_package
+    from docxplus.opc import read_package
 
     reparsed = read_package(pkg.to_bytes())
     loaded = read_manifest(reparsed)
@@ -91,6 +91,6 @@ def test_write_and_read_manifest_in_package():
 
 def test_read_manifest_absent_returns_none():
     pkg = new_base_document(["x"])
-    from opc import read_package
+    from docxplus.opc import read_package
 
     assert read_manifest(read_package(pkg.to_bytes())) is None

@@ -73,7 +73,7 @@ def _reject_unsafe_entry(name: str) -> None:
     """
     import posixpath
 
-    from opc import OpcError
+    from .opc import OpcError
 
     if not name or name.endswith("/"):
         return  # directory marker: carries no bytes
@@ -98,7 +98,7 @@ class OdtPackage:
         """Produce a deterministic, spec-conforming ODT zip archive.
         mimetype must be the first entry, uncompressed.
         """
-        from opc import _FIXED_ZIP_TIME
+        from .opc import _FIXED_ZIP_TIME
 
         def _info(name: str, compress: int) -> zipfile.ZipInfo:
             # Same determinism contract as the OPC path: the 1980-01-01 DOS epoch
@@ -137,7 +137,7 @@ class OdtPackage:
         that later materialises them to disk must not be the thing that discovers
         the package was hostile.
         """
-        from opc import MAX_ENTRIES, OpcError, _guard_zip_bomb
+        from .opc import MAX_ENTRIES, OpcError, _guard_zip_bomb
 
         pkg = cls()
         with zipfile.ZipFile(io.BytesIO(data), "r") as zf:

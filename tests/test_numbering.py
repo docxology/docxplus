@@ -24,7 +24,7 @@ import re
 import pytest
 import yaml
 
-from project_paths import project_root
+from docxplus.project_paths import project_root
 
 ROOT = project_root()
 MANUSCRIPT = ROOT / "manuscript"

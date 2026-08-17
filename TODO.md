@@ -21,10 +21,10 @@ hardened untrusted-intake `intake.safe_open` (external rels / macros / altChunk 
 entry/collision caps), and redundant media carriers. See docs/redteam-audit.md v0.4-v0.5.
 
 ## Shipped in v0.6
-MCE `AlternateContent`/`Choice`/`Fallback` channel (`src/channels/mce.py`), ODT sibling
-profile using `META-INF/manifest.xml` directly (`src/odt.py`), Verifiable Secret Sharing
-(VSS) integrity tags (`src/shamir.py`), Argon2id memory-hard KDF (`src/crypto.py`),
-cryptographic transparency log (`src/transparency.py`), CI workflow (`.github/workflows/ci.yml`),
+MCE `AlternateContent`/`Choice`/`Fallback` channel (`src/docxplus/channels/mce.py`), ODT sibling
+profile using `META-INF/manifest.xml` directly (`src/docxplus/odt.py`), Verifiable Secret Sharing
+(VSS) integrity tags (`src/docxplus/shamir.py`), Argon2id memory-hard KDF (`src/docxplus/crypto.py`),
+cryptographic transparency log (`src/docxplus/transparency.py`), CI workflow (`.github/workflows/ci.yml`),
 and linker-scrubbed sandbox execution. See `docs/redteam-audit.md` v0.6.
 
 ## Known limitations at v1.0.0
@@ -82,7 +82,7 @@ guarantee rather than a false claim.
       `docs/opc-signatures.md`. Blocked on a C14N implementation and an X.509/PKI
       decision (Office will not verify Ed25519). The guard above already holds the
       invariant any implementation must satisfy.
-- [x] ODT intelligence layer: `src/odt_container.py` gives the sibling profile the
+- [x] ODT intelligence layer: `src/docxplus/odt_container.py` gives the sibling profile the
       full Intelligence Contract, sharing sealing/unsealing with the OPC path.
 - [ ] `metadata` and `stego_media` channel analogues for ODT (`meta.xml`
       user-defined fields; `Pictures/`). The package-entry channel is implemented;
@@ -127,7 +127,7 @@ the container rather than the caller. See `docs/redteam-audit.md` v0.7.0 and
 format-spec §8.1.
 
 ## Shipped in v0.6.3 (ODT intelligence parity + signature-coverage guard)
-`src/odt_container.py` gives the ODT sibling the full Intelligence Contract — typed
+`src/docxplus/odt_container.py` gives the ODT sibling the full Intelligence Contract — typed
 payloads, all four sealing lineages, Merkle root, ODF surface digest, Ed25519
 signature and co-signatures, inclusion proofs — reusing `container.seal_module` and
 `DocxPlusReader._unseal` so the two profiles cannot drift. `validate.validate_odt_bytes`

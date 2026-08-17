@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from channels.base import Channel, ChannelRecord
-from channels.custom_xml import CustomXmlChannel
-from channels.mce import MceChannel
-from channels.metadata import MetadataChannel
-from channels.package_part import PackagePartChannel
-from channels.stego_media import StegMediaChannel
+from .base import Channel, ChannelRecord
+from .custom_xml import CustomXmlChannel
+from .mce import MceChannel
+from .metadata import MetadataChannel
+from .package_part import PackagePartChannel
+from .stego_media import StegMediaChannel
 
 # Channels that need no optional/external toolchain; safe to construct anywhere.
 _PURE_CHANNELS: dict[str, type] = {

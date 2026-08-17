@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-CLI = Path(__file__).resolve().parent.parent / "docxplus_cli.py"
+CLI = Path(__file__).resolve().parent.parent / "src/docxplus/cli.py"
 
 
 def _run(args, **kw):

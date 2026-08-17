@@ -1,13 +1,13 @@
 # Evaluation {#sec:evaluation}
 
 > Every quantity in this section is substituted at render time from live code constants via
-> `scripts/render_manuscript.py` and `src/manuscript_vars.py`. The manuscript sources contain no hardcoded
+> `scripts/render_manuscript.py` and `src/docxplus/manuscript_vars.py`. The manuscript sources contain no hardcoded
 > metrics, so a claim here cannot drift from the implementation without the render failing. The figures draw
 > from the same source.
 
 ## Round-Trip Integrity Across Every Sealing Mode {#sec:eval-roundtrip}
 
-The reference dossier (`src/reference_docs.py`, `scripts/04_dossier.py`) carries {{DOSSIER_MODULE_COUNT}}
+The reference dossier (`src/docxplus/reference_docs.py`, `scripts/04_dossier.py`) carries {{DOSSIER_MODULE_COUNT}}
 heterogeneous modules in a single archive, covering all {{DOSSIER_SEALING_COUNT}} sealing lineages
 ({{DOSSIER_SEALING}}) across {{DOSSIER_CHANNEL_COUNT}} of the {{CHANNEL_COUNT}} transport channels
 ({{DOSSIER_CHANNELS}}). Sealing is what the dossier is for; the remaining channels are exercised by the

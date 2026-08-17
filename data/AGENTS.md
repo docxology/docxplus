@@ -16,6 +16,6 @@ If you are about to add a file, check which of these it actually is:
   it. An undocumented data file is an unverifiable result.
 
 Nothing secret, ever. No keys, no shares, no recovered plaintext. `.gitignore` already
-excludes `*.hex` and `keys/`, and `src/secure_io.py` exists so those files are created
+excludes `*.hex` and `keys/`, and `src/docxplus/secure_io.py` exists so those files are created
 owner-only wherever they land — but the first rule is that they do not land in the
 repository at all.

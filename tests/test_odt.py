@@ -3,7 +3,7 @@
 import io
 import zipfile
 
-from odt import (
+from docxplus.odt import (
     MIMETYPE_ODT,
     OdtPackage,
     new_base_odt,
@@ -59,7 +59,7 @@ def _odt_with(entries: dict[str, bytes]) -> bytes:
 
 def test_odt_uses_the_same_fixed_dos_epoch_as_opc():
     """Determinism invariant: 1980-01-01, not a hand-written year."""
-    from opc import _FIXED_ZIP_TIME
+    from docxplus.opc import _FIXED_ZIP_TIME
 
     with zipfile.ZipFile(io.BytesIO(new_base_odt(["x"]).to_bytes())) as zf:
         assert {i.date_time for i in zf.infolist()} == {_FIXED_ZIP_TIME}
@@ -77,7 +77,7 @@ def test_odt_entries_carry_normalised_permissions():
 
 def test_odt_rejects_path_traversal_entry_names():
     import pytest
-    from opc import OpcError
+    from docxplus.opc import OpcError
 
     for hostile in ("../../etc/evil.txt", "/etc/passwd", "..\\..\\evil", "a/../../b"):
         with pytest.raises(OpcError, match="rejected"):
@@ -91,7 +91,7 @@ def test_odt_accepts_ordinary_nested_entry_names():
 
 def test_odt_enforces_the_entry_count_cap():
     import pytest
-    from opc import MAX_ENTRIES, OpcError
+    from docxplus.opc import MAX_ENTRIES, OpcError
 
     with pytest.raises(OpcError, match="too many entries"):
         OdtPackage.from_bytes(_odt_with({f"f{i}.txt": b"x" for i in range(MAX_ENTRIES + 10)}))
@@ -99,7 +99,7 @@ def test_odt_enforces_the_entry_count_cap():
 
 def test_odt_enforces_the_decompression_bomb_cap():
     import pytest
-    from opc import MAX_ENTRY_BYTES, OpcError
+    from docxplus.opc import MAX_ENTRY_BYTES, OpcError
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:

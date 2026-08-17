@@ -27,8 +27,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-import crypto
-from provenance import inclusion_proof, merkle_root
+from . import crypto
+from .provenance import inclusion_proof, merkle_root
 
 # Domain-separation prefix so an STH signature can never be replayed as a
 # manifest signature (or vice versa) under the same Ed25519 key.

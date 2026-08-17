@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-import crypto
-from crypto import (
+from docxplus import crypto
+from docxplus.crypto import (
     KEY_BYTES,
     decrypt_with_key,
     encrypt_with_key,

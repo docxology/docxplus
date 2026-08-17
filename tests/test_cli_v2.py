@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-CLI = Path(__file__).resolve().parent.parent / "docxplus_cli.py"
+CLI = Path(__file__).resolve().parent.parent / "src/docxplus/cli.py"
 
 
 def _run(args, **kw):
@@ -94,8 +94,8 @@ def _write_log(tmp_path, entries=5, *, sign=True):
     import sys as _sys
 
     _sys.path.insert(0, str(CLI.parent / "src"))
-    import crypto
-    from transparency import TransparencyLog
+    from docxplus import crypto
+    from docxplus.transparency import TransparencyLog
 
     log = TransparencyLog()
     for i in range(entries):
@@ -154,7 +154,7 @@ def test_verify_transparency_fails_closed_on_a_wrong_pinned_signer(tmp_path):
     import sys as _sys
 
     _sys.path.insert(0, str(CLI.parent / "src"))
-    import crypto
+    from docxplus import crypto
 
     log_path, _log, sth_path, _key = _write_log(tmp_path)
     wrong = tmp_path / "wrong.pub"
@@ -283,7 +283,7 @@ def test_analyze_carrier_exit_code_distinguishes_clean_from_embedded(tmp_path):
 
     pytest.importorskip("PIL")
     _sys.path.insert(0, str(CLI.parent / "src"))
-    import lsb
+    from docxplus import lsb
 
     clean = _carrier(tmp_path / "clean.png")
     stego = lsb.embed(clean, os.urandom(lsb.capacity_bytes(96, 96)), tmp_path / "stego.png")

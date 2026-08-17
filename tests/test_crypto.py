@@ -6,7 +6,7 @@ import os
 
 import pytest
 
-from crypto import (
+from docxplus.crypto import (
     KDF_ARGON2ID,
     EncryptedPayload,
     decrypt,

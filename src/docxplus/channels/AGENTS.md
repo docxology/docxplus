@@ -1,8 +1,8 @@
-# src/channels/ — adding and changing a channel
+# src/docxplus/channels/ — adding and changing a channel
 
 Every channel satisfies the `Channel` protocol in [`base.py`](base.py). The inventory
 is in [`README.md`](README.md); the reference is
-[`../../docs/channels.md`](../../docs/channels.md). This file is the recipe and the
+[`../../docs/channels.md`](../../../docs/channels.md). This file is the recipe and the
 traps.
 
 ## The contract

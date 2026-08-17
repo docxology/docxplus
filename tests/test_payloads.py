@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-import payloads
+from docxplus import payloads
 
 
 def test_bytes_type():

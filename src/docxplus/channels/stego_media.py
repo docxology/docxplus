@@ -22,11 +22,11 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-import lsb
-import steg_bridge
-from channels.base import ChannelRecord
-from crypto import digest as _digest
-from opc import OpcPackage, Relationship
+from .. import lsb
+from .. import steg_bridge
+from .base import ChannelRecord
+from ..crypto import digest as _digest
+from ..opc import OpcPackage, Relationship
 
 CT_PNG = "image/png"
 REL_IMAGE = (
@@ -46,7 +46,7 @@ def _insert_drawing(pkg: OpcPackage, rid: str, size: tuple[int, int]) -> None:
     EMU is the WordprocessingML unit: 914400 per inch, and a PNG with no declared DPI
     is conventionally read at 96, giving 9525 EMU per pixel.
     """
-    from channels.mce import _body_insertion_point
+    from .mce import _body_insertion_point
 
     width_emu, height_emu = size[0] * 9525, size[1] * 9525
     drawing = (

@@ -20,11 +20,11 @@ import zipfile
 
 import pytest
 
-import crypto
-import provenance
-from container import DocxPlusBuilder, DocxPlusReader
-from manifest import Manifest
-from validate import validate_bytes
+from docxplus import crypto
+from docxplus import provenance
+from docxplus.container import DocxPlusBuilder, DocxPlusReader
+from docxplus.manifest import Manifest
+from docxplus.validate import validate_bytes
 
 
 # -- Finding 1: Merkle second preimage (CVE-2012-2459 shape) ------------------

@@ -14,10 +14,10 @@ import sys
 
 import pytest
 
-import reproduce
-from container import ContainerError, DocxPlusBuilder, DocxPlusReader
-from crypto import generate_signing_key
-from reproduce import ReproSpec
+from docxplus import reproduce
+from docxplus.container import ContainerError, DocxPlusBuilder, DocxPlusReader
+from docxplus.crypto import generate_signing_key
+from docxplus.reproduce import ReproSpec
 
 # Use the running interpreter (a real CPython), not the macOS /usr/bin/python3 stub.
 PY = sys.executable
@@ -89,12 +89,12 @@ def test_h2_tampered_carried_bytes_caught_before_execution(tmp_path):
     so a tampered dossier fails before any code could run."""
     proj = _make_repro_project(tmp_path / "p")
     data = DocxPlusBuilder().add_project("source", proj, reproduce=True).build()
-    from opc import read_package
+    from docxplus.opc import read_package
 
     pkg = read_package(data)
     part = next(p for p in pkg.parts if p.startswith("intelligence/payload"))
     pkg.parts[part] = pkg.parts[part][:-1] + bytes([pkg.parts[part][-1] ^ 0xFF])
-    reader = DocxPlusReader(package=pkg, manifest=__import__("manifest").read_manifest(pkg))
+    reader = DocxPlusReader(package=pkg, manifest=__import__("docxplus.manifest", fromlist=["x"]).read_manifest(pkg))
     with pytest.raises(ContainerError, match="stored bytes altered"):
         reader.reproduce("source", tmp_path / "out", allow_execution=True)
 

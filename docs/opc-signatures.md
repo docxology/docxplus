@@ -83,7 +83,7 @@ The two signatures also fail in opposite directions, which is the useful part:
 If this is built, the invariant is: **the OPC reference set must be a superset of
 every part the manifest names.** Concretely, derive the reference list from
 `manifest.records[*].location` rather than from a fixed list of Word parts, and
-add a validator rule in `src/validate.py` that fails closed when a package
+add a validator rule in `src/docxplus/validate.py` that fails closed when a package
 carries an OPC signature whose reference set omits any manifest-named part. That
 rule is worth writing *before* the signing code, because it is what stops the
 feature from becoming a trust-laundering surface.

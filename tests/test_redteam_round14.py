@@ -23,9 +23,9 @@ from pathlib import Path
 
 import pytest
 
-import payloads
-import reproduce
-from container import DocxPlusBuilder, DocxPlusReader
+from docxplus import payloads
+from docxplus import reproduce
+from docxplus.container import DocxPlusBuilder, DocxPlusReader
 
 
 # -- Finding 1: extraction hardening must not depend on the interpreter -------

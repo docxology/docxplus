@@ -1,4 +1,4 @@
-# src/channels/ — the side-channels
+# src/docxplus/channels/ — the side-channels
 
 A *channel* is one spec-sanctioned place inside an otherwise-ordinary package where a
 payload can ride. Five are registered. They differ in capacity, visibility, and cost,
@@ -21,9 +21,9 @@ guessing a part name — that is the property that lets a reader open a document
 not build.
 
 Exact capacity numbers, visibility under each viewer, cost, and caveats are in
-[`../../docs/channels.md`](../../docs/channels.md), which is the reference; the
+[`../../docs/channels.md`](../../../docs/channels.md), which is the reference; the
 normative definitions are in
-[`../../docs/format-spec.md`](../../docs/format-spec.md). `tests/test_docs.py` fails
+[`../../docs/format-spec.md`](../../../docs/format-spec.md). `tests/test_docs.py` fails
 the build if a registered channel is missing from either.
 
 ## Two things worth knowing before you pick one

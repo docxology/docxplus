@@ -19,9 +19,9 @@ from __future__ import annotations
 import zipfile
 from dataclasses import dataclass, field
 
-from manifest import read_manifest
-from opc import CONTENT_TYPES_PART, OpcError, OpcPackage, read_package
-from wordml import CT_DOCUMENT
+from .manifest import read_manifest
+from .opc import CONTENT_TYPES_PART, OpcError, OpcPackage, read_package
+from .wordml import CT_DOCUMENT
 
 
 @dataclass
@@ -128,8 +128,8 @@ def _check_intelligence(pkg: OpcPackage, report: ValidationReport) -> None:
         report.notes.append("no intelligence manifest (plain document)")
         return
 
-    import channels as channel_registry
-    from crypto import digest as _digest
+    from . import channels as channel_registry
+    from .crypto import digest as _digest
 
     report.notes.append(f"intelligence modules: {len(manifest.records)}")
     for record in manifest.records:
@@ -152,7 +152,7 @@ def _check_intelligence(pkg: OpcPackage, report: ValidationReport) -> None:
     # module set, or the manifest is internally inconsistent.
     import json as _json
 
-    from manifest import MANIFEST_PART
+    from .manifest import MANIFEST_PART
 
     stored_root = _json.loads(pkg.parts[MANIFEST_PART]).get("merkle_root", "")
     if stored_root != manifest.merkle_root():
@@ -165,7 +165,7 @@ def _check_intelligence(pkg: OpcPackage, report: ValidationReport) -> None:
     # prose had been rewritten passed `docxplus validate` with no findings at all.
     # `verify` caught it, but validate is the command a release process runs.
     if manifest.surface_digest:
-        from container import _compute_surface_digest
+        from .container import _compute_surface_digest
 
         if manifest.surface_digest != _compute_surface_digest(pkg):
             report.fail(
@@ -206,7 +206,7 @@ def validate_odt_bytes(data: bytes) -> ValidationReport:
     """Validate raw .odt bytes across both contracts."""
     report = ValidationReport()
     try:
-        from odt import OdtPackage
+        from .odt import OdtPackage
 
         pkg = OdtPackage.from_bytes(data)
     except Exception as exc:  # noqa: BLE001 - report, don't crash the validator
@@ -222,7 +222,7 @@ def _check_odf(data: bytes, pkg, report: ValidationReport) -> None:
     import io
     import zipfile as _zip
 
-    from odt import MIMETYPE_ODT
+    from .odt import MIMETYPE_ODT
 
     with _zip.ZipFile(io.BytesIO(data)) as zf:
         infos = zf.infolist()
@@ -255,9 +255,9 @@ def _check_odf(data: bytes, pkg, report: ValidationReport) -> None:
 def _check_odt_intelligence(pkg, report: ValidationReport) -> None:
     import json as _json
 
-    from crypto import digest as _digest
-    from manifest import Manifest
-    from odt_container import ODT_MANIFEST_PART
+    from .crypto import digest as _digest
+    from .manifest import Manifest
+    from .odt_container import ODT_MANIFEST_PART
 
     blob = pkg.parts.get(ODT_MANIFEST_PART)
     if blob is None:
@@ -282,7 +282,7 @@ def _check_odt_intelligence(pkg, report: ValidationReport) -> None:
     # shared code path: a check present on one profile and absent on the other makes
     # the weaker profile the one an attacker chooses to present.
     if manifest.surface_digest:
-        from odt_container import compute_odt_surface_digest
+        from .odt_container import compute_odt_surface_digest
 
         if manifest.surface_digest != compute_odt_surface_digest(pkg):
             report.fail(
@@ -325,7 +325,7 @@ def check_opc_signature_coverage(pkg: OpcPackage, report: ValidationReport) -> N
     if OPC_SIGNATURE_ORIGIN not in pkg.parts and not signature_parts:
         return  # no OPC signature: nothing to over-claim
 
-    from manifest import MANIFEST_PART, read_manifest
+    from .manifest import MANIFEST_PART, read_manifest
 
     manifest = read_manifest(pkg)
     if manifest is None:

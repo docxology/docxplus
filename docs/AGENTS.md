@@ -28,7 +28,7 @@ Ownership matters more than contents, because it decides where a fact belongs.
 ## Rules
 
 - **Cite, do not freeze.** Documented API names, CLI commands, KDF and version facts,
-  and evaluation numbers must match the shipped `src/`, `docxplus_cli.py`, and the
+  and evaluation numbers must match the shipped `src/`, `src/docxplus/cli.py`, and the
   regenerated artifacts under `output/`. When a claim would drift — a test count, a
   coverage percentage, an audit tally — regenerate and cite the real number rather than
   typing a stale one.

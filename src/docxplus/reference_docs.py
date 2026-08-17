@@ -5,8 +5,8 @@ defined once and never restated.
 
 from __future__ import annotations
 
-import crypto
-from container import DocxPlusBuilder, DocxPlusReader
+from . import crypto
+from .container import DocxPlusBuilder, DocxPlusReader
 
 
 def build_reference_dossier() -> DocxPlusReader:

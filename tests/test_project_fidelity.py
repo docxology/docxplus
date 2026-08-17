@@ -16,7 +16,7 @@ import tarfile
 
 import pytest
 
-import payloads
+from docxplus import payloads
 
 
 def _tree(root):
@@ -177,19 +177,19 @@ def test_unpack_refuses_every_member_that_is_not_a_file_or_directory(tmp_path, k
 
 @pytest.mark.parametrize("profile", ["docx", "odt"])
 def test_project_round_trips_through_both_containers(tmp_path, profile):
-    import crypto
+    from docxplus import crypto
 
     root = _tree(tmp_path / "proj")
     priv, pub = crypto.generate_signing_key()
 
     if profile == "docx":
-        from container import DocxPlusBuilder, DocxPlusReader
+        from docxplus.container import DocxPlusBuilder, DocxPlusReader
 
         builder = DocxPlusBuilder(paragraphs=["carrier"])
         builder.add_project("source", root, password="pw").sign(priv)
         reader = DocxPlusReader.from_bytes(builder.build())
     else:
-        from odt_container import OdtPlusBuilder, OdtPlusReader
+        from docxplus.odt_container import OdtPlusBuilder, OdtPlusReader
 
         builder = OdtPlusBuilder(paragraphs=["carrier"])
         builder.add_project("source", root, password="pw").sign(priv)
@@ -204,8 +204,8 @@ def test_project_round_trips_through_both_containers(tmp_path, profile):
 
 def test_the_same_tree_packs_identically_for_both_profiles(tmp_path):
     """Profile parity means the payload bytes agree, not merely that both succeed."""
-    from container import DocxPlusBuilder, DocxPlusReader
-    from odt_container import OdtPlusBuilder, OdtPlusReader
+    from docxplus.container import DocxPlusBuilder, DocxPlusReader
+    from docxplus.odt_container import OdtPlusBuilder, OdtPlusReader
 
     root = _tree(tmp_path / "proj")
     docx = DocxPlusBuilder(paragraphs=["c"]).add_project("s", root).build()
@@ -217,8 +217,8 @@ def test_the_same_tree_packs_identically_for_both_profiles(tmp_path):
 
 
 def test_open_document_dispatches_on_the_container(tmp_path):
-    from container import DocxPlusBuilder, DocxPlusReader
-    from odt_container import OdtPlusBuilder, OdtPlusReader, open_document
+    from docxplus.container import DocxPlusBuilder, DocxPlusReader
+    from docxplus.odt_container import OdtPlusBuilder, OdtPlusReader, open_document
 
     docx = DocxPlusBuilder(paragraphs=["c"]).add_module("m", "package_part", b"x").build()
     odt = OdtPlusBuilder(paragraphs=["c"]).add_module("m", b"x").build()
@@ -227,8 +227,8 @@ def test_open_document_dispatches_on_the_container(tmp_path):
 
 
 def test_open_document_rejects_a_non_package(tmp_path):
-    from container import ContainerError
-    from odt_container import open_document
+    from docxplus.container import ContainerError
+    from docxplus.odt_container import open_document
 
     with pytest.raises(ContainerError, match="not a readable document package"):
         open_document(b"definitely not a zip")
@@ -236,9 +236,9 @@ def test_open_document_rejects_a_non_package(tmp_path):
 
 def test_a_docx_nests_inside_an_odt_and_still_verifies(tmp_path):
     """Matryoshka nesting must not care which container the inner document uses."""
-    import crypto
-    from container import DocxPlusBuilder, DocxPlusReader
-    from odt_container import OdtPlusBuilder, OdtPlusReader
+    from docxplus import crypto
+    from docxplus.container import DocxPlusBuilder, DocxPlusReader
+    from docxplus.odt_container import OdtPlusBuilder, OdtPlusReader
 
     priv, pub = crypto.generate_signing_key()
     root = _tree(tmp_path / "proj")
@@ -263,8 +263,8 @@ def test_odt_carries_and_verifies_a_reproduction_attestation(tmp_path):
     import json
     import sys
 
-    import crypto
-    from odt_container import OdtPlusBuilder, OdtPlusReader
+    from docxplus import crypto
+    from docxplus.odt_container import OdtPlusBuilder, OdtPlusReader
 
     root = tmp_path / "proj"
     root.mkdir()
@@ -343,11 +343,11 @@ def test_all_four_formats_carry_and_return_the_same_tree(tmp_path):
     A plus extension that only *looks* like a document — written but never read back
     from — would be decoration. Each name is opened here as a first-class input.
     """
-    import crypto
-    from fileext import write_document
-    from odt_container import OdtPlusBuilder, open_document
+    from docxplus import crypto
+    from docxplus.fileext import write_document
+    from docxplus.odt_container import OdtPlusBuilder, open_document
 
-    from container import DocxPlusBuilder
+    from docxplus.container import DocxPlusBuilder
 
     root = _tree(tmp_path / "proj")
     priv, pub = crypto.generate_signing_key()
@@ -377,7 +377,7 @@ def test_the_template_roundtrip_report_records_a_real_external_project():
     """
     import json
 
-    from project_paths import project_root
+    from docxplus.project_paths import project_root
 
     path = project_root() / "output" / "reports" / "template_roundtrip.json"
     if not path.is_file():

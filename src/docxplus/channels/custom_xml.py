@@ -15,9 +15,9 @@ from xml.sax.saxutils import quoteattr
 
 from defusedxml.ElementTree import fromstring as _safe_fromstring
 
-from channels.base import ChannelRecord
-from crypto import digest as _digest
-from opc import OpcPackage, Relationship
+from .base import ChannelRecord
+from ..crypto import digest as _digest
+from ..opc import OpcPackage, Relationship
 
 CT_CUSTOM_XML = "application/xml"
 REL_CUSTOM_XML = (

@@ -26,9 +26,15 @@ import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+# Installed, `docxplus` is a real package and this is a no-op. Run out of a checkout
+# the package lives under src/ and nothing has put it on the path yet. Importing
+# first keeps an installed copy authoritative instead of being shadowed.
+try:  # pragma: no cover - one branch or the other, trivially
+    import docxplus as _docxplus  # noqa: F401
+except ModuleNotFoundError:  # pragma: no cover
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from project_paths import ensure_output_dirs
+from docxplus.project_paths import ensure_output_dirs
 
 #: Square carrier edges that are actually round-tripped. Kept square because the
 #: capacity law depends on the pixel *count*, so one dimension tells the whole story.
@@ -55,7 +61,7 @@ def measure(edge: int) -> tuple[int, bool]:
     Filling a carrier to its exact stated capacity is the case where an off-by-one in
     the header accounting would show up, so it is the case worth running.
     """
-    import lsb
+    from docxplus import lsb
 
     capacity = lsb.capacity_bytes(edge, edge)
     with tempfile.TemporaryDirectory() as tmp:
@@ -78,8 +84,8 @@ def main() -> int:
         sys.stderr.write("matplotlib not installed; skipping (uv sync --extra figures)\n")
         return 0
 
-    import lsb
-    from channels.metadata import MAX_PAYLOAD
+    from docxplus import lsb
+    from docxplus.channels.metadata import MAX_PAYLOAD
 
     measured = [(e, *measure(e)) for e in MEASURED_EDGES]
     if not all(ok for _, _, ok in measured):

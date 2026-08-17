@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from project_paths import project_root
+from docxplus.project_paths import project_root
 
 ROOT = project_root()
 DOCS = ROOT / "docs"
@@ -29,13 +29,13 @@ def _read(rel: str) -> str:
 def test_every_src_module_appears_in_the_architecture_map():
     """A module nobody documented is a module nobody can find."""
     listed = set(re.findall(r"\|\s*`([a-z_]+\.py)`", _read("docs/architecture.md")))
-    on_disk = {p.name for p in (ROOT / "src").glob("*.py") if p.name != "__init__.py"}
+    on_disk = {p.name for p in (ROOT / "src" / "docxplus").glob("*.py") if p.name != "__init__.py"}
     assert not (on_disk - listed), f"missing from docs/architecture.md: {sorted(on_disk - listed)}"
 
 
 def test_the_architecture_map_lists_no_module_that_was_removed():
     listed = set(re.findall(r"\|\s*`([a-z_]+\.py)`", _read("docs/architecture.md")))
-    on_disk = {p.name for p in (ROOT / "src").glob("*.py")}
+    on_disk = {p.name for p in (ROOT / "src" / "docxplus").glob("*.py")}
     stale = {m for m in listed if m not in on_disk}
     assert not stale, f"docs/architecture.md lists modules that no longer exist: {sorted(stale)}"
 
@@ -44,7 +44,7 @@ def test_the_architecture_map_lists_no_module_that_was_removed():
 
 
 def _cli_commands() -> list[str]:
-    return sorted(set(re.findall(r'add_parser\(\s*"([a-z-]+)"', _read("docxplus_cli.py"))))
+    return sorted(set(re.findall(r'add_parser\(\s*"([a-z-]+)"', _read("src/docxplus/cli.py"))))
 
 
 def test_every_cli_command_has_a_reference_entry():
@@ -67,7 +67,7 @@ def test_the_cli_reference_documents_no_command_that_was_removed():
 
 
 def test_every_registered_channel_has_a_channels_entry():
-    import channels
+    from docxplus import channels
 
     reference = _read("docs/channels.md")
     missing = [c for c in channels.available_channels() if f"`{c}`" not in reference]
@@ -75,7 +75,7 @@ def test_every_registered_channel_has_a_channels_entry():
 
 
 def test_every_registered_channel_appears_in_the_format_spec():
-    import channels
+    from docxplus import channels
 
     spec = _read("docs/format-spec.md")
     missing = [c for c in channels.available_channels() if f"`{c}`" not in spec]
@@ -232,7 +232,7 @@ def test_the_readme_review_counts_match_the_audit_record():
     audit record had reached fourteen and eighty-eight. A file that states a count
     it does not derive needs the check the derivation would have given it.
     """
-    import manuscript_vars
+    from docxplus import manuscript_vars
 
     values = manuscript_vars.variables(include_dossier=False)
     readme = _read("README.md")
@@ -278,7 +278,7 @@ def test_the_readme_links_every_reference_document():
 # -- every directory carries its own two guides -------------------------------
 #
 # `docs/` was a checked surface long before the per-directory guides were. The
-# exemption is what let `src/AGENTS.md` describe sixteen modules while twenty-one
+# exemption is what let `src/docxplus/AGENTS.md` describe sixteen modules while twenty-one
 # shipped, hiding the whole ODT profile from anyone who read it, and let
 # `scripts/AGENTS.md` list four scripts out of eleven. These tests remove it.
 
@@ -287,7 +287,8 @@ def test_the_readme_links_every_reference_document():
 GUIDED_DIRS = (
     "",
     "src",
-    "src/channels",
+    "src/docxplus",
+    "src/docxplus/channels",
     "scripts",
     "tests",
     "docs",
@@ -365,17 +366,17 @@ def test_guides_open_with_a_title_and_use_the_current_name(guide):
 
 
 def test_the_src_readme_lists_every_module():
-    """`src/AGENTS.md` once described sixteen modules while twenty-one shipped."""
-    listed = set(re.findall(r"`([a-z_]+\.py)`", _read("src/README.md")))
-    on_disk = {p.name for p in (ROOT / "src").glob("*.py") if p.name != "__init__.py"}
-    assert not (on_disk - listed), f"missing from src/README.md: {sorted(on_disk - listed)}"
+    """`src/docxplus/AGENTS.md` once described sixteen modules while twenty-one shipped."""
+    listed = set(re.findall(r"`([a-z_]+\.py)`", _read("src/docxplus/README.md")))
+    on_disk = {p.name for p in (ROOT / "src" / "docxplus").glob("*.py") if p.name != "__init__.py"}
+    assert not (on_disk - listed), f"missing from src/docxplus/README.md: {sorted(on_disk - listed)}"
 
 
 def test_the_src_readme_lists_no_module_that_was_removed():
-    listed = set(re.findall(r"`([a-z_]+\.py)`", _read("src/README.md")))
-    on_disk = {p.name for p in (ROOT / "src").glob("*.py")}
+    listed = set(re.findall(r"`([a-z_]+\.py)`", _read("src/docxplus/README.md")))
+    on_disk = {p.name for p in (ROOT / "src" / "docxplus").glob("*.py")}
     stale = {m for m in listed if m not in on_disk}
-    assert not stale, f"src/README.md lists modules that no longer exist: {sorted(stale)}"
+    assert not stale, f"src/docxplus/README.md lists modules that no longer exist: {sorted(stale)}"
 
 
 def test_the_scripts_readme_lists_every_stage():
@@ -386,11 +387,11 @@ def test_the_scripts_readme_lists_every_stage():
 
 
 def test_the_channels_readme_lists_every_registered_channel():
-    import channels
+    from docxplus import channels
 
-    readme = _read("src/channels/README.md")
+    readme = _read("src/docxplus/channels/README.md")
     missing = [c for c in channels.available_channels() if f"`{c}`" not in readme]
-    assert not missing, f"undocumented in src/channels/README.md: {missing}"
+    assert not missing, f"undocumented in src/docxplus/channels/README.md: {missing}"
 
 
 def test_the_root_guides_point_at_every_directory_guide():
