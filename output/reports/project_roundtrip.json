@@ -156,7 +156,7 @@
         "signed": true,
         "verified": true
       },
-      "bytes": 4563,
+      "bytes": 4575,
       "comparison": {
         "content_mismatches": [],
         "executable_bit_mismatches": [],
@@ -189,7 +189,7 @@
         "signed": true,
         "verified": true
       },
-      "bytes": 3643,
+      "bytes": 3531,
       "comparison": {
         "content_mismatches": [],
         "executable_bit_mismatches": [],

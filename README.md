@@ -7,7 +7,7 @@
 > Google Docs, while carrying structured payloads through the spec-sanctioned
 > side-channels that the OOXML/ODF standards actually permit.
 
-**v1.0.0** · MIT · Python ≥ 3.10 · [CHANGELOG](CHANGELOG.md) ·
+**v1.0.1** · MIT · Python ≥ 3.10 · [CHANGELOG](CHANGELOG.md) ·
 [docs index](docs/README.md) · [CLI reference](docs/cli.md)
 
 docxplus is a standards-first reference implementation. Every channel it uses is
