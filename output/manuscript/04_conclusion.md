@@ -14,8 +14,8 @@ Concretely:
 1. **Payload-level rather than package-level sealing.** Argon2id [@rfc9106], Scrypt [@rfc7914], and
    AES-256-GCM; X25519 multi-recipient encapsulation [@rfc7748]; verifiable threshold sharing
    [@feldman1987]; decoy chaffing — all applied to modules, leaving the document open.
-2. **Provenance over the whole visible narrative.** Merkle trees [@merkle1987] over the module set bound
-   together with every WordprocessingML story part — body, headers, footers, footnotes, comments — under one
+2. **Provenance over the package graph.** Merkle trees [@merkle1987] over the module set bound together
+   with every part, content type, and relationship — not merely the story parts — under one
    signature [@rfc8032].
 3. **Reproducibility a reader can check without trusting the author.** Carried project archives, signed
    reproduction attestations verifiable with zero execution, an anchored transparency log, and re-execution
@@ -60,9 +60,9 @@ is sound.
 - **A reproduction proves process, not science.** A digest match shows the declared command produced the
   attested output on a matching toolchain. Whether the method was correct is outside what any container can
   attest.
-- **The signature covers the text, not the package.** The signed body binds the module set and every story
-  part, but styles, numbering, fonts, and the relationship graph sit outside it. Closing that gap is the
-  first item below.
+- **Desktop suites do not verify the intelligence signature.** The signed body now binds the module set
+  and the whole package graph, but Word and LibreOffice will not check it. Native validation is a
+  different signature (OPC XML-DSig), and that is the first item below.
 
 ## Future Work {#sec:future-work}
 

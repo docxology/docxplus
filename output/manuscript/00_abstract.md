@@ -21,8 +21,9 @@ sealed one. Payloads are typed (`bytes`, `text`, `json`, a nested `docxplus` con
 reproducible `project` tree), so a paper can carry the code and data that produced it.
 
 Provenance rests on a signed Merkle tree [@merkle1987] over the module roster together with a composite
-digest over every visible WordprocessingML story part — body, headers, footers, footnotes, endnotes, and
-comments — so editing a footnote breaks the signature exactly as editing a payload does. Inclusion proofs let
+digest over every package part, the content-type map, and the relationship graph — excluding only the
+manifest that carries the digest — so editing a footnote, a style, or the officeDocument relationship
+breaks the signature exactly as editing a payload does. Inclusion proofs let
 a third party confirm one module belongs to the signed set without seeing the others, and detached
 co-signatures let an institution vouch alongside an author [@rfc8032]. Throughout, a verdict of *authentic*
 requires the caller to pin the key they trust; the key travelling inside the manifest is self-asserted, and
@@ -37,7 +38,7 @@ package parts, custom document properties, Markup Compatibility and Extensibilit
 least-significant-bit steganography in a carrier image the document visibly displays. Concealment is
 measured, not asserted — a chi-squared detector [@westfeld2000] ships in-tree, with a prefix sweep that
 localises the partially-filled carriers whole-image statistics miss, alongside an optional compiled backend
-[@fridrich2001]. Across 454 mock-free test functions under a 90% coverage gate we verify
+[@fridrich2001]. Across 455 mock-free test functions under a 90% coverage gate we verify
 deterministic serialisation, round-trip integrity, openability in mainstream word processors, and the
 adversarial boundaries established by 14 red-team cycles closing
 88 confirmed findings — a record that includes the occasions when an earlier fix

@@ -2,7 +2,7 @@ paper:
   title: "docxplus: An Intelligent Document Container over Standards-Conforming OOXML"
   subtitle: "Carrying signed, encrypted, modular, self-verifying payloads inside an ordinary .docx"
   version: "1.0.0"
-  date: "2026-08-13"
+  date: "2026-08-16"
 
 authors:
   - name: "Daniel Ari Friedman"

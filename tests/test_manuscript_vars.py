@@ -231,3 +231,30 @@ def test_the_test_count_token_is_described_as_what_it_counts():
         "TEST_COUNT is described as something other than a count of test functions: "
         f"{offenders}"
     )
+
+
+def test_surface_digest_prose_matches_the_package_graph():
+    """The digest binds parts, types, and relationships — not a story-part name list.
+
+    Rounds that closed the officeDocument-swap forgery updated the code and the
+    figures first. The manuscript kept describing the old prefix list, and the
+    conclusion still told readers that styles and the relationship graph sat
+    outside the signature. This guard fails on that wording, and requires the
+    definition to name the relationship graph so the two cannot drift apart again.
+    """
+    from project_paths import project_root
+
+    blob = "\n".join(
+        p.read_text()
+        for p in (project_root() / "manuscript").glob("*.md")
+        if p.name not in {"AGENTS.md", "README.md"}
+    )
+    banned = (
+        "every visible WordprocessingML story part",
+        "styles, numbering, fonts, and the relationship graph sit outside",
+        "The signature covers the text, not the package",
+    )
+    hits = [phrase for phrase in banned if phrase in blob]
+    assert not hits, f"manuscript still describes the retired surface digest: {hits}"
+    assert "relationship graph" in blob
+    assert "#def:composite-surface-digest" in blob

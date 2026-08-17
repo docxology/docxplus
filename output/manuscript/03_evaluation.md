@@ -26,8 +26,8 @@ All 5 modules extract and verify:
 
 - **Structure.** The container passes OPC conformance (`opc_valid = True`): no part collisions, no broken
   relationship pointers.
-- **Provenance.** The Ed25519 manifest signature, the module Merkle tree, and the composite story-part
-  surface digest all validate.
+- **Provenance.** The Ed25519 manifest signature, the module Merkle tree, and the composite
+  surface digest over the package graph all validate.
 - **Sealing.** Argon2id and Scrypt password modules decrypt; X25519 multi-recipient envelopes open for each
   authorised key; Shamir $(k,n)$ shares reconstruct on reaching quorum and are refused when a share's
   verifiable tag is absent or wrong; dual-frame decoy modules return their respective plaintexts under their
@@ -35,15 +35,15 @@ All 5 modules extract and verify:
 - **Reproducibility.** Carried `project` tarballs unpack without path traversal, and reproduction
   attestations verify cryptographically.
 
-The harness comprises 454 test functions under a 90% coverage gate, with no mocks
+The harness comprises 455 test functions under a 90% coverage gate, with no mocks
 anywhere: tests run against real cryptographic primitives, real ZIP archives, real subprocess CLI
 invocations, and the compiled Rust steganography engine when it is present.
 
 ## A Manuscript That Carries Its Own Repository {#sec:living-manuscript}
 
 `scripts/05_living_manuscript.py` packs the complete, runnable docxplus repository — source and test suite —
-into a `.docx` carrying a signed reproduction attestation. The document you are reading is the artefact its
-own evaluation section describes.
+into a `.docx` carrying a signed reproduction attestation. That `.docx` is a sibling of the PDF you are
+reading, not this file; the evaluation below describes the carried archive, not the rendered paper.
 
 ![Authoring runs left to right and ends at one self-contained file; what a reader does with that file forks. The default branch is entirely cryptographic and executes nothing. The other requires an explicit flag and re-runs the attested command under confinement. The fork exists because the two verdicts are not interchangeable: one says the author's claim has not been altered, the other says it reproduces on this machine, and neither substitutes for the other.](../output/figures/reproduction_lifecycle.png){#fig:reproduction-lifecycle width=95%}
 
@@ -75,8 +75,8 @@ back file by file, byte by byte, and mode by mode.
 Over a 14-file, 9-directory tree, all 18 of 18 invariants hold.
 Both profiles validate against their own conformance rules; both verify provenance under a pinned key and
 refuse a wrong one; both extract 12 files identical to the originals; both carry and
-cryptographically verify a reproduction attestation. The sealed `.docx` is 4,507 bytes and the
-`.odt` 3,550 bytes, and the packed project payload is *byte-identical between them* — parity that
+cryptographically verify a reproduction attestation. The sealed `.docx` is 4,432 bytes and the
+`.odt` 3,713 bytes, and the packed project payload is *byte-identical between them* — parity that
 holds because the two profiles share the packing code rather than agreeing by inspection.
 
 ![A real project tree carried into a container and diffed against what came back. The through-line is what survives byte for byte, including the executable bit — a carried entrypoint that returns non-executable is not carried software. Three diversions leave that line at the point they occur: metadata normalised because determinism is worth more than an mtime, symlinks refused outright because packing one would embed its target, and build directories never packed at all. Counts are read from the harness output at render time, so a fidelity regression changes this figure rather than merely failing a test.](../output/figures/roundtrip_fidelity.png){#fig:fidelity width=95%}

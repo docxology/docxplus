@@ -65,19 +65,23 @@ form. Threshold modules therefore record that requirement in the signed manifest
 downgraded without breaking the signature. Decoy modules carry two independent frames, the second
 indistinguishable from chaff. Signatures are computed over a canonical, whitespace-invariant JSON body.
 
-![How a typed payload becomes a signed module. The path branches only at the sealing mode, and all four branches reconverge on the same stored bytes — which is what the manifest digests. Digesting the plaintext instead would leave an offline oracle against the passphrase in a file the attacker already holds. Key-derivation profiles and the ceilings imposed on attacker-declared work factors are read from the live constants rather than transcribed.](../output/figures/cryptographic_pipeline.png){#fig:crypto-pipeline width=95%}
+![How a typed payload becomes a signed module. The path branches only at the sealing mode, and all {{SEALING_COUNT}} branches reconverge on the same stored bytes — which is what the manifest digests. Digesting the plaintext instead would leave an offline oracle against the passphrase in a file the attacker already holds. Key-derivation profiles and the ceilings imposed on attacker-declared work factors are read from the live constants rather than transcribed.](../output/figures/cryptographic_pipeline.png){#fig:crypto-pipeline width=95%}
 
 ## Binding the Payloads to the Prose {#sec:payloads-provenance}
 
 ::: {.definition #def:composite-surface-digest title="Composite Surface Digest"}
-Let $\mathcal{W}$ be the sorted set of all primary WordprocessingML story parts in package $\mathcal{P}$:
-$$\mathcal{W} = \{ \text{word/document.xml} \} \cup \{ \text{word/header*.xml} \} \cup \{ \text{word/footer*.xml} \} \cup \{ \text{word/footnotes*.xml} \} \cup \{ \text{word/endnotes*.xml} \} \cup \{ \text{word/comments*.xml} \}$$
-The composite surface digest is defined as $D_{\text{surface}} = \text{Blake2b}\left( \bigotimes_{w \in \mathcal{W}} (\text{name}(w) \parallel \texttt{0x00} \parallel \text{bytes}(w)) \right)$.
+Let $\mathcal{P}$ be a package and let $\mathcal{M}$ be its intelligence manifest part. The **composite
+surface digest** $D_{\text{surface}}$ is the Blake2b digest of three sorted families, each tagged so a
+part, a content type, and a relationship edge cannot collide: every part and its bytes except
+$\mathcal{M}$; the content-type map (defaults and overrides) except the override for $\mathcal{M}$;
+and every relationship edge except the one that points at $\mathcal{M}$. The manifest is the sole
+exclusion because it carries this digest and cannot contain itself.
 :::
 
-::: {.theorem #thm:story-part-provenance title="Comprehensive Narrative Integrity"}
-By [@def:composite-surface-digest], any alteration to peripheral prose (headers, footers, footnotes, endnotes, or reviewer comments)
-modifies $D_{\text{surface}}$ and invalidates the Ed25519 manifest signature, preventing selective tampering of document context.
+::: {.theorem #thm:story-part-provenance title="Package-Graph Integrity"}
+By [@def:composite-surface-digest], any alteration to a rendered part, a content type, or a
+relationship edge — including a swap of the officeDocument target — modifies $D_{\text{surface}}$ and
+invalidates the Ed25519 manifest signature.
 :::
 
 `payloads.py` keeps an extensible registry of payload encoders (`bytes`, `text`, `json`, `project`,
@@ -87,10 +91,10 @@ size-capped tarball, which is what lets a document carry the software that produ
 `provenance.py` builds a Merkle tree [@merkle1987] over the module digests, giving logarithmic inclusion
 proofs: a third party can confirm that one module belongs to the signed set without being shown the others.
 The signature covers that root together with the composite surface digest of
-[@def:composite-surface-digest], so tampering with a header or a reviewer comment breaks provenance exactly
-as tampering with a payload does. [@thm:story-part-provenance] states the property, but the reason it is
-stated separately is that an earlier version signed only `word/document.xml` — the gap was real, and
-[@sec:threat-audit] records it. Authenticity, throughout, requires the caller to pin
+[@def:composite-surface-digest], so tampering with a header, a style, a font table, or the
+officeDocument relationship breaks provenance exactly as tampering with a payload does.
+[@thm:story-part-provenance] states the property. An earlier version hashed a list of story-part
+*names*; [@sec:threat-audit] records why a naming convention cannot carry it. Authenticity, throughout, requires the caller to pin
 `expected_public_key`; a key that travels inside the manifest is an identity claim, not a verified one.
 
 `transparency.py` maintains an append-only log of reproduction attestations, following the

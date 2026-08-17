@@ -15,7 +15,7 @@
 {\normalsize Active Inference Institute\par}
 {\normalsize \texttt{daniel@activeinference.institute} · ORCID: 0000-0001-6232-9096\par}
 \vspace{0.2in}
-{\normalsize Version: 1.0.0 · Date: 2026-08-13\par}
+{\normalsize Version: 1.0.0 · Date: 2026-08-16\par}
 {\normalsize Standard Reference: ISO/IEC 29500-2 (OPC) · OASIS OpenDocument v1.3/v1.4\par}
 \vfill
 {\small Licensed under MIT · Deterministic, Mock-Free Verification Gate: 90\% Coverage\par}
@@ -35,7 +35,7 @@
       <dt>ORCID</dt><dd>0000-0001-6232-9096</dd>
       <dt>Email</dt><dd>daniel@activeinference.institute</dd>
       <dt>Version</dt><dd>1.0.0</dd>
-      <dt>Date</dt><dd>2026-08-13</dd>
+      <dt>Date</dt><dd>2026-08-16</dd>
     </dl>
   </div>
 </section>
