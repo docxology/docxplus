@@ -35,7 +35,12 @@ class Manifest:
     version: str = FORMAT_VERSION
     public_key: str = ""  # hex Ed25519 public key, if signed
     signature: str = ""  # hex Ed25519 signature over canonical_body()
-    surface_digest: str = ""  # digest of word/document.xml, so the signature binds visible text
+    #: Digest of the whole part graph — every part, the content-type map, and every
+    #: relationship edge, excluding only this manifest. Not a digest of
+    #: word/document.xml: selecting the story part by name put a naming convention
+    #: in the trust path, and OPC resolves it through the officeDocument
+    #: relationship instead. See container._compute_surface_digest.
+    surface_digest: str = ""
     #: Detached co-signatures over the same canonical body: [{public_key, value}, ...].
     cosignatures: list[dict] = field(default_factory=list)
     #: The signature algorithm the manifest declares. Recorded so a disagreement can

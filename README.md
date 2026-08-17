@@ -5,6 +5,9 @@
 > Google Docs, while carrying structured payloads through the spec-sanctioned
 > side-channels that the OOXML/ODF standards actually permit.
 
+**v1.0.0** · MIT · Python ≥ 3.10 · [CHANGELOG](CHANGELOG.md) ·
+[docs index](docs/README.md) · [CLI reference](docs/cli.md)
+
 docxplus is a standards-first reference implementation. Every channel it uses is
 grounded in a documented feature of ISO/IEC 29500 (OOXML) or its ODF cousin —
 custom XML parts, additional package parts, custom document properties, embedded
@@ -163,16 +166,20 @@ organising rule, not an optimisation.
 
 ## Adversarial review
 
-Eight cycles of adversarial review (`docs/redteam-audit.md`) have closed 60 confirmed
-findings, each pinned by a regression test. The record is kept in full, including
-the two occasions when an earlier fix turned out to be incomplete, and one negative
-result: a sample-pair steganalysis estimator that was built, measured, found
-mis-calibrated, and withdrawn rather than shipped.
+Fourteen cycles of adversarial review ([`docs/redteam-audit.md`](docs/redteam-audit.md))
+have closed 88 confirmed findings, each pinned by a regression test. The record is
+kept in full, including the two occasions when an earlier fix turned out to be
+incomplete, and one negative result: a sample-pair steganalysis estimator that was
+built, measured, found mis-calibrated, and withdrawn rather than shipped.
+
+Those two counts are not typed by hand. `src/manuscript_vars.py` derives them from
+the audit record itself, and `tests/test_docs.py` fails the build if this paragraph
+disagrees with the live value — the same rule the manuscript follows.
 
 ## Quick start
 
 ```bash
-uv venv && uv pip install -e '.[dev,media]'
+uv venv && uv pip install -e '.[dev,media,figures]'
 ./run.sh                      # preflight, tests, example, dossier, round trips, manuscript
 
 # Or use the CLI directly:
@@ -182,6 +189,13 @@ uv run docxplus inspect report.docx
 uv run docxplus extract report.docx brief --password s3cret --out brief.json
 uv run docxplus validate report.docx
 ```
+
+Three extras, and what each one buys: `dev` is pytest and the coverage gate, `media`
+is Pillow for the LSB stego channel, `figures` is matplotlib for the manuscript
+plates. Install all three. `scripts/build_figures.py` *skips* when matplotlib is
+absent rather than failing, so a render on a `dev,media`-only environment silently
+reuses whatever figures are already committed — green, and not what you measured.
+CI installs all three for exactly that reason.
 
 ## Security posture
 
@@ -196,23 +210,32 @@ model, grounded in the USENIX 2022/2023 analyses the standards report cites.
 
 ## Layout
 
-```
-src/            tested domain modules — opc, odt, wordml, crypto, shamir, payloads,
-                provenance, transparency, reproduce, intake, lsb, steg_bridge,
-                channels/, manifest, container, odt_container, validate,
-                reference_docs, manuscript_vars, project_paths
-scripts/        thin orchestrators (preflight, example build, roundtrip report,
-                capacity figure, dossier showcase, living manuscript)
-tests/          real round-trip tests, no mocks (≥90% coverage gate)
-manuscript/     the docxplus format write-up
-docs/           spec, architecture, design rationale, security model, cookbook,
-                reproduction design, redteam audit, standards report
-docxplus_cli.py the `docxplus` CLI — .docx (build, inspect, graph, extract,
-                unpack-project, validate, scan), .odt (odt-build, odt-inspect,
-                odt-extract, odt-validate), verification (verify-reproduction,
-                verify-transparency, transparency-append, analyze-carrier),
-                plus reproduce and keygen
-```
+Every directory carries two guides, and they answer different questions: `README.md`
+is for a person deciding what is in there, `AGENTS.md` is the rules that bind anyone —
+human or agent — editing it.
+
+| Directory | What lives there | Guides |
+| --- | --- | --- |
+| [`src/`](src/README.md) | the 21 tested domain modules plus `channels/`; all business logic | [README](src/README.md) · [AGENTS](src/AGENTS.md) |
+| [`src/channels/`](src/channels/README.md) | the five side-channels behind one `Channel` protocol | [README](src/channels/README.md) · [AGENTS](src/channels/AGENTS.md) |
+| [`scripts/`](scripts/README.md) | 11 thin orchestrators; the stages `run.sh` drives | [README](scripts/README.md) · [AGENTS](scripts/AGENTS.md) |
+| [`tests/`](tests/README.md) | the real-data, no-mocks suite behind the 90% gate | [README](tests/README.md) · [AGENTS](tests/AGENTS.md) |
+| [`docs/`](docs/README.md) | spec, architecture, security model, cookbook, audit | [README](docs/README.md) · [AGENTS](docs/AGENTS.md) |
+| [`manuscript/`](manuscript/README.md) | the token-driven format write-up | [README](manuscript/README.md) · [AGENTS](manuscript/AGENTS.md) |
+| [`output/`](output/README.md) | committed evidence: documents, figures, reports | [README](output/README.md) · [AGENTS](output/AGENTS.md) |
+| [`data/`](data/README.md) | deliberately empty — inputs are generated, not stored | [README](data/README.md) · [AGENTS](data/AGENTS.md) |
+| [`.github/`](.github/README.md) | the CI gates, in the order they fail | [README](.github/README.md) · [AGENTS](.github/AGENTS.md) |
+| [`.agents/`](.agents/README.md) | the project-scoped agent skill | [README](.agents/README.md) · [AGENTS](.agents/AGENTS.md) |
+
+Top-level files: `docxplus_cli.py` (the CLI, 19 subcommands — see
+[`docs/cli.md`](docs/cli.md)), `run.sh` (the pipeline driver, `./run.sh help` for the
+stages), `pyproject.toml`, `CHANGELOG.md`, and the citation metadata
+(`CITATION.cff`, `codemeta.json`, `.zenodo.json`).
+
+The CLI's own surface is not restated here — it drifted once by omitting `verify`,
+the authenticity verb, which is the worst possible command to leave out of a summary.
+`docs/cli.md` is the contract, and `tests/test_docs.py` fails if a subcommand exists
+without an entry there.
 
 ## Documentation
 
@@ -227,6 +250,7 @@ docxplus_cli.py the `docxplus` CLI — .docx (build, inspect, graph, extract,
 | [`docs/security-model.md`](docs/security-model.md) | defenses, non-defenses, residual risks |
 | [`docs/reproduction-design.md`](docs/reproduction-design.md) | the four-lens reproduction design |
 | [`docs/cookbook.md`](docs/cookbook.md) | 12 buildable document kinds |
+| [`docs/manuscript-pipeline.md`](docs/manuscript-pipeline.md) | how the paper is built: tokens, automatic numbering, the diagnostic gate |
 | [`docs/redteam-audit.md`](docs/redteam-audit.md) | every adversarial finding and its fix |
 | [`docs/opc-signatures.md`](docs/opc-signatures.md) | whole-package OPC signature integration assessment |
 | [`docs/standards-report.md`](docs/standards-report.md) | the standards-first OOXML/ODT research report |

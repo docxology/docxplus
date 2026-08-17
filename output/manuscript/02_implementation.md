@@ -56,6 +56,15 @@ every branch reconverges on the same stored bytes — which is what the manifest
 alternative, digesting the plaintext, would ship an offline oracle against the passphrase inside the file the
 attacker already has. Every parameter in the figure is read from the live constants rather than transcribed.
 
+The recipients lineage keeps identities out of the envelope and, by default, does not keep their number out:
+one wrapped content key per recipient, plus an explicit count field, so the total is readable from the
+envelope's length. The manifest records neither identities nor number, which makes the omission an
+inconsistency rather than a policy — for the blind-review packet this lineage is meant to serve, "sealed to
+three people" is itself information about the review. Padding raises the slot count to a fixed bucket by
+wrapping to freshly generated public keys whose private halves are discarded before the call returns, so a
+padded slot is a real wrap that nobody can open, exactly as the chaff frame is. It is opt-in, and the
+unpadded default therefore still leaks the count.
+
 Beyond symmetric sealing, `crypto.py` provides X25519 multi-recipient key encapsulation (`DXE2`) [@rfc7748],
 wrapping one content key separately for each recipient, alongside Ed25519 signing [@rfc8032]. `shamir.py`
 implements $(k, n)$ threshold sharing over $\text{GF}(256)$ [@shamir1979] with verifiable-share commitment
@@ -63,7 +72,12 @@ tags [@feldman1987]. A commitment binds only if the verifier insists on it: an a
 and present the same bytes as a legacy-format share, so reconstruction must be told to require the verifiable
 form. Threshold modules therefore record that requirement in the signed manifest, where it cannot be
 downgraded without breaking the signature. Decoy modules carry two independent frames, the second
-indistinguishable from chaff. Signatures are computed over a canonical, whitespace-invariant JSON body.
+indistinguishable from chaff. Indistinguishability has a dynamic half that the static one does not imply:
+frames were once tried in order and the first success returned, so opening with the real password cost one
+key derivation and opening with the cover story cost two — a factor of two on a deliberately expensive
+function, and therefore an answer, on the wall clock, to the one question the lineage exists to refuse.
+Every frame is now attempted whichever one matches, which costs a derivation per frame and buys the
+property the format claims. Signatures are computed over a canonical, whitespace-invariant JSON body.
 
 ![How a typed payload becomes a signed module. The path branches only at the sealing mode, and all 4 branches reconverge on the same stored bytes — which is what the manifest digests. Digesting the plaintext instead would leave an offline oracle against the passphrase in a file the attacker already holds. Key-derivation profiles and the ceilings imposed on attacker-declared work factors are read from the live constants rather than transcribed.](../output/figures/cryptographic_pipeline.png){#fig:crypto-pipeline width=95%}
 
@@ -165,7 +179,11 @@ parts through `META-INF/manifest.xml` rather than a relationship graph.
 
 `validate.py` audits both contracts for both containers. For OOXML: OPC structure (index parts, relationship
 reachability, absence of ZIP collisions) and intelligence structure (Merkle root consistency, per-module
-ciphertext digests, signature verification). For ODF: the positional `mimetype` rule, manifest completeness —
+ciphertext digests, signature verification, and recomputation of the composite surface digest). That last
+check is recent and its absence was a defect rather than an omission: the signature covers the digest as a
+*stored field*, so a package whose visible prose had been rewritten still had a self-consistent signature
+and passed validation with no findings at all. Only `verify` caught it, and `validate` is the command a
+release process runs. For ODF: the positional `mimetype` rule, manifest completeness —
 an undeclared entry is unreachable to a conforming consumer, the ODF analogue of OPC reachability — and the
 same intelligence checks.
 

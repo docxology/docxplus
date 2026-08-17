@@ -186,3 +186,35 @@ def test_the_manuscript_readme_lists_every_manuscript_file():
     present = {p.name for p in (ROOT / "manuscript").glob("*") if p.is_file()}
     missing = sorted(f for f in present - {"README.md", "AGENTS.md"} if f"`{f}`" not in readme)
     assert not missing, f"manuscript/README.md omits: {missing}"
+
+
+def test_the_readme_review_counts_match_the_audit_record():
+    """README numbers cannot be tokens, so they are checked instead.
+
+    `manuscript/*.md` resolves every drift-prone number through
+    `manuscript_vars`, and README cannot: it is read on GitHub, not rendered. That
+    exemption let it fall to "Eight cycles ... 60 confirmed findings" while the
+    audit record had reached fourteen and eighty-eight. A file that states a count
+    it does not derive needs the check the derivation would have given it.
+    """
+    import manuscript_vars
+
+    values = manuscript_vars.variables(include_dossier=False)
+    readme = _read("README.md")
+
+    words = {
+        1: "One", 2: "Two", 3: "Three", 4: "Four", 5: "Five", 6: "Six", 7: "Seven",
+        8: "Eight", 9: "Nine", 10: "Ten", 11: "Eleven", 12: "Twelve",
+        13: "Thirteen", 14: "Fourteen", 15: "Fifteen", 16: "Sixteen",
+        17: "Seventeen", 18: "Eighteen", 19: "Nineteen", 20: "Twenty",
+    }
+    cycles = int(values["REDTEAM_AUDIT_COUNT"])
+    findings = int(values["REDTEAM_FINDING_COUNT"])
+
+    spelled = words.get(cycles, str(cycles))
+    assert f"{spelled} cycles of adversarial review" in readme or (
+        f"{cycles} cycles of adversarial review" in readme
+    ), f"README does not state the current cycle count ({cycles})"
+    assert f"{findings} confirmed findings" in readme, (
+        f"README does not state the current finding count ({findings})"
+    )
