@@ -151,10 +151,10 @@ def _apply_limits() -> None:  # pragma: no cover - runs in the child process
             resource.setrlimit(resource.RLIMIT_AS, (2 * 1024**3, 2 * 1024**3))
         except (ValueError, OSError):
             pass  # RLIMIT_AS is not reliably honoured on macOS
-        try:
-            resource.setrlimit(resource.RLIMIT_NPROC, (64, 64))
-        except (ValueError, OSError, AttributeError):
-            pass
+        # Note: Do not set RLIMIT_NPROC when launching unshare / bwrap on Linux;
+        # setting RLIMIT_NPROC prevents unshare() / clone(CLONE_NEWUSER/CLONE_NEWPID)
+        # from creating namespaces, causing bwrap to fail with EAGAIN (Resource temporarily unavailable).
+        # We enforce RLIMIT_CPU, RLIMIT_AS, and RLIMIT_FSIZE.
         try:
             # Cap any single output file the child can write (parent then digests it).
             resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))

@@ -27,7 +27,7 @@ jobs:
 
       - name: Run Ruff Linter
         run: |
-          uvx ruff check src scripts docxplus_cli.py
+          uvx ruff check src scripts tests
 
       - name: Run Test Suite with Coverage Gate (>=90%)
         run: |

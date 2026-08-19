@@ -17,9 +17,7 @@ import io
 import statistics
 import sys
 import tarfile
-import tempfile
 import time
-from pathlib import Path
 
 import pytest
 

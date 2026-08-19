@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from pathlib import Path
 
 #: The CLI is a module inside the package, so it is invoked with -m. Run by
 #: file path it would have no parent package and every relative import in it

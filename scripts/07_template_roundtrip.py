@@ -40,13 +40,28 @@ from docxplus.odt_container import OdtPlusBuilder, OdtPlusReader, open_document
 from docxplus.project_paths import ensure_output_dirs
 from docxplus.validate import validate_bytes, validate_odt_bytes
 
-#: The exemplar carried. Overridable so the script is not welded to one checkout.
-DEFAULT_TEMPLATE = Path(
-    os.environ.get(
-        "DOCXPLUS_TEMPLATE_PROJECT",
-        Path.home() / "Documents/GitHub/template/projects/templates/template_code_project",
-    )
-)
+def _find_default_template_project() -> Path:
+    """Locate the default template_code_project across standard sibling and environment locations."""
+    if "DOCXPLUS_TEMPLATE_PROJECT" in os.environ:
+        return Path(os.environ["DOCXPLUS_TEMPLATE_PROJECT"])
+    
+    here = Path(__file__).resolve()
+    # 1. Sibling in platform repo tree (e.g. hum-docxology/repos/public/template)
+    candidate1 = here.parents[2] / "template" / "projects" / "templates" / "template_code_project"
+    if candidate1.is_dir():
+        return candidate1
+    
+    # 2. Sibling in parent folder
+    candidate2 = here.parents[3] / "template" / "projects" / "templates" / "template_code_project"
+    if candidate2.is_dir():
+        return candidate2
+
+    # 3. Standard fallback under home
+    candidate3 = Path.home() / "Documents/GitHub/template/projects/templates/template_code_project"
+    return candidate3
+
+
+DEFAULT_TEMPLATE = _find_default_template_project()
 
 
 def snapshot(root: Path) -> dict:

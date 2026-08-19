@@ -1,17 +1,17 @@
 {
-  "document": "/Users/4d/Documents/GitHub/projects/ongoing/DAF/docxplus/output/documents/living_manuscript.docx",
-  "size_bytes": 534242,
+  "document": "/home/trim/Documents/Git/HumOS/projects/platform/hum-docxology/repos/public/docxplus/output/documents/living_manuscript.docx",
+  "size_bytes": 530364,
   "opc_valid": true,
   "verify_reproduction": {
     "attested": true,
     "signed": true,
     "verified": true
   },
-  "attested_output_digest": "912848d2fcdcfca9\u2026",
+  "attested_output_digest": "254eeb7c5814a073\u2026",
   "reproduced_match": true,
   "toolchain": {
-    "python": "3.12.13",
+    "python": "3.14.3",
     "implementation": "CPython",
-    "platform": "macOS-26.6.1-arm64-arm-64bit"
+    "platform": "Linux-7.0.13+parrot7-amd64-x86_64-with-glibc2.41"
   }
 }

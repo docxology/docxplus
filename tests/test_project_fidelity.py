@@ -100,6 +100,13 @@ def test_packing_is_deterministic_across_a_time_boundary(tmp_path, monkeypatch):
     assert payloads.pack_project(root) == first
 
 
+def test_pack_project_size_cap(tmp_path):
+    root = _tree(tmp_path / "proj")
+    # packing with tiny max_uncompressed raises ProjectPackError
+    with pytest.raises(payloads.ProjectPackError, match="exceeds limit"):
+        payloads.pack_project(root, max_uncompressed=10)
+
+
 def test_junk_directories_are_excluded(tmp_path):
     root = _tree(tmp_path / "proj")
     (root / "__pycache__").mkdir()

@@ -79,7 +79,7 @@
   "failures": [],
   "formats": {
     "docx": {
-      "bytes": 257253,
+      "bytes": 257243,
       "comparison": {
         "content_mismatches": [],
         "executable_bit_mismatches": [],
@@ -89,12 +89,12 @@
         "unexpected": []
       },
       "paths": [
-        "/Users/4d/Documents/GitHub/projects/ongoing/DAF/docxplus/output/documents/template_code_project.docx",
-        "/Users/4d/Documents/GitHub/projects/ongoing/DAF/docxplus/output/documents/template_code_project.docxplus"
+        "/home/trim/Documents/Git/HumOS/projects/platform/hum-docxology/repos/public/docxplus/output/documents/template_code_project.docx",
+        "/home/trim/Documents/Git/HumOS/projects/platform/hum-docxology/repos/public/docxplus/output/documents/template_code_project.docxplus"
       ]
     },
     "odt": {
-      "bytes": 256908,
+      "bytes": 256861,
       "comparison": {
         "content_mismatches": [],
         "executable_bit_mismatches": [],
@@ -104,17 +104,17 @@
         "unexpected": []
       },
       "paths": [
-        "/Users/4d/Documents/GitHub/projects/ongoing/DAF/docxplus/output/documents/template_code_project.odt",
-        "/Users/4d/Documents/GitHub/projects/ongoing/DAF/docxplus/output/documents/template_code_project.odtplus"
+        "/home/trim/Documents/Git/HumOS/projects/platform/hum-docxology/repos/public/docxplus/output/documents/template_code_project.odt",
+        "/home/trim/Documents/Git/HumOS/projects/platform/hum-docxology/repos/public/docxplus/output/documents/template_code_project.odtplus"
       ]
     }
   },
   "ok": true,
   "project": {
-    "directories": 15,
+    "directories": 13,
     "files_carried": 126,
     "has_executable": true
   },
-  "project_payload_digest": "485de178e77f56f07b9a73bde2ecc6dc172d6559b19e0e612be391dd3ca90afa",
-  "source": "/Users/4d/Documents/GitHub/template/projects/templates/template_code_project"
+  "project_payload_digest": "60e88f4b6d4f6e40787ef3bcee637b7d6462e5e85d7772c1de744f7150184949",
+  "source": "/home/trim/Documents/Git/HumOS/projects/platform/hum-docxology/repos/public/template/projects/templates/template_code_project"
 }

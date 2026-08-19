@@ -77,11 +77,20 @@ def _pack_json(obj: Any) -> bytes:
     return json.dumps(obj, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
+#: Refuse to inflate a project payload past this many bytes (decompression-bomb cap).
+MAX_PROJECT_UNCOMPRESSED = 512 * 1024 * 1024  # 512 MiB
+
+
 class ProjectPackError(ValueError):
     """The tree cannot be packed faithfully or safely as it stands."""
 
 
-def pack_project(root: Path, *, follow_symlinks: bool = False) -> bytes:
+def pack_project(
+    root: Path,
+    *,
+    follow_symlinks: bool = False,
+    max_uncompressed: int = MAX_PROJECT_UNCOMPRESSED,
+) -> bytes:
     """Pack a directory tree into a deterministic tar.gz (sorted, fixed mtime).
 
     What is preserved, exactly — the manuscript claims a document can carry the
@@ -131,6 +140,7 @@ def pack_project(root: Path, *, follow_symlinks: bool = False) -> bytes:
     # different module digests — while the docstring promised determinism. The
     # `# type: ignore[attr-defined]` sat on the exact line where the intent failed.
     raw = io.BytesIO()
+    total_uncompressed = 0
     with tarfile.open(fileobj=raw, mode="w", format=tarfile.PAX_FORMAT) as tar:
         for path in entries:
             arcname = str(path.relative_to(root))
@@ -153,6 +163,11 @@ def pack_project(root: Path, *, follow_symlinks: bool = False) -> bytes:
                 continue  # sockets, fifos, devices: not source code
 
             data = path.read_bytes()
+            total_uncompressed += len(data)
+            if total_uncompressed > max_uncompressed:
+                raise ProjectPackError(
+                    f"project total uncompressed size exceeds limit of {max_uncompressed} bytes"
+                )
             info.size = len(data)
             info.mode = 0o755 if os.access(path, os.X_OK) else 0o644
             tar.addfile(info, io.BytesIO(data))
@@ -163,10 +178,6 @@ def pack_project(root: Path, *, follow_symlinks: bool = False) -> bytes:
     with gzip.GzipFile(fileobj=out, mode="wb", compresslevel=9, mtime=0) as gz:
         gz.write(raw.getvalue())
     return out.getvalue()
-
-
-#: Refuse to inflate a project payload past this many bytes (decompression-bomb cap).
-MAX_PROJECT_UNCOMPRESSED = 512 * 1024 * 1024  # 512 MiB
 
 
 #: Modes a carried file may end up with. `pack_project` already clamps to these on

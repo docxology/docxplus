@@ -152,6 +152,10 @@ def test_release_metadata_versions_all_agree():
     cff = re.search(r'^version: "([^"]+)"', (root / "CITATION.cff").read_text(), re.M)
     assert cff and cff.group(1) == version, f"CITATION.cff version != {version}"
 
+    import docxplus
+
+    assert docxplus.__version__ == version, f"docxplus.__version__ ({docxplus.__version__}) != {version}"
+
     for name in ("codemeta.json", ".zenodo.json"):
         path = root / name
         if path.is_file():

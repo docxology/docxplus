@@ -77,6 +77,7 @@ class OdtPlusBuilder:
     paragraphs: list[str] = field(default_factory=lambda: ["This is an ordinary document."])
     title: str = "Document"
     creator: str = "docxplus"
+    base_package: OdtPackage | None = None
     _pending: list[_Pending] = field(default_factory=list)
     _private_key: bytes | None = None
     _public_key: bytes | None = None
@@ -173,7 +174,7 @@ class OdtPlusBuilder:
         return self
 
     def build(self) -> bytes:
-        pkg = new_base_odt(self.paragraphs, title=self.title, creator=self.creator)
+        pkg = self.base_package or new_base_odt(self.paragraphs, title=self.title, creator=self.creator)
         manifest = Manifest()
         self.threshold_shares = {}
 
@@ -279,6 +280,9 @@ class OdtPlusReader:
         return plaintext
 
     def extract_project(self, slot: str, dest: str | Path, **creds) -> Path:
+        record = self._record(slot)
+        if record.payload_type != "project":
+            raise ContainerError(f"module {slot!r} is not a project payload")
         blob = self.extract(slot, **creds)
         return payloads.unpack_project(blob, Path(dest))
 

@@ -246,10 +246,24 @@ def test_project_payload_round_trips_through_odt(tmp_path):
 
     builder = OdtPlusBuilder()
     builder.add_module("source", payloads.pack_project(proj), payload_type="project")
+    builder.add_module("non_project", b"plain bytes", payload_type="bytes")
     reader = OdtPlusReader.from_bytes(builder.build())
 
     dest = reader.extract_project("source", tmp_path / "out")
     assert (dest / "src" / "m.py").read_text() == "X = 1\n"
+
+    with pytest.raises(ContainerError, match="not a project payload"):
+        reader.extract_project("non_project", tmp_path / "out_bad")
+
+
+def test_odt_builder_accepts_base_package(tmp_path):
+    from docxplus.odt import new_base_odt
+    base = new_base_odt(["Custom base paragraph"], title="Custom Title")
+    builder = OdtPlusBuilder(base_package=base)
+    builder.add_module("data", b"123", payload_type="bytes")
+    doc_bytes = builder.build()
+    reader = OdtPlusReader.from_bytes(doc_bytes)
+    assert reader.extract("data") == b"123"
 
 
 # -- validator failure paths --------------------------------------------------

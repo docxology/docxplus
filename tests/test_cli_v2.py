@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
 
@@ -94,7 +93,6 @@ def test_graph_shows_signature_and_merkle(tmp_path):
 def _write_log(tmp_path, entries=5, *, sign=True):
     """Produce a real transparency log (and STH) on disk for the CLI to read."""
     import json as _json
-    import sys as _sys
 
     from docxplus import crypto
     from docxplus.transparency import TransparencyLog
@@ -153,7 +151,6 @@ def test_verify_transparency_full_verification_passes(tmp_path):
 
 def test_verify_transparency_fails_closed_on_a_wrong_pinned_signer(tmp_path):
     import json as _json
-    import sys as _sys
 
     from docxplus import crypto
 
@@ -280,7 +277,6 @@ def _carrier(path, size=(96, 96)):
 def test_analyze_carrier_exit_code_distinguishes_clean_from_embedded(tmp_path):
     import json as _json
     import os
-    import sys as _sys
 
     pytest.importorskip("PIL")
     from docxplus import lsb

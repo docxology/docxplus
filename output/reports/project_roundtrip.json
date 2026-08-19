@@ -26,7 +26,7 @@
       "ok": true
     },
     {
-      "detail": "{\"attested\": true, \"signed\": true, \"verified\": true, \"attestation\": {\"output_digest\": \"40997aec9d445275db49e456285057487043fae6e1cd8067689054b9d254b7f1\", \"command\": [\"/Users/4d/Documents/GitHub/projects/ongoing/DAF/docxplus/.venv/bin/python\", \"compute.py\"], \"toolchain\": {\"implementation\": \"CPython\", \"platform\": \"macOS-26.6.1-arm64-arm-64bit\", \"python\": \"3.12.13\"}}}",
+      "detail": "{\"attested\": true, \"signed\": true, \"verified\": true, \"attestation\": {\"output_digest\": \"40997aec9d445275db49e456285057487043fae6e1cd8067689054b9d254b7f1\", \"command\": [\"/home/trim/Documents/Git/HumOS/projects/platform/hum-docxology/repos/public/docxplus/.venv/bin/python\", \"compute.py\"], \"toolchain\": {\"implementation\": \"CPython\", \"platform\": \"Linux-7.0.13+parrot7-amd64-x86_64-with-glibc2.41\", \"python\": \"3.14.3\"}}}",
       "name": "docx.attestation_verified",
       "ok": true
     },
@@ -56,7 +56,7 @@
       "ok": true
     },
     {
-      "detail": "{\"attested\": true, \"signed\": true, \"verified\": true, \"attestation\": {\"output_digest\": \"40997aec9d445275db49e456285057487043fae6e1cd8067689054b9d254b7f1\", \"command\": [\"/Users/4d/Documents/GitHub/projects/ongoing/DAF/docxplus/.venv/bin/python\", \"compute.py\"], \"toolchain\": {\"implementation\": \"CPython\", \"platform\": \"macOS-26.6.1-arm64-arm-64bit\", \"python\": \"3.12.13\"}}}",
+      "detail": "{\"attested\": true, \"signed\": true, \"verified\": true, \"attestation\": {\"output_digest\": \"40997aec9d445275db49e456285057487043fae6e1cd8067689054b9d254b7f1\", \"command\": [\"/home/trim/Documents/Git/HumOS/projects/platform/hum-docxology/repos/public/docxplus/.venv/bin/python\", \"compute.py\"], \"toolchain\": {\"implementation\": \"CPython\", \"platform\": \"Linux-7.0.13+parrot7-amd64-x86_64-with-glibc2.41\", \"python\": \"3.14.3\"}}}",
       "name": "odt.attestation_verified",
       "ok": true
     },
@@ -101,7 +101,7 @@
       "missing_files": [],
       "unexpected_files": []
     },
-    "project_payload_digest": "c129a072da71f789fbff6e9400000b60eb7592cc5af237411d80469543a03efb"
+    "project_payload_digest": "36dbc754768e3e8a1ca7f1a371c3ad47f5af30b3823980356310002bbd1d56c7"
   },
   "failures": [],
   "fidelity_boundary": {
@@ -142,21 +142,21 @@
       "attestation": {
         "attestation": {
           "command": [
-            "/Users/4d/Documents/GitHub/projects/ongoing/DAF/docxplus/.venv/bin/python",
+            "/home/trim/Documents/Git/HumOS/projects/platform/hum-docxology/repos/public/docxplus/.venv/bin/python",
             "compute.py"
           ],
           "output_digest": "40997aec9d445275db49e456285057487043fae6e1cd8067689054b9d254b7f1",
           "toolchain": {
             "implementation": "CPython",
-            "platform": "macOS-26.6.1-arm64-arm-64bit",
-            "python": "3.12.13"
+            "platform": "Linux-7.0.13+parrot7-amd64-x86_64-with-glibc2.41",
+            "python": "3.14.3"
           }
         },
         "attested": true,
         "signed": true,
         "verified": true
       },
-      "bytes": 4470,
+      "bytes": 4602,
       "comparison": {
         "content_mismatches": [],
         "executable_bit_mismatches": [],
@@ -175,21 +175,21 @@
       "attestation": {
         "attestation": {
           "command": [
-            "/Users/4d/Documents/GitHub/projects/ongoing/DAF/docxplus/.venv/bin/python",
+            "/home/trim/Documents/Git/HumOS/projects/platform/hum-docxology/repos/public/docxplus/.venv/bin/python",
             "compute.py"
           ],
           "output_digest": "40997aec9d445275db49e456285057487043fae6e1cd8067689054b9d254b7f1",
           "toolchain": {
             "implementation": "CPython",
-            "platform": "macOS-26.6.1-arm64-arm-64bit",
-            "python": "3.12.13"
+            "platform": "Linux-7.0.13+parrot7-amd64-x86_64-with-glibc2.41",
+            "python": "3.14.3"
           }
         },
         "attested": true,
         "signed": true,
         "verified": true
       },
-      "bytes": 3553,
+      "bytes": 3665,
       "comparison": {
         "content_mismatches": [],
         "executable_bit_mismatches": [],

@@ -61,11 +61,9 @@ guarantee rather than a false claim.
       calibrated extent.
 - [ ] `follow_symlinks=True` drops symlinked *directories* and their contents; only
       symlinked files are dereferenced. The default (refusal) is unaffected.
-- [ ] `OdtPlusBuilder` cannot wrap an existing `.odt`; it always synthesises a base
-      package, where `DocxPlusBuilder` accepts `base_package`.
-- [ ] `extract_project` on the ODT reader lacks the OPC reader's payload-type guard.
-- [ ] `pack_project` accepts trees whose inflated size `unpack_project` will refuse,
-      and the cap is not caller-adjustable.
+- [x] `OdtPlusBuilder` accepts `base_package` to wrap an existing `.odt` (aligning with `DocxPlusBuilder`).
+- [x] `extract_project` on the ODT reader enforces the `project` payload-type guard.
+- [x] `pack_project` accepts an adjustable `max_uncompressed` cap (default 512 MiB) matching `unpack_project`.
 - [ ] Extraction does not restore hard links as links, and `docs/format-spec.md` §8.1
       states the contract for files and directories only.
 - [ ] An unsigned package passes `validate`; only `docxplus verify` distinguishes
