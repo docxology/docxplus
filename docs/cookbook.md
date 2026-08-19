@@ -80,7 +80,7 @@ Concept #1 + #5: the manuscript carries its own project under a signed Merkle
 provenance root (tamper-evident) *and* a reproduction attestation. A reader confirms
 the document, its software, and its results are the ones the author sealed — and can
 re-derive them. Run `scripts/05_living_manuscript.py`, which does exactly this over
-the real `template_code_project`.
+the real `template_code_project` ([`docxology/template`](https://github.com/docxology/template)).
 
 ## 9. The MCE Hidden Channel
 Embeds payload modules directly inside the WordprocessingML main document (`word/document.xml`)

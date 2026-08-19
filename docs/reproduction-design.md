@@ -2,7 +2,7 @@
 
 Synthesis of a four-lens review (FirstPrinciples, Council, Science, RedTeam) for
 making the "self-verifying dossier" real: a docxplus that carries
-`template_code_project` and lets a reader trust that its results *follow from its
+`template_code_project` ([`docxology/template`](https://github.com/docxology/template)) and lets a reader trust that its results *follow from its
 code*, not just that its bytes are authentic.
 
 ## First-principles decomposition

@@ -1,10 +1,10 @@
 # docxplus Architecture
 
-docxplus follows the docxology `template_code_project` paradigm: tested domain modules
+docxplus follows the docxology `template_code_project` paradigm ([`docxology/template`](https://github.com/docxology/template)): tested domain modules
 in `src/`, thin orchestrators in `scripts/`, real-data tests with a coverage gate,
 deterministic outputs, token-driven docs. It is a **standalone** repository — it does
 not import the template's shared `infrastructure/`; its domain (the docxplus container)
-is self-contained.
+is self-contained. It is also integrated into the template pipeline as optional stage 13 (`scripts/pipeline/stage_13_docxplus.py`).
 
 ## Layering
 
