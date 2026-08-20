@@ -22,6 +22,7 @@ MIMETYPE_ODT = b"application/vnd.oasis.opendocument.text"
 NS_MANIFEST = "urn:oasis:names:tc:opendocument:xmlns:manifest:1.0"
 NS_OFFICE = "urn:oasis:names:tc:opendocument:xmlns:office:1.0"
 NS_TEXT = "urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+NS_META = "urn:oasis:names:tc:opendocument:xmlns:meta:1.0"
 
 
 def build_content_xml(paragraphs: list[str]) -> bytes:
@@ -34,11 +35,17 @@ def build_content_xml(paragraphs: list[str]) -> bytes:
     ).encode()
 
 
-def build_meta_xml(title: str, creator: str) -> bytes:
+def build_meta_xml(title: str, creator: str, custom_properties: dict[str, str] | None = None) -> bytes:
+    custom_xml = ""
+    if custom_properties:
+        custom_xml = "".join(
+            f'<meta:user-defined meta:name={quoteattr(k)}>{escape(v)}</meta:user-defined>'
+            for k, v in sorted(custom_properties.items())
+        )
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
-        f'<office:document-meta xmlns:office="{NS_OFFICE}" xmlns:dc="http://purl.org/dc/elements/1.1/" office:version="1.3">'
-        f'<office:meta><dc:title>{escape(title)}</dc:title><dc:creator>{escape(creator)}</dc:creator></office:meta>'
+        f'<office:document-meta xmlns:office="{NS_OFFICE}" xmlns:meta="{NS_META}" xmlns:dc="http://purl.org/dc/elements/1.1/" office:version="1.3">'
+        f'<office:meta><dc:title>{escape(title)}</dc:title><dc:creator>{escape(creator)}</dc:creator>{custom_xml}</office:meta>'
         '</office:document-meta>'
     ).encode()
 
@@ -176,8 +183,29 @@ class OdtPackage:
         return pkg
 
 
-def new_base_odt(paragraphs: list[str] | None = None, *, title: str = "Document", creator: str = "docxplus") -> OdtPackage:
+def new_base_odt(
+    paragraphs: list[str] | None = None,
+    *,
+    title: str = "Document",
+    creator: str = "docxplus",
+    custom_properties: dict[str, str] | None = None,
+) -> OdtPackage:
     pkg = OdtPackage()
     pkg.add_part("content.xml", build_content_xml(paragraphs or [""]), "text/xml")
-    pkg.add_part("meta.xml", build_meta_xml(title, creator), "text/xml")
+    pkg.add_part("meta.xml", build_meta_xml(title, creator, custom_properties=custom_properties), "text/xml")
     return pkg
+
+
+__all__ = [
+    "MIMETYPE_ODT",
+    "NS_MANIFEST",
+    "NS_META",
+    "NS_OFFICE",
+    "NS_TEXT",
+    "OdtPackage",
+    "build_content_xml",
+    "build_manifest_xml",
+    "build_meta_xml",
+    "new_base_odt",
+]
+

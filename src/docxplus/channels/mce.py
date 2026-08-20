@@ -105,11 +105,23 @@ class MceChannel:
         root = _safe_fromstring(blob)
         slot = record.slot
 
-        for elem in root.iter(f"{{{NS_DXP_MCE}}}payload"):
-            if elem.get("slot") == slot:
-                return base64.b64decode((elem.text or "").strip())
+        # Look for dxm:payload by qualified namespace, or local tag name match if prefix varied
+        for elem in root.iter():
+            tag = elem.tag
+            if tag == f"{{{NS_DXP_MCE}}}payload" or tag.endswith("}payload") or tag == "payload" or tag.endswith(":payload"):
+                if elem.get("slot") == slot:
+                    return base64.b64decode((elem.text or "").strip())
 
         raise ValueError(f"MCE payload for slot {slot!r} not found in {doc_part}")
 
     def capacity(self, pkg: OpcPackage) -> int | None:
         return None
+
+
+__all__ = [
+    "MceChannel",
+    "NS_DXP_MCE",
+    "NS_MC",
+    "NS_WORDML",
+]
+

@@ -200,3 +200,16 @@ def test_malformed_signature_part_covers_nothing_and_fails_closed():
     _pkg, report = _docx_with_signature([])
     # An unparseable or empty signature must not be read as covering everything.
     assert not report.ok
+
+
+def test_validation_report_notes_and_failures():
+    """Cover ValidationReport note appending and failure handling."""
+    from docxplus.validate import ValidationReport
+
+    rep = ValidationReport()
+    rep.notes.append("test note")
+    assert rep.to_dict()["notes"] == ["test note"]
+    rep.fail(rep.opc_errors, "opc failure")
+    assert rep.ok is False
+    assert "opc failure" in rep.to_dict()["opc_errors"]
+

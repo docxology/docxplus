@@ -328,3 +328,21 @@ def _parse_relationships(pkg: OpcPackage, rels_name: str, blob: bytes) -> None:
                 mode=child.attrib.get("TargetMode", "Internal"),
             )
         )
+
+
+__all__ = [
+    "CONTENT_TYPES_PART",
+    "MAX_ENTRIES",
+    "MAX_ENTRY_BYTES",
+    "MAX_INFLATE_RATIO",
+    "MAX_TOTAL_BYTES",
+    "NS_CONTENT_TYPES",
+    "NS_RELATIONSHIPS",
+    "OpcError",
+    "OpcPackage",
+    "ROOT_RELS_PART",
+    "Relationship",
+    "read_package",
+]
+
+

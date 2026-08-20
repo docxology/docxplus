@@ -164,3 +164,13 @@ def verify_inclusion(proof: dict, expected_root: str) -> bool:
     except (KeyError, TypeError, ValueError):
         return False
     return current.hex() == expected_root
+
+
+__all__ = [
+    "inclusion_proof",
+    "leaf_hash",
+    "merkle_root",
+    "verify_inclusion",
+    "verify_root",
+]
+

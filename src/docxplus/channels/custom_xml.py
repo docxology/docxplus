@@ -63,6 +63,14 @@ class CustomXmlChannel:
         return None
 
 
+__all__ = [
+    "CT_CUSTOM_XML",
+    "CustomXmlChannel",
+    "REL_CUSTOM_XML",
+]
+
+
+
 def _next_item_index(pkg: OpcPackage) -> int:
     n = 1
     while f"customXml/item{n}.xml" in pkg.parts:

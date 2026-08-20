@@ -162,6 +162,23 @@ def test_release_metadata_versions_all_agree():
             assert json.loads(path.read_text()).get("version") == version, f"{name} version != {version}"
 
 
+def test_manuscript_vars_helpers_coverage():
+    """Verify auxiliary functions in manuscript_vars."""
+    from docxplus import manuscript_vars
+    from docxplus.project_paths import project_root
+
+    root = project_root()
+    # Count src modules
+    assert manuscript_vars._count_src_modules(root) > 10
+    # Coverage gate parsing
+    assert manuscript_vars._coverage_gate(root) == 90
+    # DOI resolution
+    assert isinstance(manuscript_vars._doi(), str)
+    # CLI commands
+    assert len(manuscript_vars._cli_commands(root)) >= 19
+
+
+
 def test_no_absolute_home_paths_in_tracked_sources():
     """An absolute path to one machine breaks the build for everyone else.
 

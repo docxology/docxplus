@@ -386,3 +386,15 @@ def open_document(data: bytes):
     except zipfile.BadZipFile as exc:
         raise ContainerError(f"not a readable document package: {exc}") from None
     return OdtPlusReader.from_bytes(data) if is_odf else DocxPlusReader.from_bytes(data)
+
+
+__all__ = [
+    "CT_MANIFEST",
+    "CT_PAYLOAD",
+    "ODT_MANIFEST_PART",
+    "OdtPlusBuilder",
+    "OdtPlusReader",
+    "compute_odt_surface_digest",
+    "open_document",
+]
+

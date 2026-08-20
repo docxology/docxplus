@@ -35,10 +35,11 @@ finds, what it misses, and what breaks a carrier), `test_steg_bridge` (resolutio
 on real files, plus the optional real tool).
 
 **Adversarial regressions** — `test_hardening`, `test_redteam_round12`,
-`test_redteam_round13`, `test_redteam_round14`, `test_v5_features`. Every confirmed
+`test_redteam_round13`, `test_redteam_round14`, `test_v5_features`, `test_fuzz_suite`. Every confirmed
 finding in [`../docs/redteam-audit.md`](../docs/redteam-audit.md) is pinned here so it
 cannot come back. The rounds are kept as separate files because a finding is easier to
-trace to its review than to a merged pile.
+trace to its review than to a merged pile. `test_fuzz_suite` exercises cross-format
+fuzzing, differential parsing, and corrupted crypto envelope handling.
 
 **The documentation and the paper** — `test_docs`, `test_manuscript_vars`,
 `test_numbering`. These are why a stale doc fails the build rather than reaching a

@@ -266,6 +266,21 @@ def test_odt_builder_accepts_base_package(tmp_path):
     assert reader.extract("data") == b"123"
 
 
+def test_odt_error_branches():
+    """Verify various ContainerError conditions in OdtPlusBuilder and OdtPlusReader."""
+    # Add decoy with duplicate slot
+    b = OdtPlusBuilder().add_module("dup", b"data")
+    with pytest.raises(ContainerError, match="duplicate slot"):
+        b.add_decoy("dup", real=b"r", real_password="rp", decoy=b"d", decoy_password="dp")
+
+    # Add reproduce with missing recipe
+    with pytest.raises(ContainerError, match="no .docxplus-reproduce"):
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            OdtPlusBuilder().add_project("proj", td, reproduce=True)
+
+
+
 # -- validator failure paths --------------------------------------------------
 
 

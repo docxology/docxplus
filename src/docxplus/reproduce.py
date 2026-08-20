@@ -326,3 +326,41 @@ def load_recipe(project_dir: Path) -> ReproSpec | None:
     import json
 
     return ReproSpec.from_dict(json.loads(recipe.read_text()))
+
+
+def hermetic_extract_and_reproduce(
+    packed_project: bytes,
+    attestation: dict,
+    *,
+    allow_execution: bool = False,
+    temp_dir_prefix: str = "docxplus-hermetic-",
+) -> dict:
+    """Safely unpack a project payload into an isolated temporary workspace and reproduce."""
+    if not allow_execution:
+        raise ReproError(
+            "hermetic_extract_and_reproduce requires allow_execution=True (executes carried code)"
+        )
+    from .payloads import unpack_project
+
+    with tempfile.TemporaryDirectory(prefix=temp_dir_prefix) as td:
+        proj_dir = Path(td) / "workspace"
+        unpack_project(packed_project, proj_dir)
+        return reproduce_and_compare(proj_dir, attestation)
+
+
+__all__ = [
+    "MAX_CAPTURED_STDERR",
+    "MAX_OUTPUT_BYTES",
+    "MAX_REPRO_SECONDS",
+    "RECIPE_FILE",
+    "ReproError",
+    "ReproSpec",
+    "attest",
+    "hermetic_extract_and_reproduce",
+    "load_recipe",
+    "reproduce_and_compare",
+    "run_and_digest",
+    "toolchain_fingerprint",
+]
+
+

@@ -58,6 +58,25 @@ def test_capacity_reports_lsb_bound():
     assert ch.capacity() == (64 * 64 * 3) // 8 - 8
 
 
+def test_stego_media_error_paths():
+    """Verify error handling on stego_media extraction."""
+    ch = get_channel("stego_media")
+    from docxplus.channels.base import ChannelRecord
+
+    # Missing parts in package
+    pkg = new_base_document(["x"])
+    rec = ChannelRecord.from_dict({
+        "channel": "stego_media",
+        "slot": "s",
+        "size": 10,
+        "digest": "d",
+        "location": {"parts": ["word/media/nonexistent.png"]},
+    })
+    with pytest.raises(RuntimeError, match="no surviving media carrier"):
+        ch.extract(pkg, rec)
+
+
+
 @pytest.mark.requires_steganographer
 def test_steganographer_backend_roundtrip(sample_payload):
     from docxplus import steg_bridge

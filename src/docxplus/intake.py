@@ -243,3 +243,16 @@ def safe_open_odt(data: bytes, *, policy: IntakePolicy = DEFAULT_POLICY):
         raise IntakeError(f"intake rejected: {report.to_dict()}")
     reader = OdtPlusReader.from_bytes(data) if ODT_MANIFEST_PART in pkg.parts else None
     return report, reader
+
+
+__all__ = [
+    "DEFAULT_POLICY",
+    "IntakeError",
+    "IntakePolicy",
+    "ThreatReport",
+    "safe_open",
+    "safe_open_odt",
+    "scan",
+    "scan_odt",
+]
+

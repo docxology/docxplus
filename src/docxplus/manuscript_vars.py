@@ -255,3 +255,11 @@ def variables(include_dossier: bool = True) -> dict[str, str]:
         v["DOSSIER_SEALING"] = ", ".join(f"`{s}`" for s in seals)
         v["DOSSIER_SEALING_COUNT"] = len(seals)
     return {k: str(val) for k, val in v.items()}
+
+
+__all__ = [
+    "dossier_table",
+    "render_text",
+    "variables",
+]
+

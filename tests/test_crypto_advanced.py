@@ -113,3 +113,58 @@ def test_scrypt_defaults_sit_comfortably_under_the_ceiling():
 def test_scrypt_ceiling_is_aligned_with_the_argon2_ceiling():
     """Two memory-hard KDFs on the same reader should not differ 64-fold."""
     assert crypto.MAX_SCRYPT_MEMORY_BYTES == crypto.MAX_ARGON2_MEMORY_COST_KIB * 1024
+
+
+def test_hybrid_post_quantum_crypto_suite():
+    """Verify hybrid dual-signing and hybrid KEM multi-recipient sealing (DXE3)."""
+    # Signing
+    sign_kp = crypto.generate_hybrid_signing_key()
+    data = b"evidence and reproducibility"
+    sig = crypto.hybrid_sign(data, sign_kp)
+    assert crypto.hybrid_verify(data, sig, sign_kp.public_bytes)
+    assert not crypto.hybrid_verify(b"tampered", sig, sign_kp.public_bytes)
+    assert not crypto.hybrid_verify(data, sig, b"short_pub")
+    assert not crypto.hybrid_verify(data, b"short_sig", sign_kp.public_bytes)
+
+    # Multi-recipient hybrid KEM (DXE3)
+    recip_kp1 = crypto.generate_hybrid_recipient_key()
+    recip_kp2 = crypto.generate_hybrid_recipient_key()
+    stranger = crypto.generate_hybrid_recipient_key()
+
+    plaintext = b"top secret quantum-resistant payload"
+    envelope = crypto.seal_hybrid(plaintext, [recip_kp1.public_bytes, recip_kp2.public_bytes], aad=b"pq_slot", pad_to=4)
+    assert envelope.startswith(b"DXE3")
+
+    # Both recipients can open
+    assert crypto.unseal_hybrid(envelope, recip_kp1, aad=b"pq_slot") == plaintext
+    assert crypto.unseal_hybrid(envelope, recip_kp2, aad=b"pq_slot") == plaintext
+
+    # Stranger cannot open
+    with pytest.raises(ValueError, match="no hybrid recipient slot"):
+        crypto.unseal_hybrid(envelope, stranger, aad=b"pq_slot")
+
+    # Error branches on seal/unseal hybrid
+    with pytest.raises(ValueError, match="at least one recipient"):
+        crypto.seal_hybrid(plaintext, [])
+    with pytest.raises(ValueError, match="below recipient count"):
+        crypto.seal_hybrid(plaintext, [recip_kp1.public_bytes, recip_kp2.public_bytes], pad_to=1)
+    with pytest.raises(ValueError, match="bad magic|not a DXE3"):
+        crypto.unseal_hybrid(b"DXE2" + envelope[4:], recip_kp1)
+    with pytest.raises(ValueError, match="truncated"):
+        crypto.unseal_hybrid(envelope[:12], recip_kp1)
+
+
+def test_crypto_direct_error_branches():
+    """Cover edge-case parameter checks and error paths in crypto module."""
+    with pytest.raises(ValueError, match="password must be non-empty"):
+        crypto.derive_key("", b"salt")
+    with pytest.raises(ValueError, match="password must be non-empty"):
+        crypto._derive("", b"salt", crypto.KDF_SCRYPT, bytes([15, 8, 1]))
+    with pytest.raises(ValueError, match="unknown KDF id"):
+        crypto._derive("pw", b"salt", 999, b"params")
+    with pytest.raises(ValueError, match="unknown KDF"):
+        crypto._kdf_params("invalid_kdf")
+    with pytest.raises(ValueError, match="content key must be 32 bytes"):
+        crypto.encrypt_with_key(b"data", b"short_key")
+
+

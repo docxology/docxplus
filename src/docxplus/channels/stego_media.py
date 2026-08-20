@@ -188,3 +188,13 @@ def _next_media_index(pkg: OpcPackage) -> int:
     while f"word/media/image{n}.png" in pkg.parts:
         n += 1
     return n
+
+
+__all__ = [
+    "BACKENDS",
+    "CT_PNG",
+    "REL_IMAGE",
+    "StegMediaChannel",
+]
+
+

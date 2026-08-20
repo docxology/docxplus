@@ -45,6 +45,8 @@ class MetadataChannel:
             )
         props = _load_props(pkg)
         prop_name = f"dxplus_{slot}"
+        if prop_name in props:
+            raise ValueError(f"metadata property collision for slot {slot!r}: {prop_name!r} already exists")
         props[prop_name] = base64.b64encode(payload).decode("ascii")
         _store_props(pkg, props)
         return ChannelRecord(
@@ -98,3 +100,15 @@ def _store_props(pkg: OpcPackage, props: dict[str, str]) -> None:
         pkg.add_relationship(
             Relationship(rid, REL_CUSTOM_PROPS, CUSTOM_PART), source_part=""
         )
+
+
+__all__ = [
+    "CT_CUSTOM_PROPS",
+    "CUSTOM_PART",
+    "MAX_PAYLOAD",
+    "MetadataChannel",
+    "NS_CUSTOM",
+    "NS_VT",
+    "REL_CUSTOM_PROPS",
+]
+

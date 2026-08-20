@@ -90,3 +90,10 @@ class Channel(Protocol):
         """Bytes this channel can still hold in ``pkg``; ``None`` = effectively
         unbounded (a new part can always be added)."""
         ...
+
+
+__all__ = [
+    "Channel",
+    "ChannelRecord",
+]
+

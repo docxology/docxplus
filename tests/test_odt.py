@@ -119,3 +119,12 @@ def test_roundtrip_manifest_omits_mimetype_and_itself():
         assert "META-INF/manifest.xml" not in manifest
         assert 'full-path="content.xml"' in manifest
         assert zf.infolist()[0].filename == "mimetype"
+
+
+def test_odt_custom_metadata_properties():
+    """Verify custom metadata properties serialize properly in meta.xml."""
+    pkg = new_base_odt(["Hello"], custom_properties={"dxplus_tag": "research_alpha", "sensitivity": "high"})
+    meta_xml = pkg.parts["meta.xml"].decode("utf-8")
+    assert '<meta:user-defined meta:name="dxplus_tag">research_alpha</meta:user-defined>' in meta_xml
+    assert '<meta:user-defined meta:name="sensitivity">high</meta:user-defined>' in meta_xml
+

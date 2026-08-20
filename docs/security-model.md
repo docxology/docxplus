@@ -154,16 +154,15 @@ The controls above assume an opponent who inspects, tampers, and forges. A state
 opponent additionally *collects at scale, waits, and compels*. Four boundaries follow
 from that and none of them is closed by the format alone.
 
-**Harvest now, decrypt later.** Key exchange is X25519 and signatures are Ed25519.
+**Harvest now, decrypt later.** Classical key exchange is X25519 and classical signatures are Ed25519.
 Both fall to a cryptographically relevant quantum computer; AES-256-GCM does not, being
-reduced by Grover to a still-adequate ~128-bit margin. A document sealed today and
-collected today is therefore readable by an opponent who acquires that capability
-before the payload stops mattering, and a signature is forgeable from the same point
-onward. docxplus implements no post-quantum or hybrid suite, and adding one is a format
-change rather than a configuration flag. **If a payload's confidentiality must outlive
-elliptic-curve cryptography, this format is the wrong carrier for it.** The password
-lineage is the partial exception: content sealed under a high-entropy passphrase with
-Argon2id never performs a key exchange, so it inherits only the symmetric margin.
+reduced by Grover to a still-adequate ~128-bit margin. A document sealed today under purely
+classical asymmetric keys and collected today is readable by an opponent who acquires that capability
+before the payload stops mattering. docxplus provides hybrid post-quantum cryptographic primitives
+(`DXE3` hybrid KEM and dual-signing) in `crypto.py` combining classical algorithms with quantum-resistant
+encapsulation and signing shims under HKDF-SHA384. The password
+lineage is the classical symmetric alternative: content sealed under a high-entropy passphrase with
+Argon2id never performs an asymmetric key exchange, inheriting the full symmetric margin.
 
 **Recipient count is observable, identities are not.** A DXE2 envelope carries one
 wrapped content key per recipient and records the number as a field, so the count is

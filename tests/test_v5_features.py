@@ -184,6 +184,23 @@ def test_intake_strict_raises():
         intake.safe_open(data, policy=intake.IntakePolicy(strict=True))
 
 
+def test_intake_coverage_edge_cases():
+    """Verify part limit capping and macro rel targets in intake module."""
+    from docxplus import intake
+
+    pkg = new_base_document(["x"])
+    policy = intake.IntakePolicy(max_parts=1)
+    rep = intake.scan(pkg, policy=policy)
+    assert rep.oversized is True
+
+    # Relationship with vbaproject target
+    pkg2 = new_base_document(["x"])
+    pkg2.add_relationship(Relationship("rIdVBA", "http://schemas.microsoft.com/office/2006/relationships/vbaProject", "vbaProject.bin"), source_part="")
+    pkg2.add_part("vbaProject.bin", b"bytes", "application/octet-stream")
+    rep2 = intake.scan(pkg2)
+    assert "vbaProject.bin" in rep2.macro_parts
+
+
 def test_intake_policy_can_allow():
     from docxplus import intake
 

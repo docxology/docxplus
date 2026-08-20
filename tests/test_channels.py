@@ -56,6 +56,15 @@ def test_metadata_multiple_properties_coexist():
     assert ch.extract(reparsed, r2) == b"second"
 
 
+def test_metadata_collision_refused():
+    pkg = new_base_document(["x"])
+    ch = get_channel("metadata")
+    ch.embed(pkg, b"first", slot="collision_test")
+    with pytest.raises(ValueError, match="metadata property collision"):
+        ch.embed(pkg, b"second", slot="collision_test")
+
+
+
 def test_capacity_reports():
     pkg = new_base_document(["x"])
     assert get_channel("custom_xml").capacity(pkg) is None
@@ -71,3 +80,32 @@ def test_unknown_channel_raises():
 def test_available_channels_lists_media_toggle():
     assert "stego_media" in available_channels(include_media=True)
     assert "stego_media" not in available_channels(include_media=False)
+
+
+def test_channel_record_roundtrip():
+    """Cover ChannelRecord to_dict and from_dict mapping."""
+    from docxplus.channels.base import ChannelRecord
+
+    rec = ChannelRecord(
+        channel="custom_xml",
+        slot="test_slot",
+        size=42,
+        digest="abcd",
+        encrypted=True,
+        content_type="application/xml",
+        payload_type="text",
+        sealing={"mode": "password"},
+        location={"part": "customXml/item1.xml"},
+        reproduction={"command": ["python"]},
+    )
+    d = rec.to_dict()
+    assert d["slot"] == "test_slot"
+    assert d["encrypted"] is True
+
+    rec2 = ChannelRecord.from_dict(d)
+    assert rec2.slot == rec.slot
+    assert rec2.digest == rec.digest
+    assert rec2.encrypted == rec.encrypted
+    assert rec2.sealing == rec.sealing
+    assert rec2.reproduction == rec.reproduction
+

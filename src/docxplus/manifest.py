@@ -187,3 +187,17 @@ def read_manifest(pkg: OpcPackage) -> Manifest | None:
     if MANIFEST_PART not in pkg.parts:
         return None
     return Manifest.from_bytes(pkg.parts[MANIFEST_PART])
+
+
+__all__ = [
+    "CT_MANIFEST",
+    "FORMAT_VERSION",
+    "MANIFEST_PART",
+    "REL_MANIFEST",
+    "SIGNATURE_ALGORITHM",
+    "Manifest",
+    "read_manifest",
+    "write_manifest",
+]
+
+

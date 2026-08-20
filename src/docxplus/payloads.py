@@ -300,3 +300,16 @@ def register_type(payload_type: PayloadType) -> None:
 
 def available_types() -> list[str]:
     return sorted(_REGISTRY)
+
+
+__all__ = [
+    "MAX_PROJECT_UNCOMPRESSED",
+    "PayloadType",
+    "ProjectPackError",
+    "available_types",
+    "get_type",
+    "pack_project",
+    "register_type",
+    "unpack_project",
+]
+

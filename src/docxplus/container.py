@@ -696,3 +696,13 @@ def _open_password_frames(sealed: bytes, password: str, aad: bytes) -> bytes:
     if opened is None:
         raise ContainerError("no envelope opened with this password")
     return opened
+
+
+__all__ = [
+    "SEALING_LINEAGES",
+    "ContainerError",
+    "DocxPlusBuilder",
+    "DocxPlusReader",
+    "seal_module",
+]
+

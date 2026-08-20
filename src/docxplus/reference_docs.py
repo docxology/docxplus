@@ -39,3 +39,9 @@ def build_reference_dossier() -> DocxPlusReader:
         .build()
     )
     return DocxPlusReader.from_bytes(data)
+
+
+__all__ = [
+    "build_reference_dossier",
+]
+

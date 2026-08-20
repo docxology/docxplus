@@ -21,7 +21,7 @@
       "ok": true
     },
     {
-      "detail": "{\"files_compared\": 126, \"missing\": [], \"unexpected\": [], \"content_mismatches\": [], \"executable_bit_mismatches\": [], \"identical\": true}",
+      "detail": "{\"files_compared\": 128, \"missing\": [], \"unexpected\": [], \"content_mismatches\": [], \"executable_bit_mismatches\": [], \"identical\": true}",
       "name": "docxplus.roundtrip_identical",
       "ok": true
     },
@@ -46,7 +46,7 @@
       "ok": true
     },
     {
-      "detail": "{\"files_compared\": 126, \"missing\": [], \"unexpected\": [], \"content_mismatches\": [], \"executable_bit_mismatches\": [], \"identical\": true}",
+      "detail": "{\"files_compared\": 128, \"missing\": [], \"unexpected\": [], \"content_mismatches\": [], \"executable_bit_mismatches\": [], \"identical\": true}",
       "name": "odtplus.roundtrip_identical",
       "ok": true
     },
@@ -79,11 +79,11 @@
   "failures": [],
   "formats": {
     "docx": {
-      "bytes": 257179,
+      "bytes": 320524,
       "comparison": {
         "content_mismatches": [],
         "executable_bit_mismatches": [],
-        "files_compared": 126,
+        "files_compared": 128,
         "identical": true,
         "missing": [],
         "unexpected": []
@@ -94,11 +94,11 @@
       ]
     },
     "odt": {
-      "bytes": 256730,
+      "bytes": 320044,
       "comparison": {
         "content_mismatches": [],
         "executable_bit_mismatches": [],
-        "files_compared": 126,
+        "files_compared": 128,
         "identical": true,
         "missing": [],
         "unexpected": []
@@ -112,9 +112,9 @@
   "ok": true,
   "project": {
     "directories": 13,
-    "files_carried": 126,
+    "files_carried": 128,
     "has_executable": true
   },
-  "project_payload_digest": "60e88f4b6d4f6e40787ef3bcee637b7d6462e5e85d7772c1de744f7150184949",
+  "project_payload_digest": "5d64d81dd4f49eae0d912c6cae8126242ddd2a06f416bc970c83e49c1c544b30",
   "source": "/home/trim/Documents/Git/HumOS/projects/platform/hum-docxology/repos/public/template/projects/templates/template_code_project"
 }

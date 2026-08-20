@@ -85,3 +85,19 @@ def write_document(data: bytes, path: str | Path) -> list[Path]:
         candidate.write_bytes(data)
         written.append(candidate)
     return written
+
+
+__all__ = [
+    "ALL_EXTENSIONS",
+    "DOCX_EXTENSIONS",
+    "MEDIA_TYPES",
+    "ODT_EXTENSIONS",
+    "PLUS_EXTENSION",
+    "SURFACE_EXTENSION",
+    "is_docxplus_name",
+    "plus_path",
+    "surface_path",
+    "write_document",
+]
+
+

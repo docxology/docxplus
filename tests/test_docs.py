@@ -410,6 +410,18 @@ def test_the_channels_readme_lists_every_registered_channel():
     assert not missing, f"undocumented in src/docxplus/channels/README.md: {missing}"
 
 
+def test_every_src_module_has_all_defined():
+    """Ensure all internal and public modules define an explicit __all__ export list."""
+    import importlib
+    for p in (ROOT / "src" / "docxplus").glob("*.py"):
+        if p.name == "cli.py":
+            continue
+        mod_name = f"docxplus.{p.stem}" if p.name != "__init__.py" else "docxplus"
+        mod = importlib.import_module(mod_name)
+        assert hasattr(mod, "__all__"), f"{mod_name} does not define __all__"
+        assert isinstance(mod.__all__, list), f"{mod_name}.__all__ is not a list"
+
+
 def test_the_root_guides_point_at_every_directory_guide():
     """The root AGENTS.md is the map. A directory it omits is one nobody is routed to."""
     agents = _read("AGENTS.md")

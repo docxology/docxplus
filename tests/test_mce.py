@@ -123,3 +123,20 @@ def test_a_section_break_inside_a_paragraph_is_not_mistaken_for_the_body_sectpr(
     )
     # No body-level sectPr here, so content belongs immediately before </w:body>.
     assert _body_insertion_point(doc) == doc.rfind("</w:body>")
+
+
+def test_mce_varied_prefixes_and_namespaces():
+    """Verify extraction resilience when MCE XML is loaded with alternative prefix aliases."""
+    pkg = new_base_document(["Main text."])
+    chan = MceChannel()
+    rec = chan.embed(pkg, b"flexible-mce-data", slot="flex_slot")
+
+    # Manually rewrite namespace prefix in document.xml from dxm to alt
+    doc_xml = pkg.parts["word/document.xml"].decode("utf-8")
+    doc_xml = doc_xml.replace("xmlns:dxm=", "xmlns:alt=").replace("<dxm:payload", "<alt:payload").replace("</dxm:payload>", "</alt:payload>")
+    pkg.parts["word/document.xml"] = doc_xml.encode("utf-8")
+
+    # Extraction must still find it
+    extracted = chan.extract(pkg, rec)
+    assert extracted == b"flexible-mce-data"
+

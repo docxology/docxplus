@@ -62,8 +62,8 @@ a token rather than repeated here. **Visibility** the property name is listed in
 document properties dialogs, so the *existence* of a module is visible even though its
 contents are not.
 
-**Known limitation.** A pre-existing custom property of the same name is retyped to
-`vt:lpwstr` rather than refusing the collision (`TODO.md`).
+**Collision safeguard.** A pre-existing custom property of the same name is refused
+with an explicit error rather than silently overwritten or retyped.
 
 ---
 

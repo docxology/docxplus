@@ -38,7 +38,7 @@ package parts, custom document properties, Markup Compatibility and Extensibilit
 least-significant-bit steganography in a carrier image the document visibly displays. Concealment is
 measured, not asserted — a chi-squared detector [@westfeld2000] ships in-tree, with a prefix sweep that
 localises the partially-filled carriers whole-image statistics miss, alongside an optional compiled backend
-[@fridrich2001]. Across 469 mock-free test functions under a 90% coverage gate we verify
+[@fridrich2001]. Across 496 mock-free test functions under a 90% coverage gate we verify
 deterministic serialisation, round-trip integrity, openability in mainstream word processors, and the
 adversarial boundaries established by 14 red-team cycles closing
 88 confirmed findings — a record that includes the occasions when an earlier fix

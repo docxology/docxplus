@@ -161,3 +161,30 @@ def test_container_threshold_shares_are_verifiable_and_required(tmp_path):
     downgraded = bytes([shares[0][1]]) + bytes(shares[0][shamir._VSS_HEADER:])
     with pytest.raises(ContainerError):
         reader.extract("secret", shares=[downgraded, shares[1]])
+
+
+def test_weighted_threshold_shares():
+    """Verify split_weighted and combine_weighted under various quorum configurations."""
+    secret = b"weighted multi-custodian secret"
+    # Threshold weight = 4. Custodians: Board (weight 3), Auditor (weight 2), Trustee (weight 1). Total weight = 6.
+    weights = [3, 2, 1]
+    custodian_shares = shamir.split_weighted(secret, threshold_weight=4, weights=weights, verifiable=True)
+    assert len(custodian_shares) == 3
+    assert len(custodian_shares[0]) == 3
+    assert len(custodian_shares[1]) == 2
+    assert len(custodian_shares[2]) == 1
+
+    # Board (3) + Trustee (1) = 4 >= 4 shares -> SUCCESS
+    assert shamir.combine_weighted([custodian_shares[0], custodian_shares[2]], require_verifiable=True) == secret
+
+    # Board (3) + Auditor (2) = 5 >= 4 shares -> SUCCESS
+    assert shamir.combine_weighted([custodian_shares[0], custodian_shares[1]], require_verifiable=True) == secret
+
+    # Auditor (2) + Trustee (1) = 3 shares < 4 threshold -> yields incorrect reconstructed secret (as expected with Shamir under-quorum)
+    under_quorum_reconstruction = shamir.combine_weighted([custodian_shares[1], custodian_shares[2]], require_verifiable=True)
+    assert under_quorum_reconstruction != secret
+
+    # Empty shares raises
+    with pytest.raises(ValueError, match="need at least one share"):
+        shamir.combine_weighted([])
+

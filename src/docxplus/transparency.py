@@ -295,3 +295,12 @@ class TransparencyLog:
                     "not match its contents"
                 )
         return log
+
+
+__all__ = [
+    "STH_DOMAIN",
+    "LogEntry",
+    "TransparencyLog",
+]
+
+

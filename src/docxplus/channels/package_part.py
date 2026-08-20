@@ -45,6 +45,16 @@ class PackagePartChannel:
         return None
 
 
+__all__ = [
+    "CT_INTELLIGENCE_BLOB",
+    "EXTENSION",
+    "PackagePartChannel",
+    "REL_INTELLIGENCE",
+]
+
+
+
+
 def _next_index(pkg: OpcPackage) -> int:
     n = 1
     while f"intelligence/payload{n}.{EXTENSION}" in pkg.parts:

@@ -41,6 +41,15 @@ def test_keygen_x25519_and_multi_recipient(tmp_path):
     assert _run(["keygen", str(key), "--type", "x25519"]).returncode == 0
     pub = (tmp_path / "rk.hex.pub").read_text().strip()
 
+    # Hybrid keygen smoke
+    hk_recip = tmp_path / "hk_recip.hex"
+    assert _run(["keygen", str(hk_recip), "--type", "hybrid-recipient"]).returncode == 0
+    assert hk_recip.exists() and (tmp_path / "hk_recip.hex.pub").exists()
+
+    hk_sign = tmp_path / "hk_sign.hex"
+    assert _run(["keygen", str(hk_sign), "--type", "hybrid-signing"]).returncode == 0
+    assert hk_sign.exists() and (tmp_path / "hk_sign.hex.pub").exists()
+
     payload = tmp_path / "p.bin"
     payload.write_bytes(b"referee draft")
     docx = tmp_path / "r.docx"
@@ -338,3 +347,58 @@ def test_transparency_append_is_reproducible_under_a_pinned_timestamp(tmp_path):
         out = _run(["transparency-append", str(log), "--attestation", str(att), "--timestamp", "7"])
         roots.append(_json.loads(out.stdout)["root"])
     assert roots[0] == roots[1]
+
+
+def test_cli_error_diagnostics_on_invalid_args(tmp_path):
+    # Invalid module syntax
+    res = _run(["build", str(tmp_path / "bad.docx"), "--module", "invalid_module_spec"])
+    assert res.returncode == 2
+    assert "expected SLOT:CHANNEL:FILE" in res.stderr
+
+    # Non-existent module file
+    res = _run(["build", str(tmp_path / "bad.docx"), "--module", "m:package_part:/non/existent/file.bin"])
+    assert res.returncode == 2
+    assert "module file not found" in res.stderr
+
+    # Invalid ODT module spec
+    res = _run(["odt-build", str(tmp_path / "bad.odt"), "--module", "invalid_odt_spec:too:many:colons"])
+    assert res.returncode == 2
+    assert "expected SLOT:FILE" in res.stderr
+
+    # Extraction with missing private key file
+    docx = tmp_path / "sample.docx"
+    _run(["build", str(docx), "--text", "hello"])
+    res = _run(["extract", str(docx), "slot", "--private-key", "/non/existent/key.hex"])
+    assert res.returncode == 2
+    assert "private key file not found" in res.stderr
+
+    # Invalid project format
+    res = _run(["build", str(tmp_path / "bad_proj.docx"), "--project", "invalid_proj_spec:too:many:colons"])
+    assert res.returncode == 2
+    assert "expected SLOT:DIR" in res.stderr
+
+    # Nonexistent project directory
+    res = _run(["build", str(tmp_path / "bad_proj.docx"), "--project", "s:/non/existent/dir"])
+    assert res.returncode == 2
+    assert "project directory not found" in res.stderr
+
+    # Keygen collision safeguard (secret exists)
+    k_path = tmp_path / "existing_key.hex"
+    k_path.write_text("dummy")
+    res = _run(["keygen", str(k_path)])
+    assert res.returncode == 1
+    assert "refusing to overwrite" in res.stdout or "refusing to overwrite" in res.stderr
+
+    # Opt-in reproduce requires --allow-execution
+    proj = tmp_path / "repro_proj"
+    (proj / "src").mkdir(parents=True)
+    (proj / "src" / "c.py").write_text("print('hello')\n")
+    (proj / ".docxplus-reproduce.json").write_text('{"command": ["python", "src/c.py"], "outputs": []}')
+    docx_repro = tmp_path / "repro.docx"
+    _run(["build", str(docx_repro), "--project", f"p:{proj}", "--attest"])
+    no_opt_in = _run(["reproduce", str(docx_repro), "p", str(tmp_path / "out_rep")])
+    assert no_opt_in.returncode == 2
+    assert "--allow-execution" in no_opt_in.stderr
+
+
+

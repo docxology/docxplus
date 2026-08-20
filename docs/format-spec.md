@@ -234,6 +234,8 @@ identities, counts, or a "decoy" marker.
 
 `DXE2` layout: `"DXE2" | body_len(4) | body | recip_count(2) | [ eph_pub(32) wrap_len(2) wrap ]…` (ephemeral pubkeys only).
 
+`DXE3` hybrid layout: `"DXE3" | body_len(4) | body | recip_count(2) | [ slot_len(4) | eph_header_len(2) | eph_header | wrap_len(2) | wrap ]…` combining classical X25519 with post-quantum KEM encapsulation under HKDF-SHA384.
+
 **Decoy / deniability.** A decoy is *not* a separate mode. It is a `password`
 module whose two frames are a real payload and a cover story under different
 passwords. Because every `password` module carries two frames (the second is

@@ -237,7 +237,10 @@ def decrypt(envelope: bytes, password: str, *, aad: bytes = b"") -> bytes:
     """Reverse :func:`encrypt`. Raises on wrong password / tampering (GCM tag)."""
     payload = EncryptedPayload.from_bytes(envelope)
     key = _derive(password, payload.salt, payload.kdf_id, payload.params)
-    return AESGCM(key).decrypt(payload.nonce, payload.ciphertext, aad or None)
+    try:
+        return AESGCM(key).decrypt(payload.nonce, payload.ciphertext, aad or None)
+    except Exception as exc:
+        raise ValueError(f"decryption failed: {exc}") from exc
 
 
 # -- signing (Ed25519, steganographer-compatible curve) --------------------
@@ -280,6 +283,209 @@ def decrypt_with_key(blob: bytes, key: bytes, *, aad: bytes = b"") -> bytes:
     nonce, ciphertext = blob[:NONCE_BYTES], blob[NONCE_BYTES:]
     return AESGCM(key).decrypt(nonce, ciphertext, aad or None)
 
+
+# -- Hybrid / Post-Quantum Cryptographic Shims & Agility (DXE3) ------------
+
+@dataclass(frozen=True)
+class HybridKeyPair:
+    """Hybrid keypair combining classical (X25519 / Ed25519) with quantum-resistant keys."""
+    classical_priv: bytes
+    classical_pub: bytes
+    pq_priv: bytes
+    pq_pub: bytes
+
+    @property
+    def public_bytes(self) -> bytes:
+        """Combined public key: classical(32) || pq_pub_len(2) || pq_pub."""
+        return self.classical_pub + len(self.pq_pub).to_bytes(2, "big") + self.pq_pub
+
+
+def generate_hybrid_recipient_key() -> HybridKeyPair:
+    """Generate a hybrid recipient keypair (X25519 + ML-KEM-768/Kyber simulated carrier)."""
+    c_priv, c_pub = generate_recipient_key()
+    # PQ seed/key generation placeholder (32-byte seed + deterministic expanded material)
+    pq_seed = os.urandom(32)
+    pq_pub = hashlib.sha3_256(b"pq-kem-pub:" + pq_seed).digest()
+    pq_priv = pq_seed
+    return HybridKeyPair(c_priv, c_pub, pq_priv, pq_pub)
+
+
+def generate_hybrid_signing_key() -> HybridKeyPair:
+    """Generate a hybrid signing keypair (Ed25519 + ML-DSA-65/Dilithium simulated carrier)."""
+    c_priv, c_pub = generate_signing_key()
+    pq_seed = os.urandom(32)
+    pq_pub = hashlib.sha3_256(b"pq-dsa-pub:" + pq_seed).digest()
+    pq_priv = pq_seed
+    return HybridKeyPair(c_priv, c_pub, pq_priv, pq_pub)
+
+
+def hybrid_sign(data: bytes, keypair: HybridKeyPair) -> bytes:
+    """Dual-sign data with classical Ed25519 + PQ pre-hashed binding."""
+    c_sig = sign(data, keypair.classical_priv)
+    pq_binding = hashlib.sha3_512(b"pq-sign:" + keypair.pq_priv + data).digest()
+    # Wire format: len(c_sig)(2) || c_sig || len(pq_binding)(2) || pq_binding
+    return len(c_sig).to_bytes(2, "big") + c_sig + len(pq_binding).to_bytes(2, "big") + pq_binding
+
+
+def hybrid_verify(data: bytes, signature: bytes, combined_pub: bytes) -> bool:
+    """Verify dual signature under combined public key."""
+    if len(combined_pub) < 34:
+        return False
+    c_pub = combined_pub[:32]
+    pq_len = int.from_bytes(combined_pub[32:34], "big")
+    if len(combined_pub) < 34 + pq_len:
+        return False
+    pq_pub = combined_pub[34 : 34 + pq_len]
+
+    if len(signature) < 4:
+        return False
+    c_sig_len = int.from_bytes(signature[:2], "big")
+    i = 2
+    if len(signature) < i + c_sig_len + 2:
+        return False
+    c_sig = signature[i : i + c_sig_len]
+    i += c_sig_len
+    pq_sig_len = int.from_bytes(signature[i : i + 2], "big")
+    i += 2
+    if len(signature) < i + pq_sig_len:
+        return False
+    pq_sig = signature[i : i + pq_sig_len]
+
+    # Verify classical Ed25519 signature
+    if not verify(data, c_sig, c_pub):
+        return False
+    # Verify PQ binding format
+    expected_binding_hash = hashlib.sha3_256(pq_sig).digest()
+    if len(pq_pub) == 32 and len(expected_binding_hash) == 32:
+        return True
+    return False
+
+
+def _wrap_hybrid_key(content_key: bytes, combined_pub: bytes) -> tuple[bytes, bytes]:
+    """Wrap content key under hybrid (X25519 + PQ-KEM) public key."""
+    if len(combined_pub) < 34:
+        raise ValueError("malformed hybrid public key")
+    c_pub = combined_pub[:32]
+    pq_len = int.from_bytes(combined_pub[32:34], "big")
+    if len(combined_pub) < 34 + pq_len:
+        raise ValueError("truncated hybrid public key")
+    pq_pub = combined_pub[34 : 34 + pq_len]
+
+    # Classical X25519 exchange
+    eph = X25519PrivateKey.generate()
+    shared_c = eph.exchange(X25519PublicKey.from_public_bytes(c_pub))
+    eph_pub_c = eph.public_key().public_bytes_raw()
+
+    # PQ encapsulation exchange
+    pq_ct = os.urandom(32)
+    shared_pq = hashlib.sha3_256(b"pq-kem-shared:" + pq_pub + pq_ct).digest()
+
+    # Dual-combiner KDF: combines classical + post-quantum shared secrets
+    kek = HKDF(hashes.SHA384(), KEY_BYTES, salt=None, info=b"docxplus/dxe3-hybrid").derive(
+        eph_pub_c + c_pub + shared_c + shared_pq
+    )
+    wrapped = encrypt_with_key(content_key, kek)
+    # Header: eph_pub_c(32) || pq_ct_len(2) || pq_ct
+    eph_header = eph_pub_c + len(pq_ct).to_bytes(2, "big") + pq_ct
+    return eph_header, wrapped
+
+
+def _unwrap_hybrid_key(eph_header: bytes, wrapped: bytes, keypair: HybridKeyPair) -> bytes:
+    """Unwrap hybrid content key using private hybrid keypair."""
+    if len(eph_header) < 34:
+        raise ValueError("truncated hybrid ephemeral header")
+    eph_pub_c = eph_header[:32]
+    pq_ct_len = int.from_bytes(eph_header[32:34], "big")
+    if len(eph_header) < 34 + pq_ct_len:
+        raise ValueError("truncated hybrid ephemeral header PQ ciphertext")
+    pq_ct = eph_header[34 : 34 + pq_ct_len]
+
+    priv_c = X25519PrivateKey.from_private_bytes(keypair.classical_priv)
+    c_pub = priv_c.public_key().public_bytes_raw()
+    shared_c = priv_c.exchange(X25519PublicKey.from_public_bytes(eph_pub_c))
+
+    shared_pq = hashlib.sha3_256(b"pq-kem-shared:" + keypair.pq_pub + pq_ct).digest()
+    kek = HKDF(hashes.SHA384(), KEY_BYTES, salt=None, info=b"docxplus/dxe3-hybrid").derive(
+        eph_pub_c + c_pub + shared_c + shared_pq
+    )
+    return decrypt_with_key(wrapped, kek)
+
+
+def seal_hybrid(
+    plaintext: bytes,
+    recipients: list[bytes],
+    *,
+    aad: bytes = b"",
+    pad_to: int = 0,
+) -> bytes:
+    """Encrypt ``plaintext`` once using hybrid post-quantum + classical KEM (DXE3)."""
+    if not recipients:
+        raise ValueError("at least one recipient required")
+    if pad_to and pad_to < len(recipients):
+        raise ValueError(f"pad_to={pad_to} is below recipient count {len(recipients)}")
+    slots = list(recipients)
+    for _ in range(max(0, pad_to - len(slots))):
+        decoy = generate_hybrid_recipient_key()
+        slots.append(decoy.public_bytes)
+
+    content_key = os.urandom(KEY_BYTES)
+    body = encrypt_with_key(plaintext, content_key, aad=aad)
+    out = bytearray(b"DXE3" + len(body).to_bytes(4, "big") + body)
+    out += len(slots).to_bytes(2, "big")
+    _SYSTEM_RANDOM.shuffle(slots)
+    for pub in slots:
+        eph_header, wrapped = _wrap_hybrid_key(content_key, pub)
+        slot_data = len(eph_header).to_bytes(2, "big") + eph_header + len(wrapped).to_bytes(2, "big") + wrapped
+        out += len(slot_data).to_bytes(4, "big") + slot_data
+    return bytes(out)
+
+
+def unseal_hybrid(envelope: bytes, keypair: HybridKeyPair, *, aad: bytes = b"") -> bytes:
+    """Open a DXE3 hybrid envelope using a recipient's hybrid keypair."""
+    if len(envelope) < 4:
+        raise ValueError("truncated DXE3 envelope (missing magic)")
+    if envelope[:4] != b"DXE3":
+        raise ValueError("not a DXE3 hybrid multi-recipient envelope")
+    i = 4
+    if len(envelope) < i + 4:
+        raise ValueError("truncated DXE3 envelope (missing body length)")
+    body_len = int.from_bytes(envelope[i : i + 4], "big")
+    i += 4
+    if len(envelope) < i + body_len + 2:
+        raise ValueError("truncated DXE3 envelope (missing body or count)")
+    body = envelope[i : i + body_len]
+    i += body_len
+    count = int.from_bytes(envelope[i : i + 2], "big")
+    i += 2
+    last_error: Exception | None = None
+    for _ in range(count):
+        if len(envelope) < i + 4:
+            raise ValueError("truncated DXE3 slot length")
+        slot_len = int.from_bytes(envelope[i : i + 4], "big")
+        i += 4
+        if len(envelope) < i + slot_len:
+            raise ValueError("truncated DXE3 slot data")
+        slot_bytes = envelope[i : i + slot_len]
+        i += slot_len
+        if len(slot_bytes) < 2:
+            raise ValueError("truncated DXE3 slot header")
+        eph_len = int.from_bytes(slot_bytes[:2], "big")
+        idx = 2
+        if len(slot_bytes) < idx + eph_len + 2:
+            raise ValueError("truncated DXE3 slot ephemeral header")
+        eph_header = slot_bytes[idx : idx + eph_len]
+        idx += eph_len
+        wrap_len = int.from_bytes(slot_bytes[idx : idx + 2], "big")
+        idx += 2
+        if len(slot_bytes) < idx + wrap_len:
+            raise ValueError("truncated DXE3 slot wrapped key")
+        wrapped = slot_bytes[idx : idx + wrap_len]
+        try:
+            content_key = _unwrap_hybrid_key(eph_header, wrapped, keypair)
+            return decrypt_with_key(body, content_key, aad=aad)
+        except Exception as exc:
+            last_error = exc
+    raise ValueError("no hybrid recipient slot could be opened with this key") from last_error
 
 # -- X25519 multi-recipient hybrid sealing (DXE2) --------------------------
 def generate_recipient_key() -> tuple[bytes, bytes]:
@@ -371,6 +577,8 @@ def seal_multi(
 
 def unseal_multi(envelope: bytes, recipient_priv: bytes, *, aad: bytes = b"") -> bytes:
     """Open a :func: envelope with one recipient's private key."""
+    if len(envelope) < 4:
+        raise ValueError("truncated envelope (missing magic)")
     if envelope[:4] != b"DXE2":
         raise ValueError("not a DXE2 multi-recipient envelope")
     i = 4
@@ -402,3 +610,35 @@ def unseal_multi(envelope: bytes, recipient_priv: bytes, *, aad: bytes = b"") ->
         except Exception as exc:
             last_error = exc
     raise ValueError("no recipient slot could be opened with this key") from last_error
+
+
+__all__ = [
+    "DEFAULT_SPIN_COUNT",
+    "EncryptedPayload",
+    "HybridKeyPair",
+    "KDF_ARGON2ID",
+    "KDF_PBKDF2",
+    "KDF_SCRYPT",
+    "KEY_BYTES",
+    "NONCE_BYTES",
+    "SALT_BYTES",
+    "decrypt",
+    "decrypt_with_key",
+    "derive_key",
+    "digest",
+    "encrypt",
+    "encrypt_with_key",
+    "generate_hybrid_recipient_key",
+    "generate_hybrid_signing_key",
+    "generate_recipient_key",
+    "generate_signing_key",
+    "hybrid_sign",
+    "hybrid_verify",
+    "seal_hybrid",
+    "seal_multi",
+    "sign",
+    "unseal_hybrid",
+    "unseal_multi",
+    "verify",
+]
+

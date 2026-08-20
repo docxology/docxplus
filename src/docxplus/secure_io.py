@@ -65,3 +65,12 @@ def write_secret(path: str | Path, data: bytes | str, *, overwrite: bool = False
 def is_secret_mode(path: str | Path) -> bool:
     """True when ``path`` is readable and writable by its owner and nobody else."""
     return (Path(path).stat().st_mode & 0o777) == SECRET_MODE
+
+
+__all__ = [
+    "SECRET_MODE",
+    "SecretExistsError",
+    "is_secret_mode",
+    "write_secret",
+]
+

@@ -166,7 +166,7 @@ for what confinement does and does not guarantee on each platform.
 
 ### `keygen`
 
-Generate `ed25519` (signing) or `x25519` (recipient) keys. Writes the private key to
+Generate `ed25519` (signing), `x25519` (recipient), `hybrid-recipient`, or `hybrid-signing` keys. Writes the private key to
 the named path and the public key alongside as `<path>.pub`.
 
 The private key is **created at mode 0600**, not written and then tightened, so it

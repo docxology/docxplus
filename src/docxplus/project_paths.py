@@ -38,6 +38,14 @@ def output_dirs() -> dict[str, Path]:
 
 def ensure_output_dirs() -> dict[str, Path]:
     dirs = output_dirs()
-    for path in dirs.values():
-        path.mkdir(parents=True, exist_ok=True)
+    for d in dirs.values():
+        d.mkdir(parents=True, exist_ok=True)
     return dirs
+
+
+__all__ = [
+    "ensure_output_dirs",
+    "output_dirs",
+    "project_root",
+]
+

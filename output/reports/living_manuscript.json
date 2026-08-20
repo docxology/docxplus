@@ -1,13 +1,13 @@
 {
   "document": "/home/trim/Documents/Git/HumOS/projects/platform/hum-docxology/repos/public/docxplus/output/documents/living_manuscript.docx",
-  "size_bytes": 530399,
+  "size_bytes": 545759,
   "opc_valid": true,
   "verify_reproduction": {
     "attested": true,
     "signed": true,
     "verified": true
   },
-  "attested_output_digest": "254eeb7c5814a073\u2026",
+  "attested_output_digest": "4b359ef75be70b16\u2026",
   "reproduced_match": true,
   "toolchain": {
     "python": "3.14.3",

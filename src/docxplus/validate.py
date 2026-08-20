@@ -371,3 +371,14 @@ def _signed_part_names(blob: bytes) -> set[str]:
             continue
         names.add(unquote(uri.split("?", 1)[0]).lstrip("/"))
     return names
+
+
+__all__ = [
+    "ValidationReport",
+    "assert_valid",
+    "check_opc_signature_coverage",
+    "validate_bytes",
+    "validate_odt_bytes",
+    "validate_package",
+]
+

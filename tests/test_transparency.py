@@ -178,7 +178,29 @@ def test_from_json_roundtrips_a_well_formed_log():
     log = _log_with(4)
     restored = TransparencyLog.from_json(log.to_json())
     assert len(restored.entries) == 4
+    assert restored.verify_chain() is True
     assert restored.merkle_tree_root() == log.merkle_tree_root()
+
+
+def test_transparency_empty_log_and_errors():
+    """Cover empty TransparencyLog methods and error conditions."""
+    from docxplus import crypto
+
+    log = TransparencyLog()
+    assert log.verify_chain() is True
+    assert log.merkle_tree_root() == ""
+    proof = log.consistency_proof()
+    assert proof["old_size"] == 0
+    assert proof["prefix_hashes"] == []
+
+    priv, pub = crypto.generate_signing_key()
+    sth = log.signed_tree_head(priv, timestamp=10)
+    assert log.verify_signed_tree_head(sth, expected_public_key=pub) is True
+
+    # Bad proof in verify_consistency
+    assert log.verify_consistency({"bad": "proof"}) is False
+
+
 
 
 # -- append-only consistency --------------------------------------------------

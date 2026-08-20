@@ -113,3 +113,13 @@ def _read_bits(px, width: int, height: int, count: int) -> list[int]:
                 if len(bits) >= count:
                     return bits
     return bits
+
+
+__all__ = [
+    "capacity_bytes",
+    "embed",
+    "extract",
+    "make_carrier",
+]
+
+

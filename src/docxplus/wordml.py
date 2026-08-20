@@ -90,3 +90,20 @@ def new_base_document(
         Relationship("rId2", REL_CORE_PROPS, "docProps/core.xml"), source_part=""
     )
     return pkg
+
+
+__all__ = [
+    "CT_CORE_PROPS",
+    "CT_DOCUMENT",
+    "CT_RELATIONSHIPS",
+    "CT_XML",
+    "NS_OFFICE_REL",
+    "NS_WORDML",
+    "REL_CORE_PROPS",
+    "REL_OFFICE_DOCUMENT",
+    "build_core_props",
+    "build_document_xml",
+    "new_base_document",
+]
+
+

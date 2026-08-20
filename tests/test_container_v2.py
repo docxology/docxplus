@@ -161,3 +161,38 @@ def test_choose_one_sealing_mode():
     _, pub = generate_recipient_key()
     with pytest.raises(ContainerError, match="at most one"):
         DocxPlusBuilder().add_module("x", "package_part", b"y", password="p", recipients=[pub])
+
+
+def test_container_error_branches():
+    """Verify various ContainerError conditions in DocxPlusBuilder and DocxPlusReader."""
+    # Unknown channel
+    with pytest.raises(ContainerError, match="unknown channel"):
+        DocxPlusBuilder().add_module("x", "nonexistent_channel", b"data")
+
+    # Add decoy with unknown channel
+    with pytest.raises(ContainerError, match="unknown channel"):
+        DocxPlusBuilder().add_decoy("d", real=b"r", real_password="rp", decoy=b"d", decoy_password="dp", channel_id="invalid")
+
+    # Add decoy with duplicate slot
+    b = DocxPlusBuilder().add_module("dup", "package_part", b"data")
+    with pytest.raises(ContainerError, match="duplicate slot"):
+        b.add_decoy("dup", real=b"r", real_password="rp", decoy=b"d", decoy_password="dp")
+
+    # Missing intelligence manifest on read
+    from docxplus.wordml import new_base_document
+    plain_docx = new_base_document(["plain"]).to_bytes()
+    with pytest.raises(ContainerError, match="no intelligence manifest"):
+        DocxPlusReader.from_bytes(plain_docx)
+
+    # Missing credentials on unseal
+    b = DocxPlusBuilder()
+    priv, pub = generate_recipient_key()
+    b.add_module("recip", "package_part", b"secret", recipients=[pub])
+    b.add_module("pass", "package_part", b"secret", password="pw")
+    reader = DocxPlusReader.from_bytes(b.build())
+
+    with pytest.raises(ContainerError, match="needs a password"):
+        reader.extract("pass")
+    with pytest.raises(ContainerError, match="needs a recipient private key"):
+        reader.extract("recip")
+

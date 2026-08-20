@@ -43,8 +43,18 @@ def _cmd_build(args: argparse.Namespace) -> int:
             seal["recipient_padding"] = args.pad_recipients
 
     for spec in args.module or []:
-        slot, channel, src = spec.split(":", 2)
-        payload = Path(src).read_bytes()
+        parts = spec.split(":", 2)
+        if len(parts) != 3:
+            sys.stderr.write(
+                f"error: invalid --module format {spec!r}; expected SLOT:CHANNEL:FILE\n"
+            )
+            return 2
+        slot, channel, src = parts
+        src_path = Path(src)
+        if not src_path.is_file():
+            sys.stderr.write(f"error: module file not found: {src!r}\n")
+            return 2
+        payload = src_path.read_bytes()
         if threshold:
             builder.add_threshold(slot, payload, k=threshold[0], n=threshold[1], channel_id=channel)
         else:
@@ -52,14 +62,39 @@ def _cmd_build(args: argparse.Namespace) -> int:
                                kdf=args.kdf, **seal)
 
     for spec in args.project or []:
-        slot, path = spec.split(":", 1)
+        parts = spec.split(":")
+        if len(parts) != 2:
+            sys.stderr.write(
+                f"error: invalid --project format {spec!r}; expected SLOT:DIR\n"
+            )
+            return 2
+        slot, path = parts
+        if not Path(path).is_dir():
+            sys.stderr.write(f"error: project directory not found: {path!r}\n")
+            return 2
         # A project ships its own .docxplus-reproduce.json when --attest is set.
         builder.add_project(slot, path, reproduce=args.attest or None, kdf=args.kdf, **seal)
 
     if args.signing_key:
-        builder.sign(bytes.fromhex(Path(args.signing_key).read_text().strip()))
+        key_path = Path(args.signing_key)
+        if not key_path.is_file():
+            sys.stderr.write(f"error: signing key file not found: {args.signing_key!r}\n")
+            return 2
+        try:
+            builder.sign(bytes.fromhex(key_path.read_text().strip()))
+        except ValueError as exc:
+            sys.stderr.write(f"error: invalid hex signing key in {args.signing_key!r}: {exc}\n")
+            return 2
     for keyfile in args.cosign or []:
-        builder.add_cosigner(bytes.fromhex(Path(keyfile).read_text().strip()))
+        kf_path = Path(keyfile)
+        if not kf_path.is_file():
+            sys.stderr.write(f"error: cosigner key file not found: {keyfile!r}\n")
+            return 2
+        try:
+            builder.add_cosigner(bytes.fromhex(kf_path.read_text().strip()))
+        except ValueError as exc:
+            sys.stderr.write(f"error: invalid hex cosigner key in {keyfile!r}: {exc}\n")
+            return 2
 
     data = builder.build()
     written = write_document(data, args.output)
@@ -98,15 +133,38 @@ def _cmd_graph(args: argparse.Namespace) -> int:
 
 
 def _cmd_extract(args: argparse.Namespace) -> int:
-    reader = DocxPlusReader.from_bytes(Path(args.docx).read_bytes())
+    try:
+        reader = DocxPlusReader.from_bytes(Path(args.docx).read_bytes())
+    except Exception as exc:
+        sys.stderr.write(f"error: failed to open document {args.docx!r}: {exc}\n")
+        return 1
     creds = {}
     if args.password:
         creds["password"] = args.password
     if args.private_key:
-        creds["private_key"] = bytes.fromhex(Path(args.private_key).read_text().strip())
+        pk_path = Path(args.private_key)
+        if not pk_path.is_file():
+            sys.stderr.write(f"error: private key file not found: {args.private_key!r}\n")
+            return 2
+        try:
+            creds["private_key"] = bytes.fromhex(pk_path.read_text().strip())
+        except ValueError as exc:
+            sys.stderr.write(f"error: invalid hex private key in {args.private_key!r}: {exc}\n")
+            return 2
     if args.share:
-        creds["shares"] = [Path(p).read_bytes() for p in args.share]
-    data = reader.extract(args.slot, **creds)
+        shares = []
+        for p in args.share:
+            sh_path = Path(p)
+            if not sh_path.is_file():
+                sys.stderr.write(f"error: share file not found: {p!r}\n")
+                return 2
+            shares.append(sh_path.read_bytes())
+        creds["shares"] = shares
+    try:
+        data = reader.extract(args.slot, **creds)
+    except Exception as exc:
+        sys.stderr.write(f"error: extraction failed: {exc}\n")
+        return 1
     if args.out:
         write_secret(args.out, data, overwrite=True)
         print(f"wrote {args.out} ({len(data)} bytes, mode 0600)")
@@ -245,8 +303,18 @@ def _cmd_odt_build(args: argparse.Namespace) -> int:
             seal["recipient_padding"] = args.pad_recipients
 
     for spec in args.module or []:
-        slot, src = spec.split(":", 1)
-        payload = Path(src).read_bytes()
+        parts = spec.split(":")
+        if len(parts) != 2:
+            sys.stderr.write(
+                f"error: invalid --module format {spec!r}; expected SLOT:FILE\n"
+            )
+            return 2
+        slot, src = parts
+        src_path = Path(src)
+        if not src_path.is_file():
+            sys.stderr.write(f"error: module file not found: {src!r}\n")
+            return 2
+        payload = src_path.read_bytes()
         if threshold:
             builder.add_threshold(slot, payload, k=threshold[0], n=threshold[1])
         else:
@@ -254,9 +322,25 @@ def _cmd_odt_build(args: argparse.Namespace) -> int:
                                kdf=args.kdf, **seal)
 
     if args.signing_key:
-        builder.sign(bytes.fromhex(Path(args.signing_key).read_text().strip()))
+        key_path = Path(args.signing_key)
+        if not key_path.is_file():
+            sys.stderr.write(f"error: signing key file not found: {args.signing_key!r}\n")
+            return 2
+        try:
+            builder.sign(bytes.fromhex(key_path.read_text().strip()))
+        except ValueError as exc:
+            sys.stderr.write(f"error: invalid hex signing key in {args.signing_key!r}: {exc}\n")
+            return 2
     for keyfile in args.cosign or []:
-        builder.add_cosigner(bytes.fromhex(Path(keyfile).read_text().strip()))
+        kf_path = Path(keyfile)
+        if not kf_path.is_file():
+            sys.stderr.write(f"error: cosigner key file not found: {keyfile!r}\n")
+            return 2
+        try:
+            builder.add_cosigner(bytes.fromhex(kf_path.read_text().strip()))
+        except ValueError as exc:
+            sys.stderr.write(f"error: invalid hex cosigner key in {keyfile!r}: {exc}\n")
+            return 2
 
     written = write_document(builder.build(), args.output)
     if threshold and builder.threshold_shares:
@@ -285,15 +369,38 @@ def _cmd_odt_inspect(args: argparse.Namespace) -> int:
 def _cmd_odt_extract(args: argparse.Namespace) -> int:
     from .odt_container import OdtPlusReader
 
-    reader = OdtPlusReader.from_bytes(Path(args.odt).read_bytes())
+    try:
+        reader = OdtPlusReader.from_bytes(Path(args.odt).read_bytes())
+    except Exception as exc:
+        sys.stderr.write(f"error: failed to open ODT document {args.odt!r}: {exc}\n")
+        return 1
     creds = {}
     if args.password:
         creds["password"] = args.password
     if args.private_key:
-        creds["private_key"] = bytes.fromhex(Path(args.private_key).read_text().strip())
+        pk_path = Path(args.private_key)
+        if not pk_path.is_file():
+            sys.stderr.write(f"error: private key file not found: {args.private_key!r}\n")
+            return 2
+        try:
+            creds["private_key"] = bytes.fromhex(pk_path.read_text().strip())
+        except ValueError as exc:
+            sys.stderr.write(f"error: invalid hex private key in {args.private_key!r}: {exc}\n")
+            return 2
     if args.share:
-        creds["shares"] = [Path(p).read_bytes() for p in args.share]
-    data = reader.extract(args.slot, **creds)
+        shares = []
+        for p in args.share:
+            sh_path = Path(p)
+            if not sh_path.is_file():
+                sys.stderr.write(f"error: share file not found: {p!r}\n")
+                return 2
+            shares.append(sh_path.read_bytes())
+        creds["shares"] = shares
+    try:
+        data = reader.extract(args.slot, **creds)
+    except Exception as exc:
+        sys.stderr.write(f"error: extraction failed: {exc}\n")
+        return 1
     if args.out:
         write_secret(args.out, data, overwrite=True)
         print(f"wrote {args.out} ({len(data)} bytes, mode 0600)")
@@ -438,6 +545,12 @@ def _cmd_scan(args: argparse.Namespace) -> int:
 def _cmd_keygen(args: argparse.Namespace) -> int:
     if args.type == "x25519":
         priv, pub = crypto.generate_recipient_key()
+    elif args.type == "hybrid-recipient":
+        kp = crypto.generate_hybrid_recipient_key()
+        priv, pub = kp.classical_priv + kp.pq_priv, kp.public_bytes
+    elif args.type == "hybrid-signing":
+        kp = crypto.generate_hybrid_signing_key()
+        priv, pub = kp.classical_priv + kp.pq_priv, kp.public_bytes
     else:
         priv, pub = crypto.generate_signing_key()
     try:
@@ -608,9 +721,13 @@ def main(argv: list[str] | None = None) -> int:
     sc.add_argument("--strict", action="store_true", help="exit nonzero / refuse on any threat")
     sc.set_defaults(func=_cmd_scan)
 
-    k = sub.add_parser("keygen", help="generate a signing (ed25519) or recipient (x25519) key")
+    k = sub.add_parser("keygen", help="generate a signing (ed25519), recipient (x25519), or hybrid key")
     k.add_argument("output")
-    k.add_argument("--type", choices=["ed25519", "x25519"], default="ed25519")
+    k.add_argument(
+        "--type",
+        choices=["ed25519", "x25519", "hybrid-recipient", "hybrid-signing"],
+        default="ed25519",
+    )
     k.set_defaults(func=_cmd_keygen)
 
     args = parser.parse_args(argv)

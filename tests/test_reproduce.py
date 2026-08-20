@@ -10,6 +10,7 @@ Plus the load-bearing security invariant: nothing executes without allow_executi
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import sys
 
 import pytest
@@ -23,7 +24,7 @@ from docxplus.reproduce import ReproSpec
 PY = sys.executable
 
 
-def _make_repro_project(root, sum_offset: int = 0) -> object:
+def _make_repro_project(root: Path, sum_offset: int = 0) -> Path:
     """A tiny deterministic template_code_project-style project."""
     (root / "src").mkdir(parents=True)
     (root / "src" / "compute.py").write_text(
@@ -194,8 +195,43 @@ def test_reproduce_timeout_kills_and_raises(tmp_path):
         reproduce.run_and_digest(proj, spec)
 
 
+def test_hermetic_extract_and_reproduce(tmp_path):
+    proj = Path(_make_repro_project(tmp_path / "proj"))
+    from docxplus.payloads import pack_project
+
+    packed = pack_project(proj)
+    recipe = reproduce.load_recipe(proj)
+    assert recipe is not None
+    attestation = reproduce.attest(proj, recipe)
+
+    # Without allow_execution=True, raises ReproError
+    with pytest.raises(reproduce.ReproError, match="allow_execution"):
+        reproduce.hermetic_extract_and_reproduce(packed, attestation, allow_execution=False)
+
+    # With allow_execution=True, runs hermetically in temporary sandbox and matches
+    res = reproduce.hermetic_extract_and_reproduce(packed, attestation, allow_execution=True)
+    assert res["match"] is True
+
+
+
 # -- v0.6.2: sandbox profile construction ------------------------------------
 
+
+def test_reproduce_helpers_coverage(tmp_path):
+    """Cover ReproSpec dictionary serialization and sandbox wrapper on Linux/fallback."""
+    spec = reproduce.ReproSpec(command=["python", "main.py"], outputs=["out.txt"], timeout=60)
+    d = spec.to_dict()
+    assert d["command"] == ["python", "main.py"]
+    assert d["timeout"] == 60
+
+    # Wildcard checks
+    assert reproduce._is_wildcard("*.txt") is True
+    assert reproduce._is_wildcard("file.txt") is False
+
+    # Sandbox wrap fallback / Linux
+    wrapped = reproduce._sandbox_wrap(["echo", "1"], tmp_path)
+    assert isinstance(wrapped, list)
+    assert len(wrapped) >= 2
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="seatbelt profile is macOS-only")
 def test_sandbox_profile_refuses_an_unquotable_project_path(tmp_path):

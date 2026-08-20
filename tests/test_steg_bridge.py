@@ -255,3 +255,16 @@ def test_steganalysis_report_runs_without_the_rust_toolchain(tmp_path, monkeypat
     assert report["external_analysis"] is None
     assert report["suspicious"] is True
     assert report["chi_square"]["p_embedding"] > steg_bridge.SUSPICION_THRESHOLD
+
+
+def test_steg_bridge_gamma_and_tool_not_found(tmp_path):
+    """Cover incomplete gamma edge cases and missing tool branches."""
+    # Test lower gamma and upper gamma evaluation directly
+    assert steg_bridge._lower_gamma_series(1.0, 0.5) > 0.0
+    assert steg_bridge._upper_gamma_cf(1.0, 100.0) >= 0.0
+
+    # Test StegTool run failure when executable doesn't exist
+    fake_tool = steg_bridge.StegTool(argv_prefix=("/nonexistent/steganographer-cli",), cwd=None, kind="binary")
+    with pytest.raises(steg_bridge.StegError, match="cannot execute"):
+        steg_bridge._run(fake_tool, ["analyze", str(tmp_path / "c.png")])
+

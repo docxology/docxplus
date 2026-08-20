@@ -73,13 +73,16 @@ def available(repo: Path | None = None) -> bool:
 
 
 def _run(tool: StegTool, args: list[str], timeout: int = 600) -> subprocess.CompletedProcess:
-    proc = subprocess.run(
-        [*tool.argv_prefix, *args],
-        cwd=str(tool.cwd) if tool.cwd else None,
-        capture_output=True,
-        timeout=timeout,
-        check=False,
-    )
+    try:
+        proc = subprocess.run(
+            [*tool.argv_prefix, *args],
+            cwd=str(tool.cwd) if tool.cwd else None,
+            capture_output=True,
+            timeout=timeout,
+            check=False,
+        )
+    except (FileNotFoundError, PermissionError, OSError) as exc:
+        raise StegError(f"cannot execute steganographer tool {tool.argv_prefix!r}: {exc}") from exc
     if proc.returncode != 0:
         raise StegError(
             f"steganographer {args[0]} failed (exit {proc.returncode}): "
@@ -375,3 +378,20 @@ def analyze_carrier(
         return json.loads(proc.stdout.decode("utf-8"))
     except Exception as exc:
         raise StegError(f"failed to parse analyze output: {exc}") from exc
+
+
+__all__ = [
+    "SUSPICION_THRESHOLD",
+    "StegError",
+    "StegTool",
+    "analyze_carrier",
+    "available",
+    "chi_square_lsb",
+    "chi_square_sf",
+    "chi_square_sweep",
+    "embed_payload",
+    "extract_payload",
+    "locate",
+    "steganalysis_report",
+]
+

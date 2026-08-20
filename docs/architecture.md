@@ -24,7 +24,7 @@ L6  orchestration src/docxplus/cli.py • scripts/*
 | Module | Layer | Responsibility |
 | --- | --- | --- |
 | `opc.py` | L0 | OPC package model + deterministic ZIP; intake caps (bomb/entry/collision) |
-| `crypto.py` | L0 | Argon2id/Scrypt/PBKDF2 KDFs (work-factor **and** memory capped), AES-GCM (DXE1), X25519 multi-recipient (DXE2), Ed25519, digests |
+| `crypto.py` | L0 | Argon2id/Scrypt/PBKDF2 KDFs (work-factor **and** memory capped), AES-GCM (DXE1), X25519 multi-recipient (DXE2), post-quantum hybrid KEM/signing (DXE3), Ed25519, digests |
 | `shamir.py` | L0 | k-of-n secret sharing over GF(256); VSS commitment tags with downgrade-resistant verification |
 | `lsb.py` | L0 | pure-Python LSB stego codec |
 | `provenance.py` | L0 | Merkle root (RFC 6962 splitting) + inclusion proofs over the module set |

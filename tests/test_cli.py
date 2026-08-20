@@ -81,3 +81,23 @@ def test_encrypted_build_and_extract(tmp_path):
     ok = _run(["extract", str(docx), "s", "--out", str(out), "--password", "pw"])
     assert ok.returncode == 0
     assert out.read_bytes() == b"top secret"
+
+
+def test_cli_scan_and_verify_commands(tmp_path):
+    docx = tmp_path / "doc.docx"
+    _run(["build", str(docx), "--text", "Clean Document"])
+    scan_res = _run(["scan", str(docx)])
+    assert scan_res.returncode == 0
+    assert '"ok": true' in scan_res.stdout
+
+    odt = tmp_path / "doc.odt"
+    _run(["odt-build", str(odt), "--text", "Clean ODT"])
+    odt_scan_res = _run(["odt-scan", str(odt)])
+    assert odt_scan_res.returncode == 0
+    assert '"ok": true' in odt_scan_res.stdout
+
+    # Verify command unauthenticated warning exit
+    verify_res = _run(["verify", str(docx)])
+    assert verify_res.returncode == 1
+    assert "no --expected-key" in verify_res.stdout
+

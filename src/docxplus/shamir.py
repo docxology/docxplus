@@ -194,3 +194,58 @@ def _lagrange_at_zero(xs: list[int], ys: list[int]) -> int:
             den = _gmul(den, xi ^ xj)     # (xi - xj) == xi ^ xj
         total ^= _gmul(ys[i], _gdiv(num, den))
     return total
+
+
+def split_weighted(
+    secret: bytes, threshold_weight: int, weights: list[int], *, verifiable: bool = False
+) -> list[list[bytes]]:
+    """Split ``secret`` among custodians with integer weights.
+
+    Each custodian receives ``weights[i]`` basic shares from an underlying Shamir
+    scheme with ``k = threshold_weight`` and ``n = sum(weights)``.
+    Any quorum of custodians whose total weight >= threshold_weight can reconstruct.
+    """
+    if threshold_weight < 1:
+        raise ValueError("threshold_weight must be >= 1")
+    if not weights or any(w < 1 for w in weights):
+        raise ValueError("weights must be non-empty and all >= 1")
+    total_n = sum(weights)
+    if threshold_weight > total_n:
+        raise ValueError(f"threshold_weight {threshold_weight} exceeds total weight {total_n}")
+    if total_n > MAX_X:
+        raise ValueError(f"total weight {total_n} exceeds maximum allowed shares ({MAX_X})")
+
+    all_shares = split(secret, threshold_weight, total_n, verifiable=verifiable)
+    custodian_shares: list[list[bytes]] = []
+    idx = 0
+    for w in weights:
+        custodian_shares.append(all_shares[idx : idx + w])
+        idx += w
+    return custodian_shares
+
+
+def combine_weighted(
+    custodian_shares: list[list[bytes]], *, require_verifiable: bool = False, expected_secret: bytes | None = None
+) -> bytes:
+    """Reconstruct secret from a collection of custodian shares in a weighted scheme."""
+    flat_shares: list[bytes] = []
+    for sh_group in custodian_shares:
+        flat_shares.extend(sh_group)
+    if not flat_shares:
+        raise ValueError("need at least one share")
+    res = combine(flat_shares, require_verifiable=require_verifiable)
+    return res
+
+
+__all__ = [
+    "MAX_X",
+    "VSS_MAGIC",
+    "combine",
+    "combine_weighted",
+    "is_verifiable",
+    "split",
+    "split_weighted",
+    "verify_share",
+]
+
+
