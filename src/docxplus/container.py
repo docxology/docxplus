@@ -166,6 +166,7 @@ class DocxPlusBuilder:
         channel_id: str = "package_part",
         reproduce: object | bool | None = None,
         follow_symlinks: bool = False,
+        max_uncompressed: int | None = None,
         **seal,
     ) -> DocxPlusBuilder:
         """Pack an entire directory tree and carry it as a ``project`` module.
@@ -174,9 +175,17 @@ class DocxPlusBuilder:
         pass a ``reproduce.ReproSpec``, or ``True`` to load the project's own
         ``.docxplus-reproduce.json`` recipe. The recipe is executed once now and its
         signed attestation travels in the manifest. Nothing is executed on read.
+
+        ``max_uncompressed=None`` uses the format default cap
+        (``payloads.MAX_PROJECT_UNCOMPRESSED``); an over-cap tree is refused here,
+        at authoring time, rather than discovered to be unextractable at read time.
+        Pass a number deliberately to raise the budget for this one document.
         """
         project_dir = Path(project_dir)
-        blob = payloads.pack_project(project_dir, follow_symlinks=follow_symlinks)
+        pack_kw: dict[str, object] = {"follow_symlinks": follow_symlinks}
+        if max_uncompressed is not None:
+            pack_kw["max_uncompressed"] = max_uncompressed
+        blob = payloads.pack_project(project_dir, **pack_kw)
         self.add_module(slot, channel_id, blob, payload_type="project", **seal)
         if reproduce is not None and reproduce is not False:
             import tempfile

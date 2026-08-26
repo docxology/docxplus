@@ -401,3 +401,35 @@ def test_the_template_roundtrip_report_records_a_real_external_project():
     dispatched = {c["name"] for c in report["checks"] if c["name"].startswith("dispatch.")}
     assert dispatched == {"dispatch.docx", "dispatch.docxplus",
                           "dispatch.odt", "dispatch.odtplus"}
+
+
+def test_add_project_refuses_oversized_tree_at_authoring_time_both_profiles(tmp_path):
+    """The refusal must reach the builder API, not only payloads.pack_project.
+
+    A tree over the decompression cap used to seal happily into a signed, validated
+    document whose payload could never be extracted. Both profiles share one sealing
+    lineage, so both must refuse at authoring time — and a deliberately raised
+    max_uncompressed must be honoured by both, symmetric with unpack.
+    """
+    from docxplus.container import DocxPlusBuilder, DocxPlusReader
+    from docxplus.odt_container import OdtPlusBuilder, OdtPlusReader
+
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "blob.bin").write_bytes(b"\0" * 1000)
+
+    cases = (
+        (DocxPlusBuilder, DocxPlusReader),
+        (OdtPlusBuilder, OdtPlusReader),
+    )
+    for builder_cls, reader_cls in cases:
+        b = builder_cls(paragraphs=["cover"], title="t")
+        with pytest.raises(ValueError, match="decompression cap"):
+            b.add_project("p", proj, max_uncompressed=500)
+
+        raised = builder_cls(paragraphs=["cover"], title="t")
+        raised.add_project("p", proj, max_uncompressed=2000)
+        extracted_dir = tmp_path / f"out_{builder_cls.__name__}"
+        extracted_dir.mkdir()
+        reader_cls.from_bytes(raised.build()).extract_project("p", extracted_dir)
+        assert (extracted_dir / "blob.bin").read_bytes() == b"\0" * 1000
