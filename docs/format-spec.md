@@ -206,6 +206,17 @@ would ship that key inside the document with nothing to indicate it. Packing rai
 unless the caller passes `follow_symlinks=True`, which makes the decision explicit and
 reviewable. Unpacking rejects link members unconditionally.
 
+**Refused** — a tree whose inflated size exceeds the decompression-bomb cap
+(`MAX_PROJECT_UNCOMPRESSED`, 512 MiB; adjustable per call via
+`pack_project(..., max_uncompressed=N)`). `unpack_project` has always refused to
+inflate past the cap — the archive is untrusted input there — and packing now runs
+the same accounting over what it would actually carry (after policy exclusions and
+symlink refusal), naming the heaviest members in the error. A cap that fired only on
+extraction left the failure far from its cause: an oversized tree sealed cleanly into
+a signed, validated document whose payload could never be extracted anywhere.
+Raising the budget for one call is explicit at both ends: pass the same
+`max_uncompressed=...` to pack and unpack, and review sees it twice.
+
 **Excluded by policy**, in two tiers, because where a name appears decides whether
 it means anything:
 

@@ -7,6 +7,21 @@ Findings referenced by number are recorded in full in [`docs/redteam-audit.md`](
 
 ## [Unreleased]
 
+### Fixed
+
+- **`pack_project` accepted trees whose inflated size `unpack_project` refuses**
+  (a limitation recorded in TODO since v1.0.0). Packing ran no size accounting, so
+  a tree over the decompression-bomb cap sealed cleanly into a signed, validated
+  document whose payload could never be extracted — the failure surfaced at read
+  time on another machine instead of at authoring time where the cause was.
+  `pack_project` now measures what it would actually carry (after policy
+  exclusions and symlink refusal) against the same cap `unpack_project` enforces,
+  raises `ProjectPackError` naming the heaviest members when over it, and accepts
+  `max_uncompressed=N` so a deliberately larger budget is explicit at both ends
+  of the round trip. Contract restated in `docs/format-spec.md` §8.1; pinned by
+  pack-side tests in `tests/test_payloads.py`, including the symmetry property:
+  whatever pack accepts under N, unpack accepts under the same N.
+
 ## [1.0.1] — 2026-08-17
 
 ### Fixed
