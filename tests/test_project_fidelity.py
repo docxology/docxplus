@@ -101,10 +101,16 @@ def test_packing_is_deterministic_across_a_time_boundary(tmp_path, monkeypatch):
 
 
 def test_pack_project_size_cap(tmp_path):
+    """A tree over max_uncompressed is refused at pack time, naming the heaviest members.
+
+    Both halves matter: the refusal fires at authoring time (so an over-cap tree
+    can never seal into an unextractable document), and the message says what to
+    shrink rather than merely that something failed.
+    """
     root = _tree(tmp_path / "proj")
-    # packing with tiny max_uncompressed raises ProjectPackError
-    with pytest.raises(payloads.ProjectPackError, match="exceeds limit"):
+    with pytest.raises(payloads.ProjectPackError, match="over the 10-byte decompression cap") as info:
         payloads.pack_project(root, max_uncompressed=10)
+    assert "largest members" in str(info.value)
 
 
 def test_junk_directories_are_excluded(tmp_path):
