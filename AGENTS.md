@@ -28,7 +28,8 @@ This one holds only what is true everywhere.
 uv venv && uv pip install -e '.[dev,media,figures]'   # install all three extras
 ./run.sh                        # preflight, tests, build, dossier, round trips, render, living
 ./run.sh help                   # the stage list, generated from the driver itself
-uvx ruff check src scripts tests            # CI's first gate — run it before committing
+uv run ruff check src scripts tests          # CI's first gate — run it before committing
+                                             # (ruff is pinned in the dev extra; bump deliberately)
 .venv/bin/python -m pytest --cov=src -q               # tests + the 90% gate
 uv run docxplus --help                                # the CLI
 ```

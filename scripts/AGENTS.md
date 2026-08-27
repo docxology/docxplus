@@ -22,7 +22,9 @@ stdout. They contain **no business logic**. The inventory is in
   anything a test or a reader will compare.
 - Print the paths you wrote. That output is the interface — `run.sh` composes stages,
   and a stage that writes silently is a stage nobody can verify.
-- Ruff clean: CI runs `uvx ruff check src scripts tests` before the tests.
+- Ruff clean: CI runs `uvx ruff check src scripts tests` before the tests; ruff is
+  pinned in the `dev` extra (`uv run ruff check src scripts tests`) so local and CI
+  judge the same code.
 
 ## Adding a stage
 
