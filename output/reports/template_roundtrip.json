@@ -21,7 +21,7 @@
       "ok": true
     },
     {
-      "detail": "{\"files_compared\": 128, \"missing\": [], \"unexpected\": [], \"content_mismatches\": [], \"executable_bit_mismatches\": [], \"identical\": true}",
+      "detail": "{\"files_compared\": 126, \"missing\": [], \"unexpected\": [], \"content_mismatches\": [], \"executable_bit_mismatches\": [], \"identical\": true}",
       "name": "docxplus.roundtrip_identical",
       "ok": true
     },
@@ -46,7 +46,7 @@
       "ok": true
     },
     {
-      "detail": "{\"files_compared\": 128, \"missing\": [], \"unexpected\": [], \"content_mismatches\": [], \"executable_bit_mismatches\": [], \"identical\": true}",
+      "detail": "{\"files_compared\": 126, \"missing\": [], \"unexpected\": [], \"content_mismatches\": [], \"executable_bit_mismatches\": [], \"identical\": true}",
       "name": "odtplus.roundtrip_identical",
       "ok": true
     },
@@ -79,42 +79,42 @@
   "failures": [],
   "formats": {
     "docx": {
-      "bytes": 320524,
+      "bytes": 260882,
       "comparison": {
         "content_mismatches": [],
         "executable_bit_mismatches": [],
-        "files_compared": 128,
+        "files_compared": 126,
         "identical": true,
         "missing": [],
         "unexpected": []
       },
       "paths": [
-        "/home/trim/Documents/Git/HumOS/projects/platform/hum-docxology/repos/public/docxplus/output/documents/template_code_project.docx",
-        "/home/trim/Documents/Git/HumOS/projects/platform/hum-docxology/repos/public/docxplus/output/documents/template_code_project.docxplus"
+        "/Volumes/external_drive/Git/projects/ongoing/DAF/docxplus/output/documents/template_code_project.docx",
+        "/Volumes/external_drive/Git/projects/ongoing/DAF/docxplus/output/documents/template_code_project.docxplus"
       ]
     },
     "odt": {
-      "bytes": 320044,
+      "bytes": 260680,
       "comparison": {
         "content_mismatches": [],
         "executable_bit_mismatches": [],
-        "files_compared": 128,
+        "files_compared": 126,
         "identical": true,
         "missing": [],
         "unexpected": []
       },
       "paths": [
-        "/home/trim/Documents/Git/HumOS/projects/platform/hum-docxology/repos/public/docxplus/output/documents/template_code_project.odt",
-        "/home/trim/Documents/Git/HumOS/projects/platform/hum-docxology/repos/public/docxplus/output/documents/template_code_project.odtplus"
+        "/Volumes/external_drive/Git/projects/ongoing/DAF/docxplus/output/documents/template_code_project.odt",
+        "/Volumes/external_drive/Git/projects/ongoing/DAF/docxplus/output/documents/template_code_project.odtplus"
       ]
     }
   },
   "ok": true,
   "project": {
     "directories": 13,
-    "files_carried": 128,
+    "files_carried": 126,
     "has_executable": true
   },
-  "project_payload_digest": "5d64d81dd4f49eae0d912c6cae8126242ddd2a06f416bc970c83e49c1c544b30",
-  "source": "/home/trim/Documents/Git/HumOS/projects/platform/hum-docxology/repos/public/template/projects/templates/template_code_project"
+  "project_payload_digest": "40971fe0b8e23654b8bf9ba20870a2f95a434857b1803d692c829335330c4db6",
+  "source": "/Users/4d/Documents/GitHub/template/projects/templates/template_code_project"
 }
