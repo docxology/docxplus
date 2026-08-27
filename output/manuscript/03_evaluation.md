@@ -35,7 +35,7 @@ All 5 modules extract and verify:
 - **Reproducibility.** Carried `project` tarballs unpack without path traversal, and reproduction
   attestations verify cryptographically.
 
-The harness comprises 496 test functions under a 90% coverage gate, with no mocks
+The harness comprises 501 test functions under a 90% coverage gate, with no mocks
 anywhere: tests run against real cryptographic primitives, real ZIP archives, real subprocess CLI
 invocations, and the compiled Rust steganography engine when it is present.
 
