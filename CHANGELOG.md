@@ -9,6 +9,27 @@ Findings referenced by number are recorded in full in [`docs/redteam-audit.md`](
 
 ### Fixed
 
+- **CI's first lint gate was red on `ruff` 0.16.5.** `uvx ruff check src scripts
+  tests` — the gate CI runs before the test suite — reported 53 findings on
+  pristine HEAD (they had accumulated across ruff releases against an unpinned
+  gate). All 53 fixed at the root: three shebang scripts made executable
+  (EXE001); blind `pytest.raises(Exception)` assertions narrowed to the actual
+  contract exceptions (`ContainerError`, `ValueError`, `IntakeError`,
+  `TypeError`); CLI-boundary and multi-recipient trial handlers annotated with
+  justified `noqa`; every `subprocess.run` given an explicit `check=`;
+  `SOURCE_DATE_EPOCH` dates now timezone-aware UTC (DTZ); tuple
+  `startswith`/`endswith` merges, a collapsed nested `if`, a direct boolean
+  return, `next()` over `[0]`, and unused-unpack renames. Verified green:
+  `uvx ruff check src scripts tests` and the full suite (643 passed) afterwards.
+
+### Changed
+
+- **ruff is pinned (`ruff==0.16.5`) in the `dev` extra.** CI's `uvx ruff check`
+  is unpinned, so every ruff release re-litigated the same findings against
+  pristine HEAD — the failure mode the 2026-08-26 state report flagged. Local
+  `uv run ruff check src scripts tests` and CI now judge the same code; bumps
+  are deliberate, one triage per version.
+
 - **`pack_project` accepted trees whose inflated size `unpack_project` refuses**
   (a limitation recorded in TODO since v1.0.0). Packing ran no size accounting, so
   a tree over the decompression-bomb cap sealed cleanly into a signed, validated
