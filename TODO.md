@@ -28,6 +28,13 @@ Active engineering and research backlog.
   - Differential fuzzing between DOCX (OPC) and ODT (ODF) parsers.
   - Malformed XML, zip bomb, cyclic relationship, truncated encryption envelope, and corrupted stego-carrier fuzz targets.
 
+## Maintenance
+
+- [x] Pin the lint gate: `ruff==0.16.5` in the `dev` extra; CI's unpinned
+      `uvx ruff check src scripts tests` had drifted to 53 findings on pristine
+      HEAD. All 53 fixed (2026-08-27); `uv run ruff check src scripts tests`
+      and CI now judge the same pinned toolchain. Bumps are deliberate.
+
 ## Format & Extended Backlog
 - [ ] Whole-package OPC digital signature *production* (Digital Signature Origin
       part), per standards-report §8.1. **Assessed, not scheduled** — see
