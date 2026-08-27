@@ -10,13 +10,13 @@ data. We base64-encode the payload into a single named ``lpwstr`` property.
 from __future__ import annotations
 
 import base64
-
 from xml.sax.saxutils import escape, quoteattr
+
 from defusedxml.ElementTree import fromstring as _safe_fromstring
 
-from .base import ChannelRecord
 from ..crypto import digest as _digest
 from ..opc import OpcPackage, Relationship
+from .base import ChannelRecord
 
 CT_CUSTOM_PROPS = (
     "application/vnd.openxmlformats-officedocument.custom-properties+xml"
@@ -106,9 +106,9 @@ __all__ = [
     "CT_CUSTOM_PROPS",
     "CUSTOM_PART",
     "MAX_PAYLOAD",
-    "MetadataChannel",
     "NS_CUSTOM",
     "NS_VT",
     "REL_CUSTOM_PROPS",
+    "MetadataChannel",
 ]
 

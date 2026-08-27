@@ -14,6 +14,7 @@ from __future__ import annotations
 import io
 import os
 import zipfile
+
 import pytest
 
 from docxplus import (
@@ -24,7 +25,7 @@ from docxplus import (
     validate_odt_bytes,
 )
 from docxplus.container import ContainerError
-from docxplus.intake import IntakePolicy, safe_open
+from docxplus.intake import IntakeError, IntakePolicy, safe_open
 from docxplus.opc import read_package
 
 
@@ -41,7 +42,7 @@ def test_fuzz_truncated_dxe1_envelopes():
 def test_fuzz_corrupted_dxe2_multi_recipient():
     """Fuzz corrupted and bit-flipped DXE2 multi-recipient envelopes."""
     priv1, pub1 = crypto.generate_recipient_key()
-    priv2, pub2 = crypto.generate_recipient_key()
+    _priv2, pub2 = crypto.generate_recipient_key()
     envelope = crypto.seal_multi(b"confidential data", [pub1, pub2], aad=b"slot_mr")
 
     # Corrupting critical header fields or ciphertext guarantees decryption failure
@@ -163,5 +164,5 @@ def test_fuzz_intake_threat_combinations():
     assert len(report.macro_parts) > 0
 
     # Strict mode raises IntakeError
-    with pytest.raises(Exception):
+    with pytest.raises(IntakeError):
         safe_open(pkg.to_bytes(), policy=IntakePolicy(strict=True))

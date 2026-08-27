@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+
 # src/docxplus/project_paths.py -> src/docxplus -> src -> repo root.
 # Counting parents is brittle across a package move (this file gained a level when
 # the modules were namespaced), so the root is identified by what a checkout

@@ -10,14 +10,13 @@ part is always well-formed XML.
 from __future__ import annotations
 
 import base64
-
 from xml.sax.saxutils import quoteattr
 
 from defusedxml.ElementTree import fromstring as _safe_fromstring
 
-from .base import ChannelRecord
 from ..crypto import digest as _digest
 from ..opc import OpcPackage, Relationship
+from .base import ChannelRecord
 
 CT_CUSTOM_XML = "application/xml"
 REL_CUSTOM_XML = (
@@ -65,8 +64,8 @@ class CustomXmlChannel:
 
 __all__ = [
     "CT_CUSTOM_XML",
-    "CustomXmlChannel",
     "REL_CUSTOM_XML",
+    "CustomXmlChannel",
 ]
 
 

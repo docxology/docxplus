@@ -95,7 +95,7 @@ def test_threshold_module():
     reader = DocxPlusReader.from_bytes(data)
     assert reader.extract("legacy", shares=shares[:3]) == b"the vault combination"
     # Below quorum must not recover the secret.
-    with pytest.raises(Exception):
+    with pytest.raises(ContainerError):
         reader.extract("legacy", shares=shares[:2])
 
 
@@ -186,7 +186,7 @@ def test_container_error_branches():
 
     # Missing credentials on unseal
     b = DocxPlusBuilder()
-    priv, pub = generate_recipient_key()
+    _priv, pub = generate_recipient_key()
     b.add_module("recip", "package_part", b"secret", recipients=[pub])
     b.add_module("pass", "package_part", b"secret", password="pw")
     reader = DocxPlusReader.from_bytes(b.build())

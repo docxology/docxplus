@@ -18,7 +18,6 @@ import re
 import zipfile
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-
 from xml.sax.saxutils import quoteattr
 
 from defusedxml.ElementTree import fromstring as _safe_fromstring
@@ -338,9 +337,9 @@ __all__ = [
     "MAX_TOTAL_BYTES",
     "NS_CONTENT_TYPES",
     "NS_RELATIONSHIPS",
+    "ROOT_RELS_PART",
     "OpcError",
     "OpcPackage",
-    "ROOT_RELS_PART",
     "Relationship",
     "read_package",
 ]

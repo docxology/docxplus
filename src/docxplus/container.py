@@ -20,9 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import channels as channel_registry
-from . import crypto
-from . import payloads
-from . import shamir
+from . import crypto, payloads, shamir
 from .manifest import Manifest, read_manifest, write_manifest
 from .opc import OpcPackage, read_package
 from .wordml import new_base_document

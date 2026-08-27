@@ -22,11 +22,10 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from .. import lsb
-from .. import steg_bridge
-from .base import ChannelRecord
+from .. import lsb, steg_bridge
 from ..crypto import digest as _digest
 from ..opc import OpcPackage, Relationship
+from .base import ChannelRecord
 
 CT_PNG = "image/png"
 REL_IMAGE = (

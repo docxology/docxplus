@@ -26,7 +26,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 import yaml
 
 # Installed, `docxplus` is a real package and this is a no-op. Run out of a checkout
@@ -191,7 +190,7 @@ def main() -> int:
     cmd.extend([str(p) for p in rendered])
 
     print(f"Compiling PDF -> {pdf_out}")
-    res = subprocess.run(cmd, capture_output=True, text=True)
+    res = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if res.returncode != 0:
         sys.stderr.write(f"Pandoc error:\n{res.stderr}\n")
         return res.returncode

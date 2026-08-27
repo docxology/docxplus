@@ -88,7 +88,7 @@ def _reject_unsafe_entry(name: str) -> None:
     if candidate.startswith("/") or (len(candidate) > 1 and candidate[1] == ":"):
         raise OpcError(f"absolute ODT entry name rejected: {name!r}")
     normalised = posixpath.normpath(candidate)
-    if normalised.startswith("../") or normalised == ".." or normalised.startswith("/"):
+    if normalised == ".." or normalised.startswith(("../", "/")):
         raise OpcError(f"path-traversal ODT entry name rejected: {name!r}")
 
 

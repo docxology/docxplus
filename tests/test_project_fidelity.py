@@ -357,10 +357,9 @@ def test_all_four_formats_carry_and_return_the_same_tree(tmp_path):
     from — would be decoration. Each name is opened here as a first-class input.
     """
     from docxplus import crypto
+    from docxplus.container import DocxPlusBuilder
     from docxplus.fileext import write_document
     from docxplus.odt_container import OdtPlusBuilder, open_document
-
-    from docxplus.container import DocxPlusBuilder
 
     root = _tree(tmp_path / "proj")
     priv, pub = crypto.generate_signing_key()

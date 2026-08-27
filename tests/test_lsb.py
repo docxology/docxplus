@@ -6,8 +6,9 @@ import pytest
 
 pytest.importorskip("PIL")
 
-from docxplus import lsb
 from conftest import pixels
+
+from docxplus import lsb
 
 
 def test_capacity_matches_formula():

@@ -26,8 +26,8 @@ import os
 import platform
 import shutil
 import subprocess
-import tempfile
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 

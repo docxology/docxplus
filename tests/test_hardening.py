@@ -83,7 +83,7 @@ def test_recipient_public_keys_not_in_manifest():
 def test_aad_binds_ciphertext_to_context():
     env = crypto.encrypt(b"secret", "pw", aad=b"slot-a")
     assert crypto.decrypt(env, "pw", aad=b"slot-a") == b"secret"
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         crypto.decrypt(env, "pw", aad=b"slot-b")  # wrong context fails the tag
 
 
@@ -191,7 +191,7 @@ def test_signed_document_no_unsigned_warning():
 
 # -- trust anchor: a forged signature must not read as "authentic" ---------
 def test_forged_signature_is_not_authentic_without_pinned_key():
-    author_priv, author_pub = generate_signing_key()
+    _author_priv, author_pub = generate_signing_key()
     attacker_priv, attacker_pub = generate_signing_key()
 
     # An attacker fabricates a whole document and signs it with THEIR OWN key.
@@ -348,8 +348,9 @@ def test_surface_digest_binds_headers_and_footers():
 def test_odt_zip_bomb_guard_rejects_high_ratio():
     import io
     import zipfile
-    from docxplus.odt import OdtPackage
+
     from docxplus import opc
+    from docxplus.odt import OdtPackage
 
     large_zeros = b"\x00" * (5 * 1024 * 1024)
     buf = io.BytesIO()
@@ -386,10 +387,11 @@ def test_reproduce_scrubbed_env_isolation():
 
 
 def test_xml_attribute_values_are_escaped_and_round_trip():
-    from docxplus.channels.custom_xml import CustomXmlChannel
-    from docxplus.channels.metadata import MetadataChannel
-    from docxplus.channels.mce import MceChannel
     from defusedxml.ElementTree import fromstring
+
+    from docxplus.channels.custom_xml import CustomXmlChannel
+    from docxplus.channels.mce import MceChannel
+    from docxplus.channels.metadata import MetadataChannel
     from docxplus.wordml import new_base_document
 
     slot = 'q" & < >'
@@ -524,6 +526,7 @@ def test_odt_rejects_duplicate_and_colliding_entry_names():
     import zipfile
 
     import pytest as _pytest
+
     from docxplus.odt import MIMETYPE_ODT
     from docxplus.opc import OpcError
 

@@ -21,10 +21,9 @@ import zipfile
 import pytest
 
 from docxplus import crypto
-from docxplus.container import DocxPlusBuilder, DocxPlusReader
+from docxplus.container import ContainerError, DocxPlusBuilder, DocxPlusReader
 from docxplus.manifest import SIGNATURE_ALGORITHM, Manifest
 from docxplus.secure_io import SecretExistsError, is_secret_mode, write_secret
-
 
 # -- Finding 1: the tool's own secrets were world-readable --------------------
 
@@ -74,7 +73,7 @@ def test_a_failed_write_leaves_no_partial_secret(tmp_path):
     class Unserialisable:
         pass
 
-    with pytest.raises(Exception):
+    with pytest.raises(TypeError):
         write_secret(tmp_path / "x", Unserialisable())  # type: ignore[arg-type]
     assert not (tmp_path / "x").exists()
 
@@ -133,7 +132,7 @@ def test_a_padded_slot_is_undecryptable_by_anyone():
     """
     blob, _ = _sealed_to(1, padding=8)
     outsider, _ = crypto.generate_recipient_key()
-    with pytest.raises(Exception):
+    with pytest.raises(ContainerError):
         DocxPlusReader.from_bytes(blob).extract("m", private_key=outsider)
 
 
@@ -166,7 +165,7 @@ def test_padding_does_not_place_real_recipients_first():
                 crypto._unwrap_key(ephemeral, wrapped, private)
                 positions.add(index)
                 break
-            except Exception:
+            except Exception:  # noqa: BLE001, S112 — trial-decryption of padded slots raises InvalidTag/ValueError; skip and try the next slot
                 continue
     assert len(positions) > 1, f"real recipient always landed at {positions}"
 

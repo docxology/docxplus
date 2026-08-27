@@ -28,8 +28,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import crypto
-from . import payloads
+from . import crypto, payloads
 from .container import ContainerError, _Pending, seal_module
 from .container import DocxPlusReader as DocxPlusReaderDepth
 from .manifest import Manifest

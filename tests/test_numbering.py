@@ -61,7 +61,7 @@ def _formalism_titles() -> set[str]:
 
 def _declarations(blob: str) -> dict[str, set[str]]:
     return {
-        "formalism": set(re.findall(r"^:::+ \{\.[\w-]+ #([A-Za-z]+:[\w-]+)", blob, re.M)),
+        "formalism": set(re.findall(r"^:::+ \{\.[\w-]+ #([A-Za-z]+:[\w-]+)", blob, re.MULTILINE)),
         "fig": set(re.findall(r"\{#(fig:[\w-]+)", blob)),
         "sec": set(re.findall(r"\{#(sec:[\w-]+)\}", blob)),
         "tbl": set(re.findall(r"\{#(tbl:[\w-]+)", blob)),
@@ -98,7 +98,7 @@ def test_no_numbered_thing_is_hardcoded_in_the_manuscript(name):
     )
     text = _sections()[name]
     # Fenced code may legitimately contain such strings; it is quoted, not authored.
-    text = re.sub(r"```.*?```", "", text, flags=re.S)
+    text = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
     offenders = [m.group(0) for m in pattern.finditer(text)]
     assert not offenders, (
         f"{name} hardcodes numbering: {offenders}. Declare a label and reference it "
@@ -140,7 +140,7 @@ def test_every_formalism_and_figure_is_referenced():
 def test_no_label_is_declared_twice():
     """formalism.lua reports a duplicate label and keeps going; this stops it."""
     blob = "\n".join(_sections().values())
-    all_ids = re.findall(r"^:::+ \{\.[\w-]+ #([A-Za-z]+:[\w-]+)", blob, re.M)
+    all_ids = re.findall(r"^:::+ \{\.[\w-]+ #([A-Za-z]+:[\w-]+)", blob, re.MULTILINE)
     all_ids += re.findall(r"\{#((?:fig|sec|tbl|eq):[\w-]+)", blob)
     seen, duplicated = set(), set()
     for label in all_ids:

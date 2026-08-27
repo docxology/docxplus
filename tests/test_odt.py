@@ -77,6 +77,7 @@ def test_odt_entries_carry_normalised_permissions():
 
 def test_odt_rejects_path_traversal_entry_names():
     import pytest
+
     from docxplus.opc import OpcError
 
     for hostile in ("../../etc/evil.txt", "/etc/passwd", "..\\..\\evil", "a/../../b"):
@@ -91,6 +92,7 @@ def test_odt_accepts_ordinary_nested_entry_names():
 
 def test_odt_enforces_the_entry_count_cap():
     import pytest
+
     from docxplus.opc import MAX_ENTRIES, OpcError
 
     with pytest.raises(OpcError, match="too many entries"):
@@ -99,6 +101,7 @@ def test_odt_enforces_the_entry_count_cap():
 
 def test_odt_enforces_the_decompression_bomb_cap():
     import pytest
+
     from docxplus.opc import MAX_ENTRY_BYTES, OpcError
 
     buf = io.BytesIO()
