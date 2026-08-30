@@ -5,12 +5,12 @@ from __future__ import annotations
 import io
 import zipfile
 
+from docxplus.channels.mce import MceChannel
 from docxplus.container import DocxPlusBuilder
 from docxplus.crypto import generate_signing_key
 from docxplus.opc import OpcPackage, Relationship, read_package
 from docxplus.validate import assert_valid, validate_bytes, validate_package
 from docxplus.wordml import new_base_document
-from docxplus.channels.mce import MceChannel
 
 
 def test_plain_document_validates_with_note():
@@ -131,7 +131,7 @@ def _signature_part(uris: list[str]) -> bytes:
     refs = "".join(f'<Reference URI="{u}"/>' for u in uris)
     return (
         f'<Signature xmlns="{_SIG_NS}"><SignedInfo>{refs}</SignedInfo></Signature>'
-    ).encode("utf-8")
+    ).encode()
 
 
 def _docx_with_signature(uris: list[str]) -> tuple:

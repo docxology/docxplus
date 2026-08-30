@@ -56,9 +56,9 @@ def test_every_cli_command_has_a_reference_entry():
 
 def test_the_cli_reference_documents_no_command_that_was_removed():
     reference = _read("docs/cli.md")
-    documented = set(re.findall(r"^### `([a-z-]+)`", reference, re.M))
+    documented = set(re.findall(r"^### `([a-z-]+)`", reference, re.MULTILINE))
     # Headings may group two commands ("`scan` / `odt-scan`"); catch those too.
-    documented |= set(re.findall(r"^### `[a-z-]+` / `([a-z-]+)`", reference, re.M))
+    documented |= set(re.findall(r"^### `[a-z-]+` / `([a-z-]+)`", reference, re.MULTILINE))
     stale = documented - set(_cli_commands())
     assert not stale, f"docs/cli.md documents commands that do not exist: {sorted(stale)}"
 
@@ -120,7 +120,7 @@ def test_every_doc_opens_with_a_title(doc):
     assert first.startswith("# "), f"{doc} does not open with an H1 title"
 
 
-def _legacy_pattern() -> "re.Pattern[str]":
+def _legacy_pattern() -> re.Pattern[str]:
     """The retired project name, assembled so this file does not contain it."""
     old = "DOCX" + "\\+"
     slug = "docx" + r"(?!plus|_|-)"
@@ -193,7 +193,7 @@ def test_every_run_sh_stage_appears_in_its_own_usage():
     """
     usage = _run_sh()
     usage = usage[usage.index("usage: ./run.sh") : usage.index("EOF", usage.index("usage: ./run.sh"))]
-    documented = set(re.findall(r"^\s{2}([a-z]+)\s{2,}", usage, re.M))
+    documented = set(re.findall(r"^\s{2}([a-z]+)\s{2,}", usage, re.MULTILINE))
     implemented = _run_sh_verbs()
     # Aliases kept for compatibility need not be advertised, but nothing advertised
     # may be missing, and no primary verb may be undocumented.
@@ -261,7 +261,7 @@ def test_the_readme_states_the_shipped_version():
     Four release-metadata files already agree on the version and are checked for it
     in `test_manuscript_vars.py`; the README badge is the fifth and the most read.
     """
-    version = re.search(r'^version = "([^"]+)"', _read("pyproject.toml"), re.M).group(1)
+    version = re.search(r'^version = "([^"]+)"', _read("pyproject.toml"), re.MULTILINE).group(1)
     assert f"**v{version}**" in _read("README.md"), (
         f"README does not carry the shipped version badge (**v{version}**)"
     )
@@ -327,7 +327,7 @@ def _is_git_ignored(rel: str) -> bool:
     import subprocess
 
     result = subprocess.run(
-        ["git", "check-ignore", "-q", rel], cwd=ROOT, capture_output=True
+        ["git", "check-ignore", "-q", rel], cwd=ROOT, capture_output=True, check=False
     )
     return result.returncode == 0
 

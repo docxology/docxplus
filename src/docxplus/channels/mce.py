@@ -21,9 +21,9 @@ from xml.sax.saxutils import quoteattr
 
 from defusedxml.ElementTree import fromstring as _safe_fromstring
 
-from .base import ChannelRecord
 from ..crypto import digest as _digest
 from ..opc import OpcPackage
+from .base import ChannelRecord
 
 NS_MC = "http://schemas.openxmlformats.org/markup-compatibility/2006"
 NS_DXP_MCE = "urn:docxplus:mce:1.0"
@@ -108,9 +108,11 @@ class MceChannel:
         # Look for dxm:payload by qualified namespace, or local tag name match if prefix varied
         for elem in root.iter():
             tag = elem.tag
-            if tag == f"{{{NS_DXP_MCE}}}payload" or tag.endswith("}payload") or tag == "payload" or tag.endswith(":payload"):
-                if elem.get("slot") == slot:
-                    return base64.b64decode((elem.text or "").strip())
+            if (
+                tag in (f"{{{NS_DXP_MCE}}}payload", "payload")
+                or tag.endswith(("}payload", ":payload"))
+            ) and elem.get("slot") == slot:
+                return base64.b64decode((elem.text or "").strip())
 
         raise ValueError(f"MCE payload for slot {slot!r} not found in {doc_part}")
 
@@ -119,9 +121,9 @@ class MceChannel:
 
 
 __all__ = [
-    "MceChannel",
     "NS_DXP_MCE",
     "NS_MC",
     "NS_WORDML",
+    "MceChannel",
 ]
 

@@ -14,7 +14,7 @@ from docxplus.wordml import CT_DOCUMENT, new_base_document
 def test_cosignatures_author_and_institution():
     author_priv, author_pub = generate_signing_key()
     inst_priv, inst_pub = generate_signing_key()
-    stranger_priv, stranger_pub = generate_signing_key()
+    _stranger_priv, stranger_pub = generate_signing_key()
 
     data = (
         DocxPlusBuilder(paragraphs=["Jointly attested."])

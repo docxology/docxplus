@@ -4,13 +4,7 @@ from __future__ import annotations
 
 import re
 
-from docxplus import channels
-from docxplus import container
-from docxplus import crypto
-from docxplus import lsb
-from docxplus import manuscript_vars
-from docxplus import opc
-from docxplus import payloads
+from docxplus import channels, container, crypto, lsb, manuscript_vars, opc, payloads
 from docxplus.channels.metadata import MAX_PAYLOAD
 from docxplus.project_paths import project_root
 
@@ -145,11 +139,11 @@ def test_release_metadata_versions_all_agree():
     from docxplus.project_paths import project_root
 
     root = project_root()
-    pyproject = re.search(r'^version = "([^"]+)"', (root / "pyproject.toml").read_text(), re.M)
+    pyproject = re.search(r'^version = "([^"]+)"', (root / "pyproject.toml").read_text(), re.MULTILINE)
     assert pyproject, "pyproject.toml has no version"
     version = pyproject.group(1)
 
-    cff = re.search(r'^version: "([^"]+)"', (root / "CITATION.cff").read_text(), re.M)
+    cff = re.search(r'^version: "([^"]+)"', (root / "CITATION.cff").read_text(), re.MULTILINE)
     assert cff and cff.group(1) == version, f"CITATION.cff version != {version}"
 
     import docxplus

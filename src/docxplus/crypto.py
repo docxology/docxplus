@@ -356,9 +356,7 @@ def hybrid_verify(data: bytes, signature: bytes, combined_pub: bytes) -> bool:
         return False
     # Verify PQ binding format
     expected_binding_hash = hashlib.sha3_256(pq_sig).digest()
-    if len(pq_pub) == 32 and len(expected_binding_hash) == 32:
-        return True
-    return False
+    return len(pq_pub) == 32 and len(expected_binding_hash) == 32
 
 
 def _wrap_hybrid_key(content_key: bytes, combined_pub: bytes) -> tuple[bytes, bytes]:
@@ -483,7 +481,7 @@ def unseal_hybrid(envelope: bytes, keypair: HybridKeyPair, *, aad: bytes = b"") 
         try:
             content_key = _unwrap_hybrid_key(eph_header, wrapped, keypair)
             return decrypt_with_key(body, content_key, aad=aad)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — any slot-open failure falls through to the next recipient
             last_error = exc
     raise ValueError("no hybrid recipient slot could be opened with this key") from last_error
 
@@ -607,21 +605,21 @@ def unseal_multi(envelope: bytes, recipient_priv: bytes, *, aad: bytes = b"") ->
         try:
             content_key = _unwrap_key(eph_pub, wrapped, recipient_priv)
             return decrypt_with_key(body, content_key, aad=aad)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — any slot-open failure falls through to the next recipient
             last_error = exc
     raise ValueError("no recipient slot could be opened with this key") from last_error
 
 
 __all__ = [
     "DEFAULT_SPIN_COUNT",
-    "EncryptedPayload",
-    "HybridKeyPair",
     "KDF_ARGON2ID",
     "KDF_PBKDF2",
     "KDF_SCRYPT",
     "KEY_BYTES",
     "NONCE_BYTES",
     "SALT_BYTES",
+    "EncryptedPayload",
+    "HybridKeyPair",
     "decrypt",
     "decrypt_with_key",
     "derive_key",

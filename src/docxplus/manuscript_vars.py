@@ -16,14 +16,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from . import channels
-from . import container
-from . import crypto
-from . import lsb
-from . import opc
-from . import payloads
-from . import reproduce
-from . import shamir
+from . import channels, container, crypto, lsb, opc, payloads, reproduce, shamir
 from .channels.metadata import MAX_PAYLOAD as METADATA_MAX
 from .project_paths import project_root
 
@@ -84,7 +77,7 @@ def _doc_date(root: Path) -> str:
     try:
         out = subprocess.run(
             ["git", "-C", str(root), "log", "-1", "--format=%cs"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, timeout=10, check=False,
         )
         if out.returncode == 0 and out.stdout.strip():
             return out.stdout.strip()
@@ -92,8 +85,10 @@ def _doc_date(root: Path) -> str:
         pass
     epoch = os.environ.get("SOURCE_DATE_EPOCH")
     if epoch and epoch.isdigit():
-        return datetime.datetime.utcfromtimestamp(int(epoch)).strftime("%Y-%m-%d")
-    return datetime.date.today().isoformat()
+        return datetime.datetime.fromtimestamp(
+            int(epoch), tz=datetime.timezone.utc
+        ).strftime("%Y-%m-%d")
+    return datetime.datetime.now(tz=datetime.timezone.utc).date().isoformat()
 
 
 def _cli_commands(root: Path) -> list[str]:
@@ -173,7 +168,7 @@ def _doi() -> str:
     cff = project_root() / "CITATION.cff"
     if not cff.is_file():
         return ""
-    match = re.search(r'^doi:\s*"?(10\.\d{4,}/[^\s"]+)"?', cff.read_text(), re.M)
+    match = re.search(r'^doi:\s*"?(10\.\d{4,}/[^\s"]+)"?', cff.read_text(), re.MULTILINE)
     return match.group(1) if match else ""
 
 

@@ -101,10 +101,16 @@ def test_packing_is_deterministic_across_a_time_boundary(tmp_path, monkeypatch):
 
 
 def test_pack_project_size_cap(tmp_path):
+    """A tree over max_uncompressed is refused at pack time, naming the heaviest members.
+
+    Both halves matter: the refusal fires at authoring time (so an over-cap tree
+    can never seal into an unextractable document), and the message says what to
+    shrink rather than merely that something failed.
+    """
     root = _tree(tmp_path / "proj")
-    # packing with tiny max_uncompressed raises ProjectPackError
-    with pytest.raises(payloads.ProjectPackError, match="exceeds limit"):
+    with pytest.raises(payloads.ProjectPackError, match="over the 10-byte decompression cap") as info:
         payloads.pack_project(root, max_uncompressed=10)
+    assert "largest members" in str(info.value)
 
 
 def test_junk_directories_are_excluded(tmp_path):
@@ -351,10 +357,9 @@ def test_all_four_formats_carry_and_return_the_same_tree(tmp_path):
     from — would be decoration. Each name is opened here as a first-class input.
     """
     from docxplus import crypto
+    from docxplus.container import DocxPlusBuilder
     from docxplus.fileext import write_document
     from docxplus.odt_container import OdtPlusBuilder, open_document
-
-    from docxplus.container import DocxPlusBuilder
 
     root = _tree(tmp_path / "proj")
     priv, pub = crypto.generate_signing_key()
@@ -401,3 +406,35 @@ def test_the_template_roundtrip_report_records_a_real_external_project():
     dispatched = {c["name"] for c in report["checks"] if c["name"].startswith("dispatch.")}
     assert dispatched == {"dispatch.docx", "dispatch.docxplus",
                           "dispatch.odt", "dispatch.odtplus"}
+
+
+def test_add_project_refuses_oversized_tree_at_authoring_time_both_profiles(tmp_path):
+    """The refusal must reach the builder API, not only payloads.pack_project.
+
+    A tree over the decompression cap used to seal happily into a signed, validated
+    document whose payload could never be extracted. Both profiles share one sealing
+    lineage, so both must refuse at authoring time — and a deliberately raised
+    max_uncompressed must be honoured by both, symmetric with unpack.
+    """
+    from docxplus.container import DocxPlusBuilder, DocxPlusReader
+    from docxplus.odt_container import OdtPlusBuilder, OdtPlusReader
+
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "blob.bin").write_bytes(b"\0" * 1000)
+
+    cases = (
+        (DocxPlusBuilder, DocxPlusReader),
+        (OdtPlusBuilder, OdtPlusReader),
+    )
+    for builder_cls, reader_cls in cases:
+        b = builder_cls(paragraphs=["cover"], title="t")
+        with pytest.raises(ValueError, match="decompression cap"):
+            b.add_project("p", proj, max_uncompressed=500)
+
+        raised = builder_cls(paragraphs=["cover"], title="t")
+        raised.add_project("p", proj, max_uncompressed=2000)
+        extracted_dir = tmp_path / f"out_{builder_cls.__name__}"
+        extracted_dir.mkdir()
+        reader_cls.from_bytes(raised.build()).extract_project("p", extracted_dir)
+        assert (extracted_dir / "blob.bin").read_bytes() == b"\0" * 1000

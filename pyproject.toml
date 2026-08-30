@@ -31,6 +31,9 @@ figures = [
 dev = [
     "pytest>=8.0.0",
     "pytest-cov>=4.1.0",
+    # Pin ruff so CI's `uvx ruff check src scripts tests` and local runs judge the
+    # same code. Findings are triaged once per bump, not re-litigated per release.
+    "ruff==0.16.5",
 ]
 
 [project.scripts]

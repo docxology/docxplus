@@ -21,8 +21,6 @@ import json
 import sys
 from pathlib import Path
 
-
-
 from . import crypto
 from .container import DocxPlusBuilder, DocxPlusReader
 from .fileext import write_document
@@ -135,7 +133,7 @@ def _cmd_graph(args: argparse.Namespace) -> int:
 def _cmd_extract(args: argparse.Namespace) -> int:
     try:
         reader = DocxPlusReader.from_bytes(Path(args.docx).read_bytes())
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — CLI boundary: report any failure cleanly
         sys.stderr.write(f"error: failed to open document {args.docx!r}: {exc}\n")
         return 1
     creds = {}
@@ -162,7 +160,7 @@ def _cmd_extract(args: argparse.Namespace) -> int:
         creds["shares"] = shares
     try:
         data = reader.extract(args.slot, **creds)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — CLI boundary: report any failure cleanly
         sys.stderr.write(f"error: extraction failed: {exc}\n")
         return 1
     if args.out:
@@ -371,7 +369,7 @@ def _cmd_odt_extract(args: argparse.Namespace) -> int:
 
     try:
         reader = OdtPlusReader.from_bytes(Path(args.odt).read_bytes())
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — CLI boundary: report any failure cleanly
         sys.stderr.write(f"error: failed to open ODT document {args.odt!r}: {exc}\n")
         return 1
     creds = {}
@@ -398,7 +396,7 @@ def _cmd_odt_extract(args: argparse.Namespace) -> int:
         creds["shares"] = shares
     try:
         data = reader.extract(args.slot, **creds)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — CLI boundary: report any failure cleanly
         sys.stderr.write(f"error: extraction failed: {exc}\n")
         return 1
     if args.out:

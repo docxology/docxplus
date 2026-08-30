@@ -443,7 +443,6 @@ def test_clean_odt_scans_clean():
 def test_plain_odt_yields_no_reader():
     """Absence of an intelligence layer is a fact about the document, not a failure."""
     from docxplus import intake
-
     from docxplus.odt import new_base_odt
 
     report, reader = intake.safe_open_odt(new_base_odt(["plain"]).to_bytes())
@@ -489,8 +488,9 @@ def test_scan_ignores_ordinary_in_package_links():
 
 
 def test_strict_policy_refuses_a_dirty_odt():
-    from docxplus import intake
     import pytest as _pytest
+
+    from docxplus import intake
 
     pkg = _hostile_odt(Scripts__script_xml=b"<s/>")
     with _pytest.raises(intake.IntakeError, match="intake rejected"):

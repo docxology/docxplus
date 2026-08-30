@@ -14,7 +14,7 @@ CLI_MODULE = "docxplus.cli"
 
 
 def _run(args, **kw):
-    return subprocess.run([sys.executable, "-m", CLI_MODULE, *args], capture_output=True, text=True, **kw)
+    return subprocess.run([sys.executable, "-m", CLI_MODULE, *args], capture_output=True, text=True, check=False, **kw)
 
 
 def test_project_build_and_unpack(tmp_path):
@@ -217,7 +217,7 @@ def _keypair(tmp_path):
 def test_odt_build_validate_extract_round_trip(tmp_path):
     import json as _json
 
-    key, pub = _keypair(tmp_path)
+    key, _pub = _keypair(tmp_path)
     payload = tmp_path / "brief.json"
     payload.write_text('{"kind":"brief"}')
     odt = tmp_path / "r.odt"

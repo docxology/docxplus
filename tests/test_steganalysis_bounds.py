@@ -22,11 +22,10 @@ from __future__ import annotations
 import os
 
 import pytest
+from conftest import pixels
 from PIL import Image
 
-from docxplus import lsb
-from docxplus import steg_bridge
-from conftest import pixels
+from docxplus import lsb, steg_bridge
 
 #: Small enough to keep the suite fast, large enough that the chi-squared
 #: approximation holds over the sample histogram.

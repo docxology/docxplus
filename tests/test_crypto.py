@@ -46,14 +46,14 @@ def test_encrypt_decrypt_roundtrip():
 
 def test_decrypt_wrong_password_fails():
     envelope = encrypt(b"secret", "right")
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         decrypt(envelope, "wrong")
 
 
 def test_tampered_ciphertext_fails_gcm_tag():
     envelope = bytearray(encrypt(b"secret", "pw"))
     envelope[-1] ^= 0xFF
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         decrypt(bytes(envelope), "pw")
 
 
@@ -105,7 +105,7 @@ def test_argon2id_encryption_roundtrip():
     assert decrypted == plaintext
 
     # Decrypt with wrong password fails
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         decrypt(envelope, "wrong_password", aad=b"slot1")
 
 

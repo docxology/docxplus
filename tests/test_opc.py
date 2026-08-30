@@ -133,7 +133,7 @@ def test_external_relationship_mode_serialised():
         source_part="",
     )
     parsed = read_package(pkg.to_bytes())
-    ext = [r for r in parsed.relationships[""] if r.id == "rId9"][0]
+    ext = next(r for r in parsed.relationships[""] if r.id == "rId9")
     assert ext.mode == "External"
 
 

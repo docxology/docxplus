@@ -35,12 +35,12 @@ try:  # pragma: no cover - one branch or the other, trivially
 except ModuleNotFoundError:  # pragma: no cover
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from docxplus import crypto
-from docxplus import payloads
+from docxplus import crypto, payloads
 from docxplus.container import DocxPlusBuilder, DocxPlusReader
 from docxplus.odt_container import OdtPlusBuilder, OdtPlusReader, open_document
 from docxplus.project_paths import ensure_output_dirs
 from docxplus.validate import validate_bytes, validate_odt_bytes
+
 
 def recipe_json() -> str:
     """Pin the interpreter rather than trusting PATH.

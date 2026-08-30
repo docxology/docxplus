@@ -102,7 +102,7 @@ def concept_doi(version_doi: str, *, timeout: int = 20) -> str:
             f"https://zenodo.org/api/records/{record}", timeout=timeout
         ) as response:
             return json.load(response).get("conceptdoi", "") or ""
-    except Exception:
+    except Exception:  # noqa: BLE001, S110 — best-effort probe; a missing record falls through to the draft
         pass
     # A reserved DOI has no public record yet, and the badge is written *before*
     # publication so the released README is correct on the day it ships. The draft
@@ -117,7 +117,7 @@ def concept_doi(version_doi: str, *, timeout: int = 20) -> str:
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             return json.load(response).get("conceptdoi", "") or ""
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort probe; badge simply keeps no concept DOI
         return ""
 
 
@@ -127,11 +127,11 @@ def apply(doi: str) -> list[str]:
 
     cff = root / "CITATION.cff"
     text = cff.read_text()
-    if re.search(r"^doi:", text, re.M):
-        text = re.sub(r"^doi:.*$", f'doi: "{doi}"', text, count=1, flags=re.M)
+    if re.search(r"^doi:", text, re.MULTILINE):
+        text = re.sub(r"^doi:.*$", f'doi: "{doi}"', text, count=1, flags=re.MULTILINE)
     else:
         text = re.sub(
-            r'^(repository-code:.*)$', rf'\1\ndoi: "{doi}"', text, count=1, flags=re.M
+            r'^(repository-code:.*)$', rf'\1\ndoi: "{doi}"', text, count=1, flags=re.MULTILINE
         )
     cff.write_text(text)
     touched.append("CITATION.cff")

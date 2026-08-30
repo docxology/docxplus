@@ -13,7 +13,7 @@ CLI_MODULE = "docxplus.cli"
 
 def _run(args, **kw):
     return subprocess.run(
-        [sys.executable, "-m", CLI_MODULE, *args], capture_output=True, text=True, **kw
+        [sys.executable, "-m", CLI_MODULE, *args], capture_output=True, text=True, check=False, **kw
     )
 
 

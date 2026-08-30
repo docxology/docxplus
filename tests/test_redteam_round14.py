@@ -21,10 +21,8 @@ import time
 
 import pytest
 
-from docxplus import payloads
-from docxplus import reproduce
-from docxplus.container import DocxPlusBuilder, DocxPlusReader
-
+from docxplus import payloads, reproduce
+from docxplus.container import ContainerError, DocxPlusBuilder, DocxPlusReader
 
 # -- Finding 1: extraction hardening must not depend on the interpreter -------
 
@@ -210,7 +208,7 @@ def test_both_payloads_are_still_recoverable_under_their_own_passwords():
     reader = DocxPlusReader.from_bytes(builder.build())
     assert reader.extract("s", password="real-pw") == b"THE REAL SECRET"
     assert reader.extract("s", password="decoy-pw") == b"innocuous cover story"
-    with pytest.raises(Exception):
+    with pytest.raises(ContainerError):
         reader.extract("s", password="neither")
 
 

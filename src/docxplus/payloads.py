@@ -23,8 +23,8 @@ from __future__ import annotations
 
 import gzip
 import io
-import os
 import json
+import os
 import shutil
 import tarfile
 from collections.abc import Callable
@@ -77,7 +77,10 @@ def _pack_json(obj: Any) -> bytes:
     return json.dumps(obj, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
-#: Refuse to inflate a project payload past this many bytes (decompression-bomb cap).
+#: Refuse to inflate a project payload past this many bytes
+#: (decompression-bomb cap). Shared by ``pack_project`` (authoring-time refusal)
+#: and ``unpack_project`` (untrusted-input guard), so the two sides of the
+#: contract cannot disagree about the budget.
 MAX_PROJECT_UNCOMPRESSED = 512 * 1024 * 1024  # 512 MiB
 
 
@@ -115,6 +118,17 @@ def pack_project(
     unpack side has always rejected link members; the pack side was the open door.
     Passing ``follow_symlinks=True`` restores dereferencing, but the caller has then
     said so explicitly and the choice is visible in review.
+
+    **The decompression cap applies on the way in too.** ``unpack_project`` refuses
+    to inflate more than ``max_uncompressed`` bytes, and it must: the archive is
+    untrusted input there. But a cap that only fires on extraction leaves the
+    failure far from its cause — a tree over the limit sealed cleanly into a
+    signed, validated, perfectly shipped document whose payload could never be
+    extracted. The same accounting therefore runs here against the inflated size
+    actually measured (the sum of member sizes after exclusions and symlink policy),
+    so an oversized tree is refused at authoring time with names, not at read time
+    on someone else's machine. Raising the cap for one call is a deliberate act:
+    pass ``max_uncompressed=...`` explicitly and let review see it.
     """
     root = Path(root)
     if not root.is_dir():
@@ -130,6 +144,33 @@ def pack_project(
                 f"ordinary files, exfiltrating whatever they point at): {', '.join(links)}. "
                 "Pass follow_symlinks=True to dereference them deliberately."
             )
+
+    # Measure the inflated size *here*, against what would actually be carried:
+    # the excluded cache/build names are gone, symlink policy has already been
+    # decided, and only files (which is what the pack loop will read) count. This
+    # is the same number unpack_project's bomb guard totals, so a pack that
+    # succeeds under this call's max_uncompressed cannot fail that guard on its
+    # own account. The known-wrong input is an oversized tree; it must be refused
+    # at authoring time rather than discovered at extraction time.
+    # Sizes of every member the pack loop below would carry. Directories carry no
+    # bytes; non-files are skipped there too, so they are skipped here.
+    carried = [
+        (path.stat().st_size, str(path.relative_to(root)))
+        for path in entries
+        if not path.is_dir() and path.is_file()
+    ]
+    total_inflated = sum(size for size, _ in carried)
+    if total_inflated > max_uncompressed:
+        # Name the three largest members: they are what to shrink or exclude first,
+        # and the message must say what is wrong rather than merely that something is.
+        heaviest = ", ".join(name for _, name in sorted(carried, reverse=True)[:3])
+        raise ProjectPackError(
+            f"project tree inflates to {total_inflated} bytes, over the "
+            f"{max_uncompressed}-byte decompression cap unpack_project enforces "
+            f"(largest members: {heaviest}). Sealing it would ship a document "
+            "whose payload can never be extracted; pass max_uncompressed=... "
+            "deliberately if the larger budget is intended."
+        )
 
     # Build the tar uncompressed, then gzip it with an explicit mtime.
     #

@@ -35,9 +35,9 @@ try:
     import matplotlib
 
     matplotlib.use("Agg")
-    import matplotlib.patches as patches
     import matplotlib.pyplot as plt
     import numpy as np
+    from matplotlib import patches
 except ImportError:
     sys.stderr.write("matplotlib not installed; skipping figure generation\n")
     sys.exit(0)
@@ -159,9 +159,9 @@ def build_cover_art(out_path: Path, v: dict) -> None:
     ax.text(5.5, 2.45, "PROVENANCE", color="#FDE68A", fontsize=7, fontweight="bold",
             ha="center", va="center", zorder=9)
     ax.annotate("", xy=(4.62, 2.83), xytext=(4.76, 2.83),
-                arrowprops=dict(arrowstyle="->", color="#F59E0B", lw=2), zorder=8)
+                arrowprops={"arrowstyle": "->", "color": "#F59E0B", "lw": 2}, zorder=8)
     ax.annotate("", xy=(6.38, 2.83), xytext=(6.24, 2.83),
-                arrowprops=dict(arrowstyle="->", color="#F59E0B", lw=2), zorder=8)
+                arrowprops={"arrowstyle": "->", "color": "#F59E0B", "lw": 2}, zorder=8)
 
     ax.text(5.5, 0.62,
             f"v{v['VERSION']}  ·  {v['CHANNEL_COUNT']} transport channels  ·  "
@@ -285,8 +285,8 @@ def build_architecture_diagram(out_path: Path, v: dict) -> None:
 # -- Figure 2: sealing lineages and provenance --------------------------------
 def _arrow(ax, x0, y0, x1, y1, color=None, lw=1.6, style="->"):
     ax.annotate("", xy=(x1, y1), xytext=(x0, y0),
-                arrowprops=dict(arrowstyle=style, color=color or "#94A3B8", lw=lw,
-                                shrinkA=0, shrinkB=0))
+                arrowprops={"arrowstyle": style, "color": color or "#94A3B8", "lw": lw,
+                                "shrinkA": 0, "shrinkB": 0})
 
 
 def _node(ax, x, y, w, h, label, sub=None, ec=INK, fc="#FFFFFF", fs=8.6, lw=1.5):
@@ -460,10 +460,10 @@ def build_reproduction_diagram(out_path: Path, v: dict) -> None:
 
     # -- the two verdicts, which are the reason the branch exists ------------
     for x, w, col, verdict in [
-        (0.30, 4.50, SEAL, "this attestation is authentic and intact —\n"
-                           "the author's claim has not been altered"),
-        (6.05, 5.45, RISK, "the outputs reproduce on this machine —\n"
-                           "the author's claim has now been re-run"),
+        (0.30, 4.50, SEAL, ("this attestation is authentic and intact —\n"
+                           "the author's claim has not been altered")),
+        (6.05, 5.45, RISK, ("the outputs reproduce on this machine —\n"
+                           "the author's claim has now been re-run")),
     ]:
         _arrow(ax, x + w / 2, 1.26, x + w / 2, 1.06, col, lw=1.6)
         ax.text(x + w / 2, 0.82, verdict, color=col, fontsize=8.2, fontweight="bold",
@@ -499,36 +499,36 @@ def build_redteam_matrix(out_path: Path, v: dict) -> None:
         ("SURFACE CONTRACT", SURFACE, [
             ("Document swap",
              "repoints the officeDocument relationship at a part they added",
-             "the surface digest binds every part, content type, and\n"
-             "relationship in the graph — not a list of names"),
+             ("the surface digest binds every part, content type, and\n"
+             "relationship in the graph — not a list of names")),
             ("Part-name smuggling",
              "names an entry so the reader stores it under a different name",
-             "entry names must arrive canonical or be refused, so no\n"
-             "consumer disagrees about which part this is"),
+             ("entry names must arrive canonical or be refused, so no\n"
+             "consumer disagrees about which part this is")),
         ]),
         ("INTELLIGENCE MANIFEST", INTEL, [
             ("Trust-anchor spoofing",
              "signs a forged container with a key of their own",
-             "authenticity requires a caller-pinned key, compared in\n"
-             "constant time; an unpinned verify exits nonzero and says why"),
+             ("authenticity requires a caller-pinned key, compared in\n"
+             "constant time; an unpinned verify exits nonzero and says why")),
             ("Unimplemented claim",
              "relies on a capability only the prose ever provided",
-             "the ODF profile shares the OPC sealing and unsealing code\n"
-             "rather than a lookalike of it"),
+             ("the ODF profile shares the OPC sealing and unsealing code\n"
+             "rather than a lookalike of it")),
             ("Provenance ambiguity",
              "pads the module set so two sets share one Merkle root",
-             "RFC 6962 tree splitting, so the root is unambiguous by\n"
-             "construction rather than by a caller's diligence"),
+             ("RFC 6962 tree splitting, so the root is unambiguous by\n"
+             "construction rather than by a caller's diligence")),
         ]),
         ("CRYPTOGRAPHIC SEALING", SEAL, [
             ("Slot splicing",
              "relocates a sealed ciphertext into a different slot",
-             "the slot name is authenticated data, so the GCM tag fails\n"
-             "closed on a moved payload"),
+             ("the slot name is authenticated data, so the GCM tag fails\n"
+             "closed on a moved payload")),
             ("Verifiable-share downgrade",
              "strips the VSS header off a tampered Shamir share",
-             "the signed manifest demands the tag, so the demand itself\n"
-             "cannot be downgraded"),
+             ("the signed manifest demands the tag, so the demand itself\n"
+             "cannot be downgraded")),
             ("Algorithmic denial of service",
              "declares KDF work factors no honest author would",
              f"scrypt is bounded on memory as well as iterations:\n128·N·r ≤ {v['MAX_SCRYPT_MEMORY_MIB']} MiB"),
@@ -536,8 +536,8 @@ def build_redteam_matrix(out_path: Path, v: dict) -> None:
         ("EXECUTION SANDBOX", RISK, [
             ("Sandbox profile injection",
              "names a directory so that it closes the SBPL literal",
-             "a path that cannot be quoted is refused outright, never\n"
-             "escaped and passed on"),
+             ("a path that cannot be quoted is refused outright, never\n"
+             "escaped and passed on")),
         ]),
     ]
 

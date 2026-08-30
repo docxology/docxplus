@@ -7,6 +7,42 @@ Findings referenced by number are recorded in full in [`docs/redteam-audit.md`](
 
 ## [Unreleased]
 
+### Fixed
+
+- **CI's first lint gate was red on `ruff` 0.16.5.** `uvx ruff check src scripts
+  tests` — the gate CI runs before the test suite — reported 53 findings on
+  pristine HEAD (they had accumulated across ruff releases against an unpinned
+  gate). All 53 fixed at the root: three shebang scripts made executable
+  (EXE001); blind `pytest.raises(Exception)` assertions narrowed to the actual
+  contract exceptions (`ContainerError`, `ValueError`, `IntakeError`,
+  `TypeError`); CLI-boundary and multi-recipient trial handlers annotated with
+  justified `noqa`; every `subprocess.run` given an explicit `check=`;
+  `SOURCE_DATE_EPOCH` dates now timezone-aware UTC (DTZ); tuple
+  `startswith`/`endswith` merges, a collapsed nested `if`, a direct boolean
+  return, `next()` over `[0]`, and unused-unpack renames. Verified green:
+  `uvx ruff check src scripts tests` and the full suite (643 passed) afterwards.
+
+### Changed
+
+- **ruff is pinned (`ruff==0.16.5`) in the `dev` extra.** CI's `uvx ruff check`
+  is unpinned, so every ruff release re-litigated the same findings against
+  pristine HEAD — the failure mode the 2026-08-26 state report flagged. Local
+  `uv run ruff check src scripts tests` and CI now judge the same code; bumps
+  are deliberate, one triage per version.
+
+- **`pack_project` accepted trees whose inflated size `unpack_project` refuses**
+  (a limitation recorded in TODO since v1.0.0). Packing ran no size accounting, so
+  a tree over the decompression-bomb cap sealed cleanly into a signed, validated
+  document whose payload could never be extracted — the failure surfaced at read
+  time on another machine instead of at authoring time where the cause was.
+  `pack_project` now measures what it would actually carry (after policy
+  exclusions and symlink refusal) against the same cap `unpack_project` enforces,
+  raises `ProjectPackError` naming the heaviest members when over it, and accepts
+  `max_uncompressed=N` so a deliberately larger budget is explicit at both ends
+  of the round trip. Contract restated in `docs/format-spec.md` §8.1; pinned by
+  pack-side tests in `tests/test_payloads.py`, including the symmetry property:
+  whatever pack accepts under N, unpack accepts under the same N.
+
 ## [1.0.1] — 2026-08-17
 
 ### Fixed

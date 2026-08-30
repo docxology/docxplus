@@ -28,8 +28,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import crypto
-from . import payloads
+from . import crypto, payloads
 from .container import ContainerError, _Pending, seal_module
 from .container import DocxPlusReader as DocxPlusReaderDepth
 from .manifest import Manifest
@@ -128,16 +127,22 @@ class OdtPlusBuilder:
 
     def add_project(
         self, slot: str, project_dir: str | Path, *, reproduce: object | bool | None = None,
-        follow_symlinks: bool = False, **seal,
+        follow_symlinks: bool = False, max_uncompressed: int | None = None, **seal,
     ) -> OdtPlusBuilder:
         """Pack a whole directory tree and carry it as a ``project`` module.
 
         Mirrors the OOXML profile exactly, including the reproduction attestation:
         an ODF document that carried source but could not attest it would be a
-        second-class citizen of the same specification.
+        second-class citizen of the same specification. The decompression cap is
+        mirrored too: an over-cap tree is refused here at authoring time
+        (``max_uncompressed=None`` keeps the format default), not found to be
+        unextractable when someone later tries to open it.
         """
         project_dir = Path(project_dir)
-        blob = payloads.pack_project(project_dir, follow_symlinks=follow_symlinks)
+        pack_kw: dict[str, object] = {"follow_symlinks": follow_symlinks}
+        if max_uncompressed is not None:
+            pack_kw["max_uncompressed"] = max_uncompressed
+        blob = payloads.pack_project(project_dir, **pack_kw)
         self.add_module(slot, blob, payload_type="project", **seal)
         if reproduce is not None and reproduce is not False:
             import tempfile
