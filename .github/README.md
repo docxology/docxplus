@@ -7,7 +7,7 @@ The continuous integration workflow ([`workflows/ci.yml`](workflows/ci.yml)) exe
 | # | Gate | Canonical Command | Purpose & Pass Condition |
 | --- | --- | --- | --- |
 | 1 | **Environment & Dependencies** | `uv venv && uv pip install -e '.[dev,media,figures]'` | Installs editable package with all three extras (`dev` for test tools, `media` for Pillow LSB stego, `figures` for matplotlib plates). |
-| 2 | **Lint & Style** | `uvx ruff check src scripts tests` | Enforces zero lint/style violations across source, orchestrator scripts, and CLI entry points. |
+| 2 | **Lint & Style** | `uvx ruff check src scripts tests` | Enforces zero lint/style violations across the `src/` package, the orchestrator scripts, and the test suite — the three trees `ci.yml` passes to Ruff. |
 | 3 | **Tests & Coverage** | `.venv/bin/python -m pytest --cov=src -q` | Executes deterministic real-data test suite; enforces strict **≥90% coverage on `src/`** (`fail_under = 90` in `pyproject.toml`). |
 | 4 | **Manuscript & Token Integrity** | `.venv/bin/python scripts/z_generate_manuscript_variables.py && .venv/bin/python scripts/render_manuscript.py` | Verifies live code constant extraction and guarantees zero unresolved `{{TOKEN}}` references in research prose. |
 
@@ -24,7 +24,7 @@ Gate 4 is an automated consistency contract between codebase and research public
 
 | Verification Scope | In GitHub CI | In Local Pipeline (`./run.sh`) | Notes & Pre-Release Requirement |
 | --- | :---: | :---: | --- |
-| **Python Unit & Integration Suite** | Checked (Pass) | Checked (Pass) | 496 real-data test functions with zero mock framework calls. |
+| **Python Unit & Integration Suite** | Checked (Pass) | Checked (Pass) | 642 collected tests, from 496 real-data test functions (`TEST_COUNT`, expanded by parametrization), with zero mock framework calls. |
 | **Code Coverage Floor (≥90%)** | Enforced | Enforced | Monitored across all 22 core domain modules and channels. |
 | **Token Hydration & Variable Invariants** | Enforced | Enforced | Catches drift between implementation constants and text. |
 | **Pandoc Diagnostic Gate & Full PDF** | Skipped | **Required** | CI runs in headless environments without pandoc/LaTeX. Pandoc reports unresolved cross-references or missing figures as non-fatal warnings; local `./run.sh render` treats them as blocking gates. |
