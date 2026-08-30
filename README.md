@@ -121,7 +121,7 @@ The first carries a *synthetic* tree built to contain the awkward cases — an e
 entrypoint, an empty directory, a zero-byte file, non-ASCII and spaced filenames — through
 both profiles, checking 18 invariants including cross-profile nesting and byte-identical
 payload parity. The second carries a *real* external repository (the docxology
-`template_code_project`, 126 source files) through all four emitted formats:
+`template_code_project`, 128 source files) through all four emitted formats:
 
 | Artefact | |
 | --- | --- |
@@ -218,9 +218,9 @@ human or agent — editing it.
 
 | Directory | What lives there | Guides |
 | --- | --- | --- |
-| [`src/`](src/docxplus/README.md) | the 21 tested domain modules plus `channels/`; all business logic | [README](src/docxplus/README.md) · [AGENTS](src/docxplus/AGENTS.md) |
+| [`src/`](src/docxplus/README.md) | the 22 tested domain modules plus `channels/`; all business logic | [README](src/docxplus/README.md) · [AGENTS](src/docxplus/AGENTS.md) |
 | [`src/docxplus/channels/`](src/docxplus/channels/README.md) | the five side-channels behind one `Channel` protocol | [README](src/docxplus/channels/README.md) · [AGENTS](src/docxplus/channels/AGENTS.md) |
-| [`scripts/`](scripts/README.md) | 11 thin orchestrators; the stages `run.sh` drives | [README](scripts/README.md) · [AGENTS](scripts/AGENTS.md) |
+| [`scripts/`](scripts/README.md) | 13 thin orchestrators; the stages `run.sh` drives | [README](scripts/README.md) · [AGENTS](scripts/AGENTS.md) |
 | [`tests/`](tests/README.md) | the real-data, no-mocks suite behind the 90% gate | [README](tests/README.md) · [AGENTS](tests/AGENTS.md) |
 | [`docs/`](docs/README.md) | spec, architecture, security model, cookbook, audit | [README](docs/README.md) · [AGENTS](docs/AGENTS.md) |
 | [`manuscript/`](manuscript/README.md) | the token-driven format write-up | [README](manuscript/README.md) · [AGENTS](manuscript/AGENTS.md) |

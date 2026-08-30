@@ -14,7 +14,7 @@ Ownership matters more than contents, because it decides where a fact belongs.
 | --- | --- |
 | `standards-report.md` | **what OOXML and ODF actually permit.** Every structural claim anywhere in this repository traces here. Nothing else may paraphrase spec behaviour that is not in this report. |
 | `format-spec.md` | the normative container definition — implementable from this document plus the OOXML standard alone |
-| `architecture.md` | the module map, layers, and data flow. Authoritative; every `src/*.py` must appear |
+| `architecture.md` | the module map, layers, and data flow. Authoritative; every `src/docxplus/*.py` must appear |
 | `cli.md` | the subcommand contract. Every `add_parser` must have an entry |
 | `channels.md` | per-channel capacity, visibility, cost, caveats, and what does not cross to ODF |
 | `design-rationale.md` | the first-principles decomposition — which constraints are real and which inherited |

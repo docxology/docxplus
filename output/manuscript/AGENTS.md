@@ -2,7 +2,7 @@
 
 These files are the **output** of `scripts/render_manuscript.py`: the sources in
 [`../../manuscript/`](../../manuscript/AGENTS.md) with every `{{TOKEN}}` substituted
-from `src/manuscript_vars.variables()`. The PDF is compiled from them.
+from `src/docxplus/manuscript_vars.variables()`. The PDF is compiled from them.
 
 Edit the sources, then `./run.sh render`. An edit made here is overwritten by the next
 render, and in the meantime it makes the paper say something the live system does not.

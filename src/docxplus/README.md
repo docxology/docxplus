@@ -1,8 +1,8 @@
-# src/ — the domain modules
+# src/docxplus/ — the domain modules
 
-All of docxplus's business logic. 21 modules plus the `channels/` package, imported
-flat (`pyproject` puts `src` on `pythonpath`): `import opc`, `import container`,
-`import channels`.
+All of docxplus's business logic. 22 modules plus the `channels/` package, imported
+from the package (`pyproject` puts `src` on `pythonpath`): `from docxplus import opc`,
+`from docxplus import container`, `from docxplus import channels`.
 
 They form a strict dependency stack. A lower layer never imports a higher one, which
 is what makes the crypto testable without a document and the container swappable
@@ -60,16 +60,16 @@ Where bytes become a docxplus package rather than a zip with extras.
 ## Where to look first
 
 - **"How is a document built?"** — `container.py`, then the data-flow diagrams in
-  [`../docs/architecture.md`](../../docs/architecture.md).
+  [`../../docs/architecture.md`](../../docs/architecture.md).
 - **"What can I trust about a file I was sent?"** — `validate.py` and `intake.py` for
   the no-execution checks, `manifest.py` and `provenance.py` for what a signature
-  covers, [`../docs/security-model.md`](../../docs/security-model.md) for the boundary.
+  covers, [`../../docs/security-model.md`](../../docs/security-model.md) for the boundary.
 - **"Where does the payload physically go?"** — `channels/`.
 - **"Why is this number in the docs?"** — `manuscript_vars.py`. It is the answer to
   every "where did that figure come from" question in this repo.
 
 The authoritative module map, with layers and data flow, is
-[`../docs/architecture.md`](../../docs/architecture.md); `tests/test_docs.py` fails the
+[`../../docs/architecture.md`](../../docs/architecture.md); `tests/test_docs.py` fails the
 build if a module is missing from it, or from this file.
 
 Editing rules: [`AGENTS.md`](AGENTS.md).

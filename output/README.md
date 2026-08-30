@@ -39,9 +39,9 @@ same bytes.
 
 ## Reading the reports
 
-`reports/*.json` is consumed by `src/manuscript_vars.py`, which is how a figure in the
+`reports/*.json` is consumed by `src/docxplus/manuscript_vars.py`, which is how a figure in the
 paper stays tied to a measurement. `template_roundtrip.json` is the one to read first:
-it records 126 files across 15 directories carried through both profiles and diffed
+it records 128 files across 13 directories carried through both profiles and diffed
 back, content and executable bit, with an empty `failures` list as the only acceptable
 result.
 

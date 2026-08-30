@@ -1,11 +1,12 @@
-# src/ — docxplus domain modules
+# src/docxplus/ — domain modules
 
-All business logic lives here. Modules are imported flat (pyproject `pythonpath`
-includes `src`): `import opc`, `import container`, `import channels`.
+All business logic lives here. Modules are imported from the package (pyproject
+`pythonpath` includes `src`): `from docxplus import opc`, `from docxplus import
+container`, `from docxplus import channels`.
 
 The module inventory is **not** repeated in this file. It lives in
 [`README.md`](README.md) (grouped by layer, for orientation) and in
-[`../docs/architecture.md`](../../docs/architecture.md) (authoritative, with data flow).
+[`../../docs/architecture.md`](../../docs/architecture.md) (authoritative, with data flow).
 Both are enforced by `tests/test_docs.py`. A third hand-maintained copy would drift,
 and did: this file once described sixteen modules while twenty-one shipped, hiding the
 entire ODT profile and the transparency log from anyone who read it.
@@ -24,7 +25,7 @@ import, the logic is in the wrong module.
 - Every public function typed and docstringed. The docstring says what the caller may
   conclude, not just what the code does — the difference matters most on the
   verification functions, where "valid" and "authentic" are not the same word.
-- Ground every spec claim in [`../docs/standards-report.md`](../../docs/standards-report.md).
+- Ground every spec claim in [`../../docs/standards-report.md`](../../docs/standards-report.md).
   If the behaviour is not in that report, do not assert it.
 - No absolute paths. Resolve through `project_paths.py`.
 - A missing optional capability skips loudly; a broken one raises. Never `except:

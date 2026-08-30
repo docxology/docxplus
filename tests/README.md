@@ -34,6 +34,10 @@ and the execution boundary), `test_steganalysis_bounds` (what the shipped stegan
 finds, what it misses, and what breaks a carrier), `test_steg_bridge` (resolution logic
 on real files, plus the optional real tool).
 
+**The command line** — `test_cli`, `test_cli_v2`. The `docxplus` entry point launched
+as a real subprocess (`python -m docxplus.cli`), so argument parsing, exit codes, and
+the entry point itself are proved rather than bypassed by an in-process `main()` call.
+
 **Adversarial regressions** — `test_hardening`, `test_redteam_round12`,
 `test_redteam_round13`, `test_redteam_round14`, `test_v5_features`, `test_fuzz_suite`. Every confirmed
 finding in [`../docs/redteam-audit.md`](../docs/redteam-audit.md) is pinned here so it
