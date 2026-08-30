@@ -24,7 +24,7 @@ Gate 4 is an automated consistency contract between codebase and research public
 
 | Verification Scope | In GitHub CI | In Local Pipeline (`./run.sh`) | Notes & Pre-Release Requirement |
 | --- | :---: | :---: | --- |
-| **Python Unit & Integration Suite** | Checked (Pass) | Checked (Pass) | 642 collected tests, from 496 real-data test functions (`TEST_COUNT`, expanded by parametrization), with zero mock framework calls. |
+| **Python Unit & Integration Suite** | Checked (Pass) | Checked (Pass) | 600+ real-data tests with zero mock framework calls (647 collected from 501 `def test_` functions; parametrization expands the rest). |
 | **Code Coverage Floor (≥90%)** | Enforced | Enforced | Monitored across all 22 core domain modules and channels. |
 | **Token Hydration & Variable Invariants** | Enforced | Enforced | Catches drift between implementation constants and text. |
 | **Pandoc Diagnostic Gate & Full PDF** | Skipped | **Required** | CI runs in headless environments without pandoc/LaTeX. Pandoc reports unresolved cross-references or missing figures as non-fatal warnings; local `./run.sh render` treats them as blocking gates. |

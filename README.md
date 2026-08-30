@@ -121,7 +121,7 @@ The first carries a *synthetic* tree built to contain the awkward cases — an e
 entrypoint, an empty directory, a zero-byte file, non-ASCII and spaced filenames — through
 both profiles, checking 18 invariants including cross-profile nesting and byte-identical
 payload parity. The second carries a *real* external repository (the docxology
-`template_code_project`, 128 carried files across 13 directories) through all four emitted formats:
+`template_code_project`, 126 carried files across 13 directories) through all four emitted formats:
 
 | Artefact | |
 | --- | --- |
