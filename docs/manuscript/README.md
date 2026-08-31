@@ -1,4 +1,4 @@
-# manuscript/ — the docxplus format write-up (token-driven)
+# docs/manuscript/ — the docxplus format write-up (token-driven)
 
 The manuscript is **modular and generated**, not hand-numbered. Each section is a
 source file with `{{TOKENS}}`; every drift-prone value (channel count, KDF

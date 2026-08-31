@@ -45,7 +45,7 @@ L6  orchestration src/docxplus/cli.py • scripts/*
 | `reference_docs.py` | L5 | the one canonical example document, defined once |
 | `fileext.py` | L1 | the `.docx`/`.docxplus` and `.odt`/`.odtplus` extension pair, media types, and dual-name export |
 | `project_paths.py` | L0 | repository-root and output-directory resolution, so nothing hardcodes a path |
-| `manuscript_vars.py` | L5 | derive every doc/manuscript value from live constants (no hard-coding) |
+| `manuscript_vars.py` | L5 | derive every docs/manuscript value from live constants (no hard-coding) |
 
 ## Data flow — build
 

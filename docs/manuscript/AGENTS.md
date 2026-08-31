@@ -1,4 +1,4 @@
-# manuscript/ — the docxplus format write-up
+# docs/manuscript/ — the docxplus format write-up
 
 Modular, token-driven sections (00–04) plus `config.yaml`. The file inventory and the
 render pipeline are in [`README.md`](README.md); the full pipeline reference is

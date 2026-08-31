@@ -12,7 +12,7 @@ cross-reference, a missing resource, and a broken citation on stderr and then ex
 mistyped ``[@thm:label]`` therefore shipped into the PDF as the literal text
 ``[@thm:label]`` with nothing failing anywhere: not pandoc, not this script, not
 ``run.sh``. Diagnostics are now gated against patterns declared in
-``manuscript/config.yaml`` under ``render.fatal_diagnostics``, so the gate is
+``docs/manuscript/config.yaml`` under ``render.fatal_diagnostics``, so the gate is
 configurable and so it names classes of problem rather than the one message that
 happened to be found first.
 """
@@ -139,14 +139,14 @@ def main() -> int:
         "--metadata-file=" + str(config_out),
         "--pdf-engine=" + str(settings["pdf_engine"]),
         # Manuscript sources reference figures as ../output/figures/<name>.png, i.e.
-        # relative to manuscript/ (the CONVENTIONS rule authors follow). The rendered
+        # relative to docs/manuscript/ (the CONVENTIONS rule authors follow). The rendered
         # copies live in output/manuscript/ and pandoc runs from the repo root, so
         # without this the path resolves outside the project and every figure is
         # silently dropped — the PDF still compiles, just with no images.
         "--resource-path", os.pathsep.join([str(root), str(src_dir), str(out_dir)]),
     ]
 
-    # Numbering is automatic, per manuscript/README.md. Hand-typed section numbers
+    # Numbering is automatic, per docs/manuscript/README.md. Hand-typed section numbers
     # drift, and without real numbers pandoc-crossref renders every [@sec:x]
     # reference as a bare "sec." with nothing after it.
     if settings.get("number_sections", True):
@@ -207,7 +207,7 @@ def main() -> int:
             sys.stderr.write(f"  {line}\n")
         sys.stderr.write(
             "Fix the manuscript, or, if a diagnostic is genuinely benign, add it to "
-            "render.benign_diagnostics in manuscript/config.yaml with a reason.\n"
+            "render.benign_diagnostics in docs/manuscript/config.yaml with a reason.\n"
         )
         return 1
     if res.stderr.strip():
