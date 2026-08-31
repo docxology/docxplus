@@ -19,6 +19,7 @@ render time from the live system.
 | `formalism.lua` | numbers definitions/theorems/propositions and resolves references to them |
 | `preamble.tex` | page geometry and colour definitions |
 | `references.bib` | bibliography |
+| `MANUSCRIPT_STATUS.md` | publication-readiness status of this manuscript |
 
 ## Rendering
 
@@ -34,18 +35,18 @@ uv run python scripts/render_manuscript.py                 # -> output/manuscrip
 ```
 
 The renderer fails if any `{{TOKEN}}` is undefined. The values come from
-`src/manuscript_vars.variables()`, which reads code constants and the repository —
+`src/docxplus/manuscript_vars.variables()`, which reads code constants and the repository —
 so changing a constant changes the manuscript, and `tests/test_manuscript_vars.py`
 fails the build if a source file hard-codes a value that should be a token.
 
 It also fails on a pandoc diagnostic even when pandoc itself exits 0, which it does
 for an unresolved cross-reference and for a missing figure. The full pipeline,
 including how numbering works and what is configurable, is documented in
-[`../docs/manuscript-pipeline.md`](../docs/manuscript-pipeline.md).
+[`../manuscript-pipeline.md`](../manuscript-pipeline.md).
 
 ## Editing rules
 
-* Never type a drift-prone **value**. Add it to `src/manuscript_vars.variables()`
+* Never type a drift-prone **value**. Add it to `src/docxplus/manuscript_vars.variables()`
   (read from the code constant, not restated) and reference the `{{TOKEN}}`.
 * Never type a **number that names something numbered** — no "Figure 2", no
   "Definition 3", no "Section 1.4". Declare a label and reference it:

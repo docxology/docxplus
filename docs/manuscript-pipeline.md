@@ -144,7 +144,7 @@ Python or Lua.
 | `render.benign_diagnostics` | reasoned exemptions from the above |
 
 Page geometry and colour definitions live in
-[`../manuscript/preamble.tex`](../manuscript/preamble.tex). Link colour is the one
+[`../docs/manuscript/preamble.tex`](../docs/manuscript/preamble.tex). Link colour is the one
 exception that must **not** go there: pandoc emits its own `\hypersetup{...hidelinks}`
 after anything `-H` injects, so a preamble `\hypersetup` is silently overridden and
 every link renders black. It is passed as a pandoc variable instead.
@@ -159,4 +159,4 @@ every link renders black. It is passed as a pandoc variable instead.
   The rendered copies live elsewhere, which is what `--resource-path` reconciles.
 * Prose is timeless present-state, told once — no session logs, no "fixed this pass".
 
-See [`../manuscript/README.md`](../manuscript/README.md) for the section inventory.
+See [`docs/manuscript/README.md`](manuscript/README.md) for the section inventory.

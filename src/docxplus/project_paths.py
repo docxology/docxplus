@@ -13,7 +13,7 @@ from pathlib import Path
 def _find_root() -> Path:
     here = Path(__file__).resolve()
     for candidate in here.parents:
-        if (candidate / "pyproject.toml").is_file() and (candidate / "manuscript").is_dir():
+        if (candidate / "pyproject.toml").is_file() and (candidate / "docs" / "manuscript").is_dir():
             return candidate
     return Path.cwd()
 

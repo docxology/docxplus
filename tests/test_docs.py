@@ -217,10 +217,10 @@ def test_the_default_pipeline_renders_the_manuscript():
 
 def test_the_manuscript_readme_lists_every_manuscript_file():
     """An inventory that omits a file is how a reader misses `formalism.lua`."""
-    readme = _read("manuscript/README.md")
-    present = {p.name for p in (ROOT / "manuscript").glob("*") if p.is_file()}
+    readme = _read("docs/manuscript/README.md")
+    present = {p.name for p in (ROOT / "docs" / "manuscript").glob("*") if p.is_file()}
     missing = sorted(f for f in present - {"README.md", "AGENTS.md"} if f"`{f}`" not in readme)
-    assert not missing, f"manuscript/README.md omits: {missing}"
+    assert not missing, f"docs/manuscript/README.md omits: {missing}"
 
 
 def test_the_readme_review_counts_match_the_audit_record():
@@ -292,7 +292,7 @@ GUIDED_DIRS = (
     "scripts",
     "tests",
     "docs",
-    "manuscript",
+    "docs/manuscript",
     "output",
     "data",
     ".github",

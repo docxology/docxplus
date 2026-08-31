@@ -2,8 +2,8 @@
 
 Modular, token-driven sections (00–04) plus `config.yaml`. The file inventory and the
 render pipeline are in [`README.md`](README.md); the full pipeline reference is
-[`../docs/manuscript-pipeline.md`](../docs/manuscript-pipeline.md). Rendered output
-goes to [`../output/manuscript/`](../output/manuscript/AGENTS.md) — never edit there.
+[`../manuscript-pipeline.md`](../manuscript-pipeline.md). Rendered output
+goes to [`../output/manuscript/`](../../output/manuscript/AGENTS.md) — never edit there.
 
 **No hard-coded values.** Every drift-prone number is a `{{TOKEN}}` filled from
 `src/manuscript_vars.variables()`, which reads live code constants and the repository.

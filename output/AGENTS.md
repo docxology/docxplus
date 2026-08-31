@@ -11,7 +11,7 @@ measurement, not a description of it.
   code, rerun the stage, and let the number move.
 - **Never hand-edit a rendered section.** `manuscript/*.md` here is the token-substituted
   output of `scripts/render_manuscript.py`. The sources are in
-  [`../manuscript/`](../manuscript/AGENTS.md).
+  [`../docs/manuscript/`](../docs/manuscript/AGENTS.md).
 - **Regenerate before claiming.** If you changed anything a result depends on, run the
   stage that produces it and commit the new artefact alongside the change. A committed
   artefact older than the code it evidences is worse than no artefact.
