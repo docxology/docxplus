@@ -39,10 +39,30 @@ Active engineering and research backlog.
 - [ ] Whole-package OPC digital signature *production* (Digital Signature Origin
       part), per standards-report §8.1. **Assessed, not scheduled** — see
       `docs/opc-signatures.md`. Blocked on a C14N implementation and an X.509/PKI
-      decision (Office will not verify Ed25519). The guard above already holds the
-      invariant any implementation must satisfy.
-- [ ] ODT custom media channel analogues for ODT (`Pictures/`). The package-entry channel is implemented;
-      stego media is OOXML-specific and the docs say so.
+      decision (Office will not verify Ed25519). The fail-closed coverage guard the
+      assessment prescribes is implemented and tested:
+      `check_opc_signature_coverage` in `src/docxplus/validate.py` fails any package
+      whose OPC signature reference set omits a manifest-named part; verify with
+      `.venv/bin/python -m pytest tests/test_validate.py -q`.
+      **Acceptance for any future implementation:** (a) reference set derived from
+      `manifest.records[*].location`, never a fixed Word-part list; (b) the coverage
+      guard stays green against real signed packages; (c) Word/LibreOffice verify a
+      signed output without error; (d) dual-key story (Ed25519 manifest +
+      RSA/ECDSA OPC) decided by the owner first.
+- [ ] ODT `stego_media` channel analogue (`Pictures/` carriers). The package-entry
+      channel is implemented; stego media is OOXML-specific and the docs say so.
+      **Acceptance:** (a) `OdtPlusBuilder` accepts a `stego_media` module carrying an
+      RGB PNG at `Pictures/<name>.png` with LSB payload, embedding the image so it
+      renders in LibreOffice; (b) real round-trip test (no mocks) covering
+      embed→extract byte-parity in `tests/test_odt_container.py`; (c)
+      `docs/channels.md` and `docs/format-spec.md` updated and
+      `tests/test_docs.py` green; (d) the ODT profile notes the missing
+      Rust-backend and redundancy options unless both are ported; (e) the
+      profile-parity figure stops naming it as a gap.
 - [ ] Validate produced documents against Office-o-tron and the ODF Toolkit
-      validator in CI (standards-report §11.6).
-
+      validator in CI (standards-report §11.6). External services; needs an owner
+      decision on hosting (neither offers a stable public API today).
+      **Acceptance:** (a) a pinned, reproducible validator invocation (container or
+      hosted endpoint) runs on a local stage; (b) CI job added only after the
+      endpoint is owner-approved (CI configs are outside agent scope); (c) failures
+      are blocking, and a service outage skips loudly — never reported as a pass.
