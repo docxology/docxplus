@@ -7,7 +7,7 @@ measurement, not a description of it.
 ## Rules
 
 - **Never hand-edit a report to make a claim true.** `reports/*.json` is what
-  `src/manuscript_vars.py` reads, and therefore what the manuscript asserts. Change the
+  `src/docxplus/manuscript_vars.py` reads, and therefore what the manuscript asserts. Change the
   code, rerun the stage, and let the number move.
 - **Never hand-edit a rendered section.** `manuscript/*.md` here is the token-substituted
   output of `scripts/render_manuscript.py`. The sources are in

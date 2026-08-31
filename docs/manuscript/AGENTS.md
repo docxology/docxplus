@@ -6,7 +6,7 @@ render pipeline are in [`README.md`](README.md); the full pipeline reference is
 goes to [`../output/manuscript/`](../../output/manuscript/AGENTS.md) — never edit there.
 
 **No hard-coded values.** Every drift-prone number is a `{{TOKEN}}` filled from
-`src/manuscript_vars.variables()`, which reads live code constants and the repository.
+`src/docxplus/manuscript_vars.variables()`, which reads live code constants and the repository.
 To cite a new value, add it to that generator — reading the code constant, never
 restating it — and reference the token. `tests/test_manuscript_vars.py` fails the build
 on any undefined token or hard-coded drift-prone literal.

@@ -1,6 +1,6 @@
 # scripts/ — the pipeline stages
 
-Eleven thin orchestrators. Each coordinates I/O, calls the domain modules in `src/`,
+Thirteen thin orchestrators. Each coordinates I/O, calls the domain modules in `src/`,
 and prints the paths it wrote. None contains business logic.
 
 You rarely run them directly — [`../run.sh`](../run.sh) drives them in dependency
@@ -41,7 +41,7 @@ A synthetic tree can be shaped until it passes. A real one cannot. `06` carries 
 built specifically to contain the hard cases — an executable entrypoint, an empty
 directory, a zero-byte file, non-ASCII and spaced filenames — and checks 18 invariants
 including cross-profile nesting and byte-identical payload parity. `07` carries the
-docxology `template_code_project` (126 files, 15 directories) through `.docx`,
+docxology `template_code_project` (126 files, 13 directories) through `.docx`,
 `.docxplus`, `.odt`, and `.odtplus`, reads each back *from that name*, and diffs
 against the original. Both, every run.
 
