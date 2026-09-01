@@ -96,7 +96,7 @@ nested module *inside* a signed `.odt`, opened through a dispatcher that reads t
 rather than trusting the caller to declare it, with the inner document's provenance and project both
 verifying after extraction.
 
-![The two profiles drawn as shells around a shared core. Every capability in the centre block is one implementation both profiles call, which makes parity a structural property rather than a coincidence that survives until someone patches one side. Divergence is confined to the dashed boxes at the transport edge — two constructs ODF does not define, and two analogues that are plausible but not built — and none of it touches how a payload is sealed, digested, signed, or refused. That is what stops the weaker profile becoming the one an attacker chooses to present.](../output/figures/profile_parity.png){#fig:parity width=95%}
+![The two profiles drawn as shells around a shared core. Every capability in the centre block is one implementation both profiles call, which makes parity a structural property rather than a coincidence that survives until someone patches one side. Divergence is confined to the dashed boxes at the transport edge — two constructs ODF does not define, and one analogue that is plausible but not built — and none of it touches how a payload is sealed, digested, signed, or refused. That is what stops the weaker profile becoming the one an attacker chooses to present.](../output/figures/profile_parity.png){#fig:parity width=95%}
 
 ## Channel Capacity {#sec:capacity}
 

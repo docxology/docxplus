@@ -9,7 +9,7 @@ the drift because the document still compiles and still reads like prose.
 These tests need no toolchain. They read the manuscript sources and the render
 config, so they run wherever pytest runs, and they fail on the *class* of mistake
 rather than on any instance of it — the vocabulary of numbered things is derived
-from `manuscript/config.yaml` and `manuscript/formalism.lua`, so adding a kind
+from `docs/manuscript/config.yaml` and `docs/manuscript/formalism.lua`, so adding a kind
 extends the guard automatically instead of quietly escaping it.
 
 The complementary runtime check lives in `scripts/render_manuscript.py`: pandoc
@@ -24,10 +24,10 @@ import re
 import pytest
 import yaml
 
-from docxplus.project_paths import project_root
+from docxplus.project_paths import project_root, source_manuscript_dir
 
 ROOT = project_root()
-MANUSCRIPT = ROOT / "manuscript"
+MANUSCRIPT = source_manuscript_dir()
 
 #: Sections only. AGENTS.md and README.md are guidance for authors, not content.
 NOT_SECTIONS = {"AGENTS.md", "README.md"}

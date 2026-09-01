@@ -7,7 +7,31 @@ Findings referenced by number are recorded in full in [`docs/redteam-audit.md`](
 
 ## [Unreleased]
 
+### Added
+
+- **The `stego_media` channel crosses to ODF.** `OdtStegMediaChannel` (in
+  `src/docxplus/channels/stego_media.py`) carries a payload in the LSBs of a PNG at
+  `Pictures/figureN.png` that the document visibly renders through a
+  `<draw:frame>` in `content.xml`. It subclasses the OOXML channel so the decode
+  path — backend dispatch, redundancy, digest-verified replica selection — is one
+  implementation; only placement differs. `OdtPlusBuilder.add_module` gained
+  `channel_id`/`**channel_kwargs`; the ODT reader and validator dispatch on the
+  recorded channel instead of assuming a package-entry part. Sealed (password)
+  modules compose with concealment; the ODT builder still refuses unknown channel
+  ids at authoring time. Real round-trip tests live in `tests/test_odt_container.py`
+  (`-k stego`); `docs/channels.md`, `docs/format-spec.md`, the parity figure, its
+  caption, and `TODO.md` all updated (one unbuilt analogue remains: `metadata`).
+
 ### Fixed
+
+- **Four stale `manuscript/` paths survived the `docs/manuscript/` migration.**
+  `tests/test_numbering.py`, `tests/test_manuscript_vars.py` (three call sites),
+  and `scripts/render_manuscript.py` still read the retired root-level directory,
+  so 4 tests failed on pristine HEAD and the renderer pointed at nothing. All now
+  go through `docxplus.project_paths.source_manuscript_dir()`, the single resolver,
+  so a future relocation is one edit. The parity-caption guard's regex also
+  accepted only plural wording ("analogues that are"); it now accepts singular or
+  plural so a one-item list cannot fail the prose.
 
 - **CI's first lint gate was red on `ruff` 0.16.5.** `uvx ruff check src scripts
   tests` — the gate CI runs before the test suite — reported 53 findings on

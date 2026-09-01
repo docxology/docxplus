@@ -49,16 +49,10 @@ Active engineering and research backlog.
       guard stays green against real signed packages; (c) Word/LibreOffice verify a
       signed output without error; (d) dual-key story (Ed25519 manifest +
       RSA/ECDSA OPC) decided by the owner first.
-- [ ] ODT `stego_media` channel analogue (`Pictures/` carriers). The package-entry
-      channel is implemented; stego media is OOXML-specific and the docs say so.
-      **Acceptance:** (a) `OdtPlusBuilder` accepts a `stego_media` module carrying an
-      RGB PNG at `Pictures/<name>.png` with LSB payload, embedding the image so it
-      renders in LibreOffice; (b) real round-trip test (no mocks) covering
-      embed→extract byte-parity in `tests/test_odt_container.py`; (c)
-      `docs/channels.md` and `docs/format-spec.md` updated and
-      `tests/test_docs.py` green; (d) the ODT profile notes the missing
-      Rust-backend and redundancy options unless both are ported; (e) the
-      profile-parity figure stops naming it as a gap.
+- [x] ODT `stego_media` channel analogue (`Pictures/` carriers), via
+      `OdtStegMediaChannel` — a subclass of the OOXML channel sharing the decode path.
+      Real round-trip tests in `tests/test_odt_container.py` (`-k stego`); parity figure
+      and caption updated (one unbuilt analogue remains: `metadata`).
 - [ ] Validate produced documents against Office-o-tron and the ODF Toolkit
       validator in CI (standards-report §11.6). External services; needs an owner
       decision on hosting (neither offers a stable public API today).

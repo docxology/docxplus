@@ -281,6 +281,107 @@ def test_odt_error_branches():
 
 
 
+# -- the stego_media channel over ODF ------------------------------------------
+
+
+def _odt_stego_builder():
+    pytest.importorskip("PIL")
+    from docxplus.odt_container import OdtPlusBuilder as B
+
+    return B
+
+
+def test_odt_stego_media_round_trip_byte_parity():
+    """Embed into a displayed Pictures/ carrier, re-read from bytes, extract.
+
+    Serialise → parse → extract, not an in-memory shortcut: the ZIP round trip is
+    where part naming, ODF manifest declaration, and content types actually bite.
+    """
+    pytest.importorskip("PIL")
+    from docxplus.odt import OdtPackage
+
+    payload = b"concealed in plain sight" * 16
+    data = (
+        OdtPlusBuilder(paragraphs=["An ordinary ODF document."])
+        .add_module("figure", payload, channel_id="stego_media", carrier_size=(128, 128))
+        .build()
+    )
+    pkg = OdtPackage.from_bytes(data)
+    assert "Pictures/figure1.png" in pkg.parts
+    # The carrier is declared in META-INF/manifest.xml, as every ODF entry must be.
+    assert b"Pictures/figure1.png" in pkg.parts["META-INF/manifest.xml"]
+
+    reader = OdtPlusReader.from_bytes(data)
+    assert reader.extract("figure") == payload
+    # The frame renders the carrier: the image is on the page, not a spare part.
+    assert "draw:frame" in pkg.parts["content.xml"].decode("utf-8")
+    assert "Pictures/figure1.png" in pkg.parts["content.xml"].decode("utf-8")
+
+
+def test_odt_stego_media_surfaces_validate_and_sign():
+    """The whole contract, not just extraction: validator green, signature binds."""
+    pytest.importorskip("PIL")
+    from docxplus.validate import validate_odt_bytes
+
+    payload = b"signed and hidden" * 8
+    priv, pub = crypto.generate_signing_key()
+    data = (
+        OdtPlusBuilder(paragraphs=["x"])
+        .add_module("figure", payload, channel_id="stego_media", carrier_size=(128, 128))
+        .sign(priv)
+        .build()
+    )
+    assert validate_odt_bytes(data).ok
+    reader = OdtPlusReader.from_bytes(data)
+    assert reader.extract("figure") == payload
+    assert reader.verify_provenance(pub)
+    # Tampering with the carrier is caught: the manifest binds the payload digest.
+    from docxplus.odt import OdtPackage
+
+    pkg = OdtPackage.from_bytes(data)
+    raw = bytearray(pkg.parts["Pictures/figure1.png"])
+    raw[-1] ^= 0xFF
+    pkg.parts["Pictures/figure1.png"] = bytes(raw)
+    report = validate_odt_bytes(pkg.to_bytes())
+    assert not report.ok
+
+
+def test_odt_stego_media_password_sealed():
+    """Sealing composes with concealment: an encrypted payload inside the pixels."""
+    pytest.importorskip("PIL")
+    from docxplus.validate import validate_odt_bytes
+
+    payload = b"sealed beneath the surface" * 8
+    data = (
+        OdtPlusBuilder(paragraphs=["x"])
+        .add_module(
+            "sec", payload, channel_id="stego_media", password="pw", carrier_size=(128, 128)
+        )
+        .build()
+    )
+    assert validate_odt_bytes(data).ok
+    reader = OdtPlusReader.from_bytes(data)
+    assert reader.extract("sec", password="pw") == payload
+
+
+def test_odt_stego_media_is_deterministic():
+    pytest.importorskip("PIL")
+
+    def build():
+        return (
+            OdtPlusBuilder(paragraphs=["fixed"])
+            .add_module("m", b"bytes", channel_id="stego_media", carrier_size=(64, 64))
+            .build()
+        )
+
+    assert build() == build()
+
+
+def test_odt_stego_media_unknown_channel_refused():
+    with pytest.raises(ContainerError, match="unknown channel"):
+        OdtPlusBuilder().add_module("m", b"x", channel_id="nope")
+
+
 # -- validator failure paths --------------------------------------------------
 
 

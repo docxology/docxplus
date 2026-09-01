@@ -6,10 +6,10 @@ import re
 
 from docxplus import channels, container, crypto, lsb, manuscript_vars, opc, payloads
 from docxplus.channels.metadata import MAX_PAYLOAD
-from docxplus.project_paths import project_root
+from docxplus.project_paths import project_root, source_manuscript_dir
 
 _SECTIONS = sorted(
-    p for p in (project_root() / "manuscript").glob("*.md")
+    p for p in source_manuscript_dir().glob("*.md")
     if p.name not in {"AGENTS.md", "README.md"}
 )
 _TOKEN = re.compile(r"\{\{([A-Z0-9_]+)\}\}")
@@ -89,7 +89,7 @@ def test_parity_caption_matches_the_figure_it_describes():
     import ast
     import re
 
-    from docxplus.project_paths import project_root
+    from docxplus.project_paths import project_root, source_manuscript_dir
 
     root = project_root()
     tree = ast.parse((root / "scripts" / "build_figures.py").read_text())
@@ -109,9 +109,9 @@ def test_parity_caption_matches_the_figure_it_describes():
     by_standard = reasons.count("standard")
     unbuilt = reasons.count("unbuilt")
 
-    caption = (root / "manuscript" / "03_evaluation.md").read_text()
+    caption = (source_manuscript_dir() / "03_evaluation.md").read_text()
     match = re.search(
-        r"(\w+) constructs ODF does not define, and (\w+) analogues that are plausible",
+        r"(\w+) constructs ODF does not define, and (\w+) analogues? that (?:is|are) plausible",
         caption,
     )
     assert match, "parity caption no longer states its divergence counts"
@@ -224,7 +224,7 @@ def test_the_test_count_token_is_described_as_what_it_counts():
     import re
 
     from docxplus import manuscript_vars
-    from docxplus.project_paths import project_root
+    from docxplus.project_paths import project_root, source_manuscript_dir
 
     source = inspect.getsource(manuscript_vars._count_test_functions)
     assert "def test" in source, (
@@ -233,7 +233,7 @@ def test_the_test_count_token_is_described_as_what_it_counts():
     )
 
     root = project_root()
-    sites = list((root / "manuscript").glob("*.md")) + [root / "scripts" / "build_figures.py"]
+    sites = list(source_manuscript_dir().glob("*.md")) + [root / "scripts" / "build_figures.py"]
     offenders = []
     for path in sites:
         # A four-word window: "mock-free test functions" puts the noun third, so a
@@ -257,11 +257,11 @@ def test_surface_digest_prose_matches_the_package_graph():
     outside the signature. This guard fails on that wording, and requires the
     definition to name the relationship graph so the two cannot drift apart again.
     """
-    from docxplus.project_paths import project_root
+    from docxplus.project_paths import source_manuscript_dir
 
     blob = "\n".join(
         p.read_text()
-        for p in (project_root() / "manuscript").glob("*.md")
+        for p in source_manuscript_dir().glob("*.md")
         if p.name not in {"AGENTS.md", "README.md"}
     )
     banned = (

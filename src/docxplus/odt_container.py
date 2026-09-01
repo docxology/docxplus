@@ -29,6 +29,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import crypto, payloads
+from .channels.base import ChannelRecord
+from .channels.stego_media import OdtStegMediaChannel
 from .container import ContainerError, _Pending, seal_module
 from .container import DocxPlusReader as DocxPlusReaderDepth
 from .manifest import Manifest
@@ -94,16 +96,27 @@ class OdtPlusBuilder:
         recipients: list[bytes] | None = None,
         threshold: tuple[int, int] | None = None,
         kdf: str = "scrypt",
+        channel_id: str = "odt_package_part",
+        **channel_kwargs,
     ) -> OdtPlusBuilder:
-        """Queue a typed payload under manifest ``slot``."""
+        """Queue a typed payload under manifest ``slot``.
+
+        ``channel_id`` selects the transport. The default ``odt_package_part`` rides
+        as an ordinary intelligence package entry; ``stego_media`` instead conceals
+        the payload in the LSBs of a PNG the document visibly displays (see
+        :mod:`channels.stego_media`). Unknown channel ids fail here, at authoring
+        time, not when some reader meets them.
+        """
+        if channel_id not in ("odt_package_part", "stego_media"):
+            raise ContainerError(f"unknown channel: {channel_id}")
         if any(m.slot == slot for m in self._pending):
             raise ContainerError(f"duplicate slot: {slot}")
         if sum(x is not None for x in (password, recipients, threshold)) > 1:
             raise ContainerError("choose at most one of password/recipients/threshold")
         payloads.get_type(payload_type)  # validate early
         self._pending.append(
-            _Pending(slot, "odt_package_part", obj, payload_type, password, recipients,
-                     threshold, None, {}, kdf=kdf)
+            _Pending(slot, channel_id, obj, payload_type, password, recipients,
+                     threshold, None, channel_kwargs, kdf=kdf)
         )
         return self
 
@@ -183,21 +196,25 @@ class OdtPlusBuilder:
         manifest = Manifest()
         self.threshold_shares = {}
 
-        for index, m in enumerate(self._pending, start=1):
+        payload_index = 0
+        for m in self._pending:
             sealed, sealing = seal_module(m, self.threshold_shares)
-            part = f"intelligence/payload{index}.dxp"
-            pkg.add_part(part, sealed, CT_PAYLOAD)
-
-            from .channels.base import ChannelRecord
-
-            record = ChannelRecord(
-                channel="odt_package_part",
-                slot=m.slot,
-                size=len(sealed),
-                digest=crypto.digest(sealed),
-                content_type=CT_PAYLOAD,
-                location={"part": part},
-            )
+            if m.channel_id == "stego_media":
+                # Concealment channel: the payload travels inside the carrier's
+                # pixels, so no intelligence/payloadN.dxp part is written.
+                record = OdtStegMediaChannel(**m.channel_kwargs).embed(pkg, sealed, slot=m.slot)
+            else:
+                payload_index += 1
+                part = f"intelligence/payload{payload_index}.dxp"
+                pkg.add_part(part, sealed, CT_PAYLOAD)
+                record = ChannelRecord(
+                    channel="odt_package_part",
+                    slot=m.slot,
+                    size=len(sealed),
+                    digest=crypto.digest(sealed),
+                    content_type=CT_PAYLOAD,
+                    location={"part": part},
+                )
             record.payload_type = m.payload_type
             record.encrypted = sealing["mode"] != "plain"
             record.sealing = sealing
@@ -292,7 +309,15 @@ class OdtPlusReader:
         return payloads.unpack_project(blob, Path(dest))
 
     def _stored_bytes(self, record) -> bytes:
-        """ODF payloads are package entries, not OPC channel targets."""
+        """The bytes a module actually occupies in the package.
+
+        The default is a package entry; a record placed by the stego channel travels
+        inside its carrier's pixels, so the channel's own extract — digest-verified
+        across replicas — recovers it. Shared with the OOXML profile by inheritance.
+        """
+        if record.channel == "stego_media":
+            backend = record.location.get("backend", "python_lsb")
+            return OdtStegMediaChannel(backend=backend).extract(self.package, record)
         part = record.location.get("part")
         raw = self.package.parts.get(part)
         if raw is None:

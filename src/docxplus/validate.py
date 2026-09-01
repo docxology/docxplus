@@ -266,7 +266,19 @@ def _check_odt_intelligence(pkg, report: ValidationReport) -> None:
     manifest = Manifest.from_bytes(blob)
     report.notes.append(f"intelligence modules: {len(manifest.records)}")
 
+    from .channels.stego_media import OdtStegMediaChannel
+
     for record in manifest.records:
+        if record.channel == "stego_media":
+            # A concealed module travels inside its carrier's pixels, not as a
+            # standalone part; the channel's extract verifies against the record
+            # digest itself, including the replica-selection rule.
+            try:
+                backend = record.location.get("backend", "python_lsb")
+                OdtStegMediaChannel(backend=backend).extract(pkg, record)
+            except Exception as exc:  # noqa: BLE001 - reported, not raised
+                report.fail(report.intelligence_errors, f"{record.slot}: {exc}")
+            continue
         part = record.location.get("part")
         raw = pkg.parts.get(part)
         if raw is None:

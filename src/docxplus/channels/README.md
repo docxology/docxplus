@@ -12,7 +12,7 @@ without any of them knowing about the others.
 | `package_part.py` | `package_part` | `intelligence/payloadN.dxp` | a package may contain additional files | unbounded |
 | `metadata.py` | `metadata` | a custom document property in `docProps/custom.xml` | custom document properties | bounded — short routing tags only |
 | `mce.py` | `mce` | an `<mc:Choice>` inside `word/document.xml` | Markup Compatibility `AlternateContent` | unbounded, but writes into the main story part |
-| `stego_media.py` | `stego_media` | the LSBs of `word/media/imageN.png` | embedded image parts plus LSB steganography | bounded by carrier pixels |
+| `stego_media.py` | `stego_media` | the LSBs of a displayed PNG (`word/media/` or `Pictures/`) | embedded image parts plus LSB steganography | bounded by carrier pixels |
 
 `base.py` holds the contract both sides bind to: the `Channel` protocol
 (`embed` / `extract` / `capacity`) and `ChannelRecord`, the manifest-facing description

@@ -67,11 +67,12 @@ with an explicit error rather than silently overwritten or retyped.
 
 ---
 
-## `stego_media` — OOXML only
+## `stego_media`
 
-Payload in the least-significant bits of an RGB PNG at `word/media/imageN.png`, and the
-image is inserted into the body as a `<w:drawing>` so the carrier is a figure the
-document actually displays. That is the point: an image nothing renders is a
+Payload in the least-significant bits of an RGB PNG the document visibly displays —
+`word/media/imageN.png` under OOXML, `Pictures/figureN.png` under ODF — inserted into
+the visible body (`<w:drawing>` or `<draw:frame>` respectively) so the carrier is a
+figure the document actually renders. That is the point: an image nothing renders is a
 conspicuously spare part, not cover.
 
 **Capacity** scales with carrier pixels: roughly `(w·h·3)/8 − 8` bytes.
@@ -121,10 +122,11 @@ break the surface contract.
 ## What does not cross to ODF
 
 ODF has no custom XML datastore part and no Markup Compatibility element, so
-`custom_xml` and `mce` are OOXML-only by the standards rather than by choice. Analogues
-for `metadata` (`meta.xml` user-defined fields) and `stego_media` (`Pictures/`) are
-plausible and not yet built; `TODO.md` tracks them and the profile-parity figure names
-them rather than implying coverage.
+`custom_xml` and `mce` are OOXML-only by the standards rather than by choice. An
+analogue for `metadata` (`meta.xml` user-defined fields) is plausible and not yet
+built; `TODO.md` tracks it and the profile-parity figure names it rather than implying
+coverage. The `stego_media` analogue is built — the same channel class places carriers
+at `Pictures/figureN.png` and renders them through `<draw:frame>`.
 
 ---
 

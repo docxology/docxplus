@@ -37,7 +37,7 @@ except ModuleNotFoundError:  # pragma: no cover
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from docxplus.manuscript_vars import render_text, variables
-from docxplus.project_paths import ensure_output_dirs, project_root
+from docxplus.project_paths import ensure_output_dirs, project_root, source_manuscript_dir
 
 #: Used only when config.yaml carries no ``render:`` block, so a stripped-down
 #: config still gets a gate rather than silently getting none.
@@ -84,7 +84,7 @@ def diagnose(stderr: str, settings: dict) -> list[str]:
 def main() -> int:
     values = variables()
     root = project_root()
-    src_dir = root / "manuscript"
+    src_dir = source_manuscript_dir()
     dirs = ensure_output_dirs()
     out_dir = dirs["output"] / "manuscript"
     out_dir.mkdir(parents=True, exist_ok=True)

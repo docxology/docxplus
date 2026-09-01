@@ -1,9 +1,10 @@
 """Media-steganography channel.
 
 The payload is hidden in the LSBs of a PNG that is *also* a visible image part of
-the document (``word/media/``). To a reader the file is a document with a picture;
-the picture's pixels carry the intelligence packet. This is the channel that lets
-a docxplus "look completely ordinary" while carrying content.
+the document (``word/media/`` under OOXML, ``Pictures/`` under ODF). To a reader the
+file is a document with a picture; the picture's pixels carry the intelligence packet.
+This is the channel that lets a docxplus "look completely ordinary" while carrying
+content.
 
 Two real backends:
 
@@ -182,6 +183,96 @@ class StegMediaChannel:
         return lsb.capacity_bytes(w, h)
 
 
+class OdtStegMediaChannel(StegMediaChannel):
+    """The same channel over an ODF package: LSB stego into ``Pictures/<name>.png``.
+
+    Subclassing is the point: extraction is driven by ``record.location`` and reads
+    ``pkg.parts`` by name, neither of which cares which packaging standard named the
+    part, so the decode path — backend dispatch, redundancy, digest-verified replica
+    selection — is literally the parent's code. Only *placement* differs: ODF declares
+    images as package file-entries and renders them through a ``<draw:frame>`` in
+    ``content.xml`` rather than a relationship plus a ``<w:drawing>``.
+
+    The carrier is inserted into the visible body so the channel's premise holds on
+    this profile too: an image nothing renders is a conspicuously spare part, not
+    cover. Media carriers live under the ODF-conventional ``Pictures/`` tree.
+    """
+
+    def _embed_one(self, pkg, payload: bytes) -> str:
+        index = _next_odt_media_index(pkg)
+        part_name = f"Pictures/figure{index}.png"
+        with tempfile.TemporaryDirectory() as td:
+            carrier = self.carrier_png or lsb.make_carrier(
+                Path(td) / "carrier.png", self.carrier_size
+            )
+            out_png = Path(td) / "stego.png"
+            if self.backend == "python_lsb":
+                lsb.embed(Path(carrier), payload, out_png)
+            else:
+                if not steg_bridge.available():
+                    raise steg_bridge.StegError("steganographer CLI not available")
+                steg_bridge.embed_payload(
+                    Path(carrier), payload, out_png, signing_key=self.signing_key
+                )
+            stego_bytes = out_png.read_bytes()
+        pkg.add_part(part_name, stego_bytes, CT_PNG)
+        _insert_odt_frame(pkg, part_name, self.carrier_size)
+        return part_name
+
+    def capacity(self, pkg=None) -> int | None:
+        w, h = self.carrier_size
+        return lsb.capacity_bytes(w, h)
+
+
+def _next_odt_media_index(pkg) -> int:
+    """Deterministically number ``Pictures/figureN.png`` carriers."""
+    n = 1
+    while f"Pictures/figure{n}.png" in pkg.parts:
+        n += 1
+    return n
+
+
+def _insert_odt_frame(pkg, part_name: str, size: tuple[int, int]) -> None:
+    """Insert a `<draw:frame>` that displays the carrier into ``content.xml``.
+
+    A package entry alone is not an image on the page; the frame is what makes the
+    carrier a figure the document visibly renders. Dimensions follow the same 96-dpi
+    convention the OOXML drawing uses (2.54 cm per inch).
+    """
+    width_cm = size[0] / 96.0 * 2.54
+    height_cm = size[1] / 96.0 * 2.54
+    frame = (
+        '<text:p><draw:frame draw:name="Figure" '
+        'xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" '
+        'xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" '
+        'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" '
+        'xmlns:xlink="http://www.w3.org/1999/xlink" '
+        f'svg:width="{width_cm:.3f}cm" svg:height="{height_cm:.3f}cm" '
+        'text:anchor-type="as-char">'
+        f'<draw:image xlink:href="{part_name}" xlink:type="simple" '
+        'xlink:show="embed" xlink:actuate="onLoad"/>'
+        "</draw:frame></text:p>"
+    )
+    doc_xml = pkg.parts["content.xml"].decode("utf-8")
+    pos = _odt_body_insertion_point(doc_xml)
+    pkg.parts["content.xml"] = (doc_xml[:pos] + frame + doc_xml[pos:]).encode("utf-8")
+
+
+def _odt_body_insertion_point(doc_xml: str) -> int:
+    """Offset before ``</office:text>`` so the frame stays inside the visible body.
+
+    ODF content models differ from WordprocessingML's, and the OPC helper in
+    :mod:`mce` looks for ``</w:body>`` — reusing it here would refuse every ODF
+    document. ``</office:text>`` closes the visible text body; appending before it
+    keeps the frame inside ``office:body``, which is what a conforming consumer
+    renders.
+    """
+    end = doc_xml.rfind("</office:text>")
+    if end == -1:
+        raise ValueError("invalid content.xml: missing </office:text>")
+    return end
+
+
 def _next_media_index(pkg: OpcPackage) -> int:
     n = 1
     while f"word/media/image{n}.png" in pkg.parts:
@@ -193,6 +284,7 @@ __all__ = [
     "BACKENDS",
     "CT_PNG",
     "REL_IMAGE",
+    "OdtStegMediaChannel",
     "StegMediaChannel",
 ]
 

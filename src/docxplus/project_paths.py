@@ -25,6 +25,17 @@ def project_root() -> Path:
     return _ROOT
 
 
+def source_manuscript_dir() -> Path:
+    """The manuscript *source* directory: ``docs/manuscript`` in this checkout.
+
+    The canonical location moved from a root-level ``manuscript/`` to
+    ``docs/manuscript/``; every reader of the sources goes through here so a
+    future relocation is one edit instead of a fresh round of stale-path
+    failures (the class of bug this repo already hit once).
+    """
+    return _ROOT / "docs" / "manuscript"
+
+
 def output_dirs() -> dict[str, Path]:
     """Return the standard output directories (disposable, regeneratable)."""
     output = _ROOT / "output"
@@ -48,5 +59,6 @@ __all__ = [
     "ensure_output_dirs",
     "output_dirs",
     "project_root",
+    "source_manuscript_dir",
 ]
 

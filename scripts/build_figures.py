@@ -752,7 +752,6 @@ def build_parity_figure(out_path: Path, v: dict) -> None:
         ("custom_xml", "a custom XML datastore part", "standard"),
         ("mce", "an ignorable-namespace Choice", "standard"),
         ("metadata", "a custom document property", "unbuilt"),
-        ("stego_media", "LSBs of a displayed figure", "unbuilt"),
     ]
 
     fig, ax = _canvas(11.8, 7.0)
@@ -831,7 +830,7 @@ def build_parity_figure(out_path: Path, v: dict) -> None:
             color=MUTED, fontsize=7.1, va="center", linespacing=1.4)
     ax.text(8.94, 1.86, f"no analogue yet built ({len(unbuilt)})", color=WARN, fontsize=7.6,
             fontweight="bold", va="center")
-    ax.text(8.94, 1.58, "meta.xml fields and Pictures/ carriers\nare plausible and tracked, not shipped",
+    ax.text(8.94, 1.58, "meta.xml user-defined fields\nare plausible and tracked, not shipped",
             color=MUTED, fontsize=7.1, va="center", linespacing=1.4)
 
     _arrow(ax, 1.69, 4.08, 1.69, 4.30, SURFACE, lw=1.4)

@@ -92,9 +92,10 @@ Payload is base64-encoded into a named custom document property
 suited to routing tags and identifiers.
 
 ### 3.4 `stego_media`
-Payload is hidden in the least-significant bits of a PNG stored at
-`word/media/imageN.png` and referenced by an `image` relationship — an image the
-document can visibly display. Two backends, recorded in `location.backend`:
+Payload is hidden in the least-significant bits of a PNG the document visibly displays:
+under OOXML at `word/media/imageN.png` referenced by an `image` relationship and
+rendered through a `<w:drawing>`; under ODF at `Pictures/figureN.png` rendered through
+a `<draw:frame>` in `content.xml`. Two backends, recorded in `location.backend`:
 
 * `python_lsb` — pure-Python LSB codec (`DXL1` framing: magic + uint32 length +
   bytes). Needs only Pillow. Capacity ≈ `(w·h·3)/8 − 8` bytes.
@@ -380,9 +381,11 @@ The intelligence layer is implemented in `src/docxplus/odt_container.py`
 
 **Channels that do not cross over.** ODF has no custom XML datastore part and no
 Markup Compatibility `<mc:AlternateContent>` element, so the `custom_xml` and `mce`
-channels are OOXML-only. `metadata` and `stego_media` have plausible ODF analogues
-(`meta.xml` user-defined fields; `Pictures/`) and are not yet implemented; the ODT
-profile currently offers the unbounded package-entry channel alone.
+channels are OOXML-only. `metadata` has a plausible ODF analogue (`meta.xml`
+user-defined fields) that is not yet implemented. `stego_media` crosses over: the ODT
+profile offers the unbounded package-entry channel, the LSB media channel at
+`Pictures/figureN.png`, and shares the sealing, digest, and signature machinery with
+the OOXML profile.
 
 **Verifiable Secret Sharing (VSS).** Shamir shares carry an integrity header:
 `0xFF ‖ x(1) ‖ digest(32) ‖ payload`, where `digest = blake2b(x ‖ payload)`. The
