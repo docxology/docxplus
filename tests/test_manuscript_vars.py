@@ -63,7 +63,9 @@ def test_manuscript_sources_hardcode_no_drift_prone_values():
     blob = "\n".join(p.read_text() for p in _SECTIONS)
     for name in guarded:
         literal = v[name]
-        assert literal not in blob, (
+        # Standalone-number match: a written-out value must flag, but digits that
+        # merely continue a larger token ("X.509" containing "509") must not.
+        assert not re.search(rf"(?<![\w.]){re.escape(literal)}(?![\w.])", blob), (
             f"manuscript hard-codes {name}={literal}; use {{{{{name}}}}} instead"
         )
 
@@ -92,7 +94,7 @@ def test_parity_caption_matches_the_figure_it_describes():
     from docxplus.project_paths import project_root, source_manuscript_dir
 
     root = project_root()
-    tree = ast.parse((root / "scripts" / "build_figures.py").read_text())
+    tree = ast.parse((root / "src" / "docxplus" / "manuscript_figures.py").read_text())
     ooxml_only = None
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef) and node.name == "build_parity_figure":
@@ -233,7 +235,7 @@ def test_the_test_count_token_is_described_as_what_it_counts():
     )
 
     root = project_root()
-    sites = list(source_manuscript_dir().glob("*.md")) + [root / "scripts" / "build_figures.py"]
+    sites = list(source_manuscript_dir().glob("*.md")) + [root / "src" / "docxplus" / "manuscript_figures.py"]
     offenders = []
     for path in sites:
         # A four-word window: "mock-free test functions" puts the noun third, so a

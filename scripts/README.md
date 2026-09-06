@@ -26,7 +26,7 @@ is the order.
 | --- | --- | --- |
 | `z_generate_manuscript_variables.py` | derives every documented value from the live system → `output/data/manuscript_variables.json` | `render` |
 | `render_manuscript.py` | substitutes tokens, builds the figures, compiles the PDF, and runs the pandoc diagnostic gate | `render` |
-| `build_figures.py` | the manuscript plates; invoked by the renderer, not usually alone | — |
+| `build_figures.py` | the manuscript plates, drawn by `src/docxplus/manuscript_figures.py`; invoked by the renderer, not usually alone | — |
 | `set_doi.py` | writes a minted Zenodo DOI into CITATION.cff and the metadata files, after resolving it against the Zenodo API; run once per release | — |
 | `zenodo_release.py` | reserve / upload / publish the Zenodo record for a release; the reserved DOI is what lets the PDF cite its own record | — |
 

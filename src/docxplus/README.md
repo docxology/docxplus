@@ -1,6 +1,6 @@
 # src/docxplus/ — the domain modules
 
-All of docxplus's business logic. 22 modules plus the `channels/` package, imported
+All of docxplus's business logic. 23 modules plus the `channels/` package, imported
 from the package (`pyproject` puts `src` on `pythonpath`): `from docxplus import opc`,
 `from docxplus import container`, `from docxplus import channels`.
 
@@ -56,6 +56,7 @@ Where bytes become a docxplus package rather than a zip with extras.
 | `validate.py` | L4 | OPC, ODF, and intelligence conformance; refuses an OPC package signature whose reference set omits a manifest-named part |
 | `reference_docs.py` | L5 | the one canonical example document, defined once and shared by scripts and tests |
 | `manuscript_vars.py` | L5 | derives every documented value from live constants and the repository, so nothing drift-prone is typed by hand |
+| `manuscript_figures.py` | L5 | draws every manuscript plate from `manuscript_vars` values with one shared visual language; matplotlib optional |
 
 ## Where to look first
 

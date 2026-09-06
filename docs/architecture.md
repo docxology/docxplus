@@ -46,6 +46,7 @@ L6  orchestration src/docxplus/cli.py • scripts/*
 | `fileext.py` | L1 | the `.docx`/`.docxplus` and `.odt`/`.odtplus` extension pair, media types, and dual-name export |
 | `project_paths.py` | L0 | repository-root and output-directory resolution, so nothing hardcodes a path |
 | `manuscript_vars.py` | L5 | derive every docs/manuscript value from live constants (no hard-coding) |
+| `manuscript_figures.py` | L5 | the manuscript plates: every figure drawn from `manuscript_vars` values with one shared visual language (matplotlib optional) |
 
 ## Data flow — build
 
