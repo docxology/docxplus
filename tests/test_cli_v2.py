@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -12,9 +14,28 @@ import pytest
 #: would fail — which is exactly how this broke when the module moved.
 CLI_MODULE = "docxplus.cli"
 
+#: Repo root, so the subprocess can import the package from ``src/`` even when
+#: the interpreter running the tests is not the one the project is installed
+#: into (see the identical note in ``test_cli.py``).
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _subprocess_env() -> dict[str, str]:
+    env = dict(os.environ)
+    src = str(REPO_ROOT / "src")
+    env["PYTHONPATH"] = os.pathsep.join(filter(None, [src, env.get("PYTHONPATH", "")]))
+    return env
+
 
 def _run(args, **kw):
-    return subprocess.run([sys.executable, "-m", CLI_MODULE, *args], capture_output=True, text=True, check=False, **kw)
+    return subprocess.run(
+        [sys.executable, "-m", CLI_MODULE, *args],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_subprocess_env(),
+        **kw,
+    )
 
 
 def test_project_build_and_unpack(tmp_path):

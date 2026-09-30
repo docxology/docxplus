@@ -23,6 +23,11 @@ import os
 
 import pytest
 from conftest import pixels
+
+#: Pillow is the optional `media` extra (PNG carriers). Skip the whole module,
+#: as test_lsb.py does, instead of erroring at collection when it is absent.
+pytest.importorskip("PIL")
+
 from PIL import Image
 
 from docxplus import lsb, steg_bridge

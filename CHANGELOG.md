@@ -9,6 +9,31 @@ Findings referenced by number are recorded in full in [`docs/redteam-audit.md`](
 
 ### Fixed
 
+- **CLI tests captured whatever interpreter ran pytest, not the project env.**
+  `tests/test_cli.py` and `tests/test_cli_v2.py` launch the CLI as
+  `sys.executable -m docxplus.cli`, which is right — but when pytest itself is
+  reached via PATH (a bare Homebrew pytest, python 3.13) while the package is
+  installed only in the uv venv (python 3.14), the subprocess imports nothing
+  and every CLI test fails with `ModuleNotFoundError`. Root-caused as an
+  environment split-brain, not a test-logic bug: `.venv` lacked the `dev`
+  extra, so `uv run pytest` fell through to `/opt/homebrew/bin/pytest`. Fixed at
+  both layers — `uv sync --extra dev` restores the venv pytest, and both test
+  helpers now put the repo's `src/` on the subprocess `PYTHONPATH`, so the
+  package is importable from any interpreter that runs the tests.
+
+- **`tests/test_steganalysis_bounds.py` errored at collection without the
+  optional `media` extra.** It imported `PIL` at module top level, so a venv
+  synced without Pillow (the documented optional extra) interrupted the whole
+  suite at collection instead of skipping. Now uses
+  `pytest.importorskip("PIL")`, matching `test_lsb.py` and the other
+  Pillow-dependent modules.
+
+- **CI's lint step still used the unpinned `uvx ruff` the pin was meant to
+  retire.** The `ruff==0.16.5` dev-extra pin (2026-08-27) fixed the local
+  toolchain but `.github/workflows/ci.yml` kept `uvx ruff check`, so the next
+  ruff release would have re-drifted CI. The job now runs the venv's pinned
+  `.venv/bin/ruff`, exactly what `uv run ruff check src scripts tests` runs.
+
 - **CI's first lint gate was red on `ruff` 0.16.5.** `uvx ruff check src scripts
   tests` — the gate CI runs before the test suite — reported 53 findings on
   pristine HEAD (they had accumulated across ruff releases against an unpinned

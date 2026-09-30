@@ -223,7 +223,7 @@ human or agent — editing it.
 | [`scripts/`](scripts/README.md) | 11 thin orchestrators; the stages `run.sh` drives | [README](scripts/README.md) · [AGENTS](scripts/AGENTS.md) |
 | [`tests/`](tests/README.md) | the real-data, no-mocks suite behind the 90% gate | [README](tests/README.md) · [AGENTS](tests/AGENTS.md) |
 | [`docs/`](docs/README.md) | spec, architecture, security model, cookbook, audit | [README](docs/README.md) · [AGENTS](docs/AGENTS.md) |
-| [`manuscript/`](manuscript/README.md) | the token-driven format write-up | [README](manuscript/README.md) · [AGENTS](manuscript/AGENTS.md) |
+| [`docs/manuscript/`](docs/manuscript/README.md) | the token-driven format write-up | [README](docs/manuscript/README.md) · [AGENTS](docs/manuscript/AGENTS.md) |
 | [`output/`](output/README.md) | committed evidence: documents, figures, reports | [README](output/README.md) · [AGENTS](output/AGENTS.md) |
 | [`data/`](data/README.md) | deliberately empty — inputs are generated, not stored | [README](data/README.md) · [AGENTS](data/AGENTS.md) |
 | [`.github/`](.github/README.md) | the CI gates, in the order they fail | [README](.github/README.md) · [AGENTS](.github/AGENTS.md) |

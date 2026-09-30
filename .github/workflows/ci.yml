@@ -25,9 +25,9 @@ jobs:
           uv venv
           uv pip install -e '.[dev,media,figures]'
 
-      - name: Run Ruff Linter
+      - name: Run Ruff Linter (pinned by the dev extra — same toolchain as local)
         run: |
-          uvx ruff check src scripts tests
+          .venv/bin/ruff check src scripts tests
 
       - name: Run Test Suite with Coverage Gate (>=90%)
         run: |

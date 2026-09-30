@@ -49,7 +49,7 @@ manuscript source. Two filters assign them at render time:
 
 * **pandoc-crossref** numbers figures, tables, equations, listings, and sections.
   Declare `{#fig:name}` on a figure and write `[@fig:name]`.
-* **`manuscript/formalism.lua`** numbers definitions, theorems, propositions, and the
+* **`docs/manuscript/formalism.lua`** numbers definitions, theorems, propositions, and the
   rest, which pandoc-crossref has no support for. Write a fenced div and reference it
   the same way:
 
@@ -69,7 +69,7 @@ renumbers everything after it and every reference follows. There is no number in
 sources that can go stale, because there is no number in the sources.
 
 **Adding a numbered environment is a config change, not a filter edit.** Declare the
-class under `formalism_kinds` in [`../manuscript/config.yaml`](../manuscript/config.yaml)
+class under `formalism_kinds` in [`../docs/manuscript/config.yaml`](../docs/manuscript/config.yaml)
 and it is numbered and referenceable immediately. `formalism_reset_level` restarts
 counters at a given header level, for a collected volume that reproduces several
 works; a standalone paper leaves it at `0`.
@@ -114,7 +114,7 @@ failing: not pandoc, not the render script, not `run.sh`. The same silence dropp
 missing figure and left the PDF a page short of an image.
 
 Every stderr line is now matched against `render.fatal_diagnostics` in
-[`../manuscript/config.yaml`](../manuscript/config.yaml) and any hit fails the build.
+[`../docs/manuscript/config.yaml`](../docs/manuscript/config.yaml) and any hit fails the build.
 The patterns name **classes** of diagnostic — `^formalism\.lua:`, `^\[WARNING\]`,
 unresolved-reference and undefined-control-sequence forms — rather than the one
 message that happened to be found first, so a new instance of the same class is
@@ -128,7 +128,7 @@ how a gate stops being a gate. The correct state of that list is empty.
 
 ## Configuration
 
-Everything below is read from `manuscript/config.yaml`, so none of it requires editing
+Everything below is read from `docs/manuscript/config.yaml`, so none of it requires editing
 Python or Lua.
 
 | Key | Controls |
@@ -155,7 +155,7 @@ every link renders black. It is passed as a pandoc variable instead.
 
 * Never type a number that names something numbered. Declare a label; reference it.
 * Never type a drift-prone value. Add it to `manuscript_vars.variables()` as a token.
-* Figures are referenced as `../output/figures/<name>.png`, relative to `manuscript/`.
+* Figures are referenced as `../output/figures/<name>.png`, relative to `docs/manuscript/`.
   The rendered copies live elsewhere, which is what `--resource-path` reconciles.
 * Prose is timeless present-state, told once — no session logs, no "fixed this pass".
 

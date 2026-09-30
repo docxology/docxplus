@@ -16,7 +16,7 @@ This one holds only what is true everywhere.
 | `scripts/` | [`scripts/AGENTS.md`](scripts/AGENTS.md) | [`scripts/README.md`](scripts/README.md) |
 | `tests/` | [`tests/AGENTS.md`](tests/AGENTS.md) | [`tests/README.md`](tests/README.md) |
 | `docs/` | [`docs/AGENTS.md`](docs/AGENTS.md) | [`docs/README.md`](docs/README.md) |
-| `manuscript/` | [`manuscript/AGENTS.md`](manuscript/AGENTS.md) | [`manuscript/README.md`](manuscript/README.md) |
+| `docs/manuscript/` | [`docs/manuscript/AGENTS.md`](docs/manuscript/AGENTS.md) | [`docs/manuscript/README.md`](docs/manuscript/README.md) |
 | `output/` | [`output/AGENTS.md`](output/AGENTS.md) | [`output/README.md`](output/README.md) |
 | `data/` | [`data/AGENTS.md`](data/AGENTS.md) | [`data/README.md`](data/README.md) |
 | `.github/` | [`.github/AGENTS.md`](.github/AGENTS.md) | [`.github/README.md`](.github/README.md) |
