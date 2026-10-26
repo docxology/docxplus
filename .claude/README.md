@@ -1,11 +1,16 @@
-# .claude
+# .claude/ — Claude Code configuration
 
-> Auto-expanded 2026-08-29 from on-disk inspection (File_Types doc-fleet pass).
-
-This folder is part of the local-only `projects/ongoing/File_Types/` lane.
+The directory Claude Code reads when a session starts in this repository.
 
 ## Contents
 
-Child folders (verified on disk):
+`git ls-files .claude` lists two files and nothing else:
 
-- `.cc-writes/`
+- `README.md` — this inventory
+- `AGENTS.md` — the editing rules for this directory
+
+No project configuration, no staging directories. The project-scoped agent skill —
+the entry points and contracts for working on docxplus itself — lives in
+[`../.agents/`](../.agents/README.md).
+
+Editing rules: [`AGENTS.md`](AGENTS.md).

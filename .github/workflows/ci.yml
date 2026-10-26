@@ -10,10 +10,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v10.3.2
         with:
           enable-cache: true
 
@@ -26,8 +26,10 @@ jobs:
           uv pip install -e '.[dev,media,figures]'
 
       - name: Run Ruff Linter
+        # Run the ruff the `dev` extra pins, not `uvx ruff` — an unpinned gate
+        # re-litigated the same findings on every ruff release.
         run: |
-          uvx ruff check src scripts tests
+          .venv/bin/python -m ruff check src scripts tests
 
       - name: Run Test Suite with Coverage Gate (>=90%)
         run: |

@@ -1,18 +1,13 @@
-# AGENTS.md — `docxplus/.claude`
+# AGENTS.md — `.claude/`
 
-> Auto-expanded 2026-08-29 from on-disk inspection (File_Types doc-fleet pass).
-> Facts below are verified listings, not behavioral claims.
+Guides only: this directory carries no code and nothing the project executes.
 
-- Local-only path under `projects/ongoing/File_Types/` — never commit.
-- Parent standard: [`../../AGENTS.md`](../../AGENTS.md).
+- Parent standard: [`../AGENTS.md`](../AGENTS.md).
+- Entry-point guidance belongs in the project skill,
+  [`../.agents/`](../.agents/README.md), not here.
 
-## Contents
-
-Child folders (verified on disk):
-
-- `.cc-writes/`
-
-
-## Gotchas
+## Rules
 
 - Content-only edits: no renames, moves, or deletions of non-doc files.
+- Keep both guides accurate about what is on disk. A listing that names a
+  subdirectory this folder does not have is a stale claim, not an inventory.

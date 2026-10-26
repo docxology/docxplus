@@ -30,10 +30,11 @@ Active engineering and research backlog.
 
 ## Maintenance
 
-- [x] Pin the lint gate: `ruff==0.16.5` in the `dev` extra; CI's unpinned
-      `uvx ruff check src scripts tests` had drifted to 53 findings on pristine
-      HEAD. All 53 fixed (2026-08-27); `uv run ruff check src scripts tests`
-      and CI now judge the same pinned toolchain. Bumps are deliberate.
+- [x] Pin the lint gate: `ruff==0.16.5` in the `dev` extra, and run it from the
+      venv — `.venv/bin/python -m ruff check src scripts tests` — so CI and a local
+      checkout judge the same toolchain. The unpinned `uvx ruff check src scripts
+      tests` had drifted to 53 findings on pristine HEAD (all 53 fixed 2026-08-27).
+      Bumps are deliberate.
 
 ## Format & Extended Backlog
 - [ ] Whole-package OPC digital signature *production* (Digital Signature Origin

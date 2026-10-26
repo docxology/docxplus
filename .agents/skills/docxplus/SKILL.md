@@ -1,7 +1,7 @@
 ---
 name: docxplus
 description: docxplus intelligent document container — build/read/validate a byte-valid .docx or .odt that also carries a signed, encrypted, modular intelligence layer through spec-sanctioned side-channels, with a steganographer media backend.
-version: 1.0.0
+version: 1.0.1
 author: docxology
 license: MIT
 tags: [ooxml, odf, docx, odt, steganography, document-security, thin-orchestrator]
@@ -28,7 +28,7 @@ this skill carries the entry points and the contracts, not the module map.
 ```bash
 uv venv && uv pip install -e '.[dev,media,figures]'   # all three extras; see AGENTS.md
 ./run.sh                                    # preflight, tests, build, dossier, round trips, render, living
-uv run ruff check src scripts tests         # CI's first gate (ruff pinned in the dev extra)
+.venv/bin/python -m ruff check src scripts tests  # CI's first gate (ruff pinned in the dev extra)
 .venv/bin/python -m pytest --cov=src -q     # 90% gate
 
 # .docx profile

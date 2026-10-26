@@ -1,13 +1,13 @@
 # .github/ — Continuous Integration & Quality Gates
 
-The continuous integration workflow ([`workflows/ci.yml`](workflows/ci.yml)) executes on every push and pull request targeting `main` (Ubuntu Latest, Python 3.12, powered by `uv`).
+The continuous integration workflow ([`workflows/ci.yml`](workflows/ci.yml)) executes on every push or pull request targeting `main` (Ubuntu Latest, Python 3.12, powered by `uv`).
 
 ## The Gates (in Execution Order)
 
 | # | Gate | Canonical Command | Purpose & Pass Condition |
 | --- | --- | --- | --- |
 | 1 | **Environment & Dependencies** | `uv venv && uv pip install -e '.[dev,media,figures]'` | Installs editable package with all three extras (`dev` for test tools, `media` for Pillow LSB stego, `figures` for matplotlib plates). |
-| 2 | **Lint & Style** | `uvx ruff check src scripts tests` | Enforces zero lint/style violations across the `src/` package, the orchestrator scripts, and the test suite — the three trees `ci.yml` passes to Ruff. |
+| 2 | **Lint & Style** | `.venv/bin/python -m ruff check src scripts tests` | Enforces zero lint/style violations across the `src/` package, the orchestrator scripts, and the test suite. Runs the ruff the `dev` extra pins, so CI and a local checkout judge the same version — an unpinned `uvx ruff` gate re-litigated the same findings on every ruff release. |
 | 3 | **Tests & Coverage** | `.venv/bin/python -m pytest --cov=src -q` | Executes deterministic real-data test suite; enforces strict **≥90% coverage on `src/`** (`fail_under = 90` in `pyproject.toml`). |
 | 4 | **Manuscript & Token Integrity** | `.venv/bin/python scripts/z_generate_manuscript_variables.py && .venv/bin/python scripts/render_manuscript.py` | Verifies live code constant extraction and guarantees zero unresolved `{{TOKEN}}` references in research prose. |
 
@@ -24,7 +24,7 @@ Gate 4 is an automated consistency contract between codebase and research public
 
 | Verification Scope | In GitHub CI | In Local Pipeline (`./run.sh`) | Notes & Pre-Release Requirement |
 | --- | :---: | :---: | --- |
-| **Python Unit & Integration Suite** | Checked (Pass) | Checked (Pass) | 600+ real-data tests with zero mock framework calls (647 collected from 501 `def test_` functions; parametrization expands the rest). |
+| **Python Unit & Integration Suite** | Checked (Pass) | Checked (Pass) | 600+ real-data tests with zero mock framework calls (509 `def test_` functions across `tests/*.py`; parametrization and the shared fixtures expand the rest). |
 | **Code Coverage Floor (≥90%)** | Enforced | Enforced | Monitored across all 22 core domain modules and channels. |
 | **Token Hydration & Variable Invariants** | Enforced | Enforced | Catches drift between implementation constants and text. |
 | **Pandoc Diagnostic Gate & Full PDF** | Skipped | **Required** | CI runs in headless environments without pandoc/LaTeX. Pandoc reports unresolved cross-references or missing figures as non-fatal warnings; local `./run.sh render` treats them as blocking gates. |

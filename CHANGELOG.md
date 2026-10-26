@@ -46,13 +46,34 @@ Findings referenced by number are recorded in full in [`docs/redteam-audit.md`](
   return, `next()` over `[0]`, and unused-unpack renames. Verified green:
   `uvx ruff check src scripts tests` and the full suite (643 passed) afterwards.
 
+- **`.claude/README.md` and its AGENTS described a directory that is not this
+  one.** Both called themselves local-only files under another lane's
+  `projects/ongoing/File_Types/` path, marked "never commit", while being tracked in
+  this repository — and both listed a `.cc-writes/` subdirectory this folder does not
+  have. Both now describe what is on disk. The guard that walks every tracked text
+  file checks names, not claims; a listing nobody verifies is precisely the stale
+  claim these guides exist to prevent.
+
+- **`docs/manuscript/MANUSCRIPT_STATUS.md` named a resolver this repository does not
+  have.** It called `docs/manuscript/` both the canonical location and its own
+  "legacy fallback", resolved by `infrastructure.core.project_paths.resolve_manuscript_dir`
+  — a module from the docxology template the project deliberately does not import
+  (root `AGENTS.md`). It now names `docxplus.project_paths.source_manuscript_dir()`,
+  the resolver the renderer and the tests actually call.
+
 ### Changed
 
-- **ruff is pinned (`ruff==0.16.5`) in the `dev` extra.** CI's `uvx ruff check`
-  is unpinned, so every ruff release re-litigated the same findings against
-  pristine HEAD — the failure mode the 2026-08-26 state report flagged. Local
-  `uv run ruff check src scripts tests` and CI now judge the same code; bumps
-  are deliberate, one triage per version.
+- **The lint gate still ran an unpinned ruff.** Pinning `ruff==0.16.5` in the `dev`
+  extra covered `uv run ruff`, but CI kept invoking `uvx ruff check src scripts
+  tests`, which resolves the newest release whatever the extra pins — the drift the
+  pin existed to stop. The gate now runs the pinned ruff out of the venv
+  (`.venv/bin/python -m ruff check src scripts tests`), so CI and a local checkout
+  judge the same code, and a bump is one deliberate edit in one place.
+
+- **CI's action pins are current.** `actions/checkout` v4 → v7 and
+  `astral-sh/setup-uv` v3 → v10.3.2. The runner interpreter, the dependency floors
+  in `pyproject.toml`, and `uv.lock` are unchanged: a lockfile moved forward without
+  the suite re-run against it is a claim, not a check.
 
 - **`pack_project` accepted trees whose inflated size `unpack_project` refuses**
   (a limitation recorded in TODO since v1.0.0). Packing ran no size accounting, so

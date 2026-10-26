@@ -2,6 +2,7 @@
 
 - **Project:** docxplus
 - **Manuscript title:** docxplus: An Intelligent Document Container over Standards-Conforming OOXML
-- **Location:** `docs/manuscript/` (canonical default; legacy `docs/manuscript/` fallback resolved by `infrastructure.core.project_paths.resolve_manuscript_dir`)
+- **Location:** `docs/manuscript/` — resolved by
+  `docxplus.project_paths.source_manuscript_dir()`, so no reader hardcodes the path
 - **Type:** Active publication-target manuscript (6 section files)
-- **Status file purpose:** Tracks publication-readiness of the manuscript content in this directory. Migrated from legacy `docs/manuscript/` location.
+- **Status file purpose:** Tracks publication-readiness of the manuscript content in this directory, migrated here from the retired root-level `manuscript/` tree.
