@@ -13,7 +13,7 @@ description = "docxplus — a byte-valid OOXML .docx that also carries a modular
 authors = [
     { name = "Daniel Ari Friedman", email = "daniel@activeinference.institute" },
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "cryptography>=43.0.0",
     "defusedxml>=0.7.1",
