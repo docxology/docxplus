@@ -25,7 +25,7 @@ This one holds only what is true everywhere.
 ## Commands
 
 ```bash
-uv venv && uv pip install -e '.[dev,media,figures]'   # install all three extras
+uv sync --locked --all-extras                         # pinned Python and all extras
 ./run.sh                        # preflight, tests, build, dossier, round trips, render, living
 ./run.sh help                   # the stage list, generated from the driver itself
 .venv/bin/python -m ruff check src scripts tests       # CI's first gate, verbatim:
@@ -37,13 +37,23 @@ uv run docxplus --help                                # the CLI
 Install **all three** extras. `dev` is pytest, `media` is Pillow for the LSB channel,
 `figures` is matplotlib. `scripts/build_figures.py` exits 0 when matplotlib is absent,
 so a render without `figures` reuses the committed plates instead of regenerating them
-— green, and not what you measured. CI installs `.[dev,media,figures]`; match it.
+— green, and not what you measured. CI uses the same locked all-extras sync.
 
 The optional steganographer backend needs a built Rust binary. On this machine:
 `rustup run stable cargo build --release -p steganographer-cli` inside
 `../steganographer`, with `/opt/homebrew/bin` on PATH and
 `DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib` (GStreamer). Integration tests are
 marked `requires_steganographer` and skip gracefully when absent.
+
+Release validation additionally uses
+[`scripts/validate_release.py`](scripts/validate_release.py) and
+[`Dockerfile.release-validation`](Dockerfile.release-validation): separately
+captured private inputs, network-enabled provisioning, then qualified offline
+Linux compute with read-only source/runtime and real nested bubblewrap. See
+[`scripts/README.md`](scripts/README.md#release-validation). Do not disable
+production sandboxing to work around macOS nested-Seatbelt refusal. Collection
+users capture/import under their manager's native short source leases; no long
+pipeline belongs inside a canonical repository lease.
 
 ## Architecture (see [`docs/architecture.md`](docs/architecture.md))
 

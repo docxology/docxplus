@@ -79,7 +79,7 @@ function, and therefore an answer, on the wall clock, to the one question the li
 Every frame is now attempted whichever one matches, which costs a derivation per frame and buys the
 property the format claims. Signatures are computed over a canonical, whitespace-invariant JSON body.
 
-![How a typed payload becomes a signed module. The path branches only at the sealing mode, and all 4 branches reconverge on the same stored bytes — which is what the manifest digests. Digesting the plaintext instead would leave an offline oracle against the passphrase in a file the attacker already holds. Key-derivation profiles and the ceilings imposed on attacker-declared work factors are read from the live constants rather than transcribed.](../output/figures/cryptographic_pipeline.png){#fig:crypto-pipeline width=95%}
+![How a typed payload becomes a signed module. The path branches only at the sealing mode, and all 4 branches reconverge on the same stored bytes — which is what the manifest digests. Digesting the plaintext instead would leave an offline oracle against the passphrase in a file the attacker already holds. Key-derivation profiles and the ceilings imposed on attacker-declared work factors are read from the live constants rather than transcribed.](../../output/figures/cryptographic_pipeline.png){#fig:crypto-pipeline width=95%}
 
 ## Binding the Payloads to the Prose {#sec:payloads-provenance}
 

@@ -3,9 +3,9 @@
   "@type": "SoftwareSourceCode",
   "name": "docxplus \u2014 the Intelligent Document Container",
   "description": "A byte-valid OOXML .docx that also carries a modular, signed, encrypted intelligence layer through spec-sanctioned side-channels, with an optional steganographer signed-packet media backend.",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "programmingLanguage": "Python",
-  "runtimePlatform": "Python 3.10+",
+  "runtimePlatform": "Python 3.11+",
   "license": "https://spdx.org/licenses/MIT",
   "codeRepository": "https://github.com/docxology/docxplus",
   "keywords": [
@@ -27,6 +27,5 @@
         "name": "Active Inference Institute"
       }
     }
-  ],
-  "identifier": "https://doi.org/10.5281/zenodo.21985580"
+  ]
 }

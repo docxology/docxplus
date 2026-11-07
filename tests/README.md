@@ -45,6 +45,10 @@ cannot come back. The rounds are kept as separate files because a finding is eas
 trace to its review than to a merged pile. `test_fuzz_suite` exercises cross-format
 fuzzing, differential parsing, and corrupted crypto envelope handling.
 
+**Release custody** — `test_release_validation` crosses real compressed archive
+bytes to private extracted artifacts, rejecting oversized PAX metadata and
+disguised non-gzip input before publication.
+
 **The documentation and the paper** — `test_docs`, `test_manuscript_vars`,
 `test_numbering`. These are why a stale doc fails the build rather than reaching a
 reader: every module has an architecture entry, every CLI command a reference entry,

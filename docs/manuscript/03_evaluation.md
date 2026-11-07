@@ -39,7 +39,7 @@ invocations, and the compiled Rust steganography engine when it is present.
 into a `.docx` carrying a signed reproduction attestation. That `.docx` is a sibling of the PDF you are
 reading, not this file; the evaluation below describes the carried archive, not the rendered paper.
 
-![Authoring runs left to right and ends at one self-contained file; what a reader does with that file forks. The default branch is entirely cryptographic and executes nothing. The other requires an explicit flag and re-runs the attested command under confinement. The fork exists because the two verdicts are not interchangeable: one says the author's claim has not been altered, the other says it reproduces on this machine, and neither substitutes for the other.](../output/figures/reproduction_lifecycle.png){#fig:reproduction-lifecycle width=95%}
+![Authoring runs left to right and ends at one self-contained file; what a reader does with that file forks. The default branch is entirely cryptographic and executes nothing. The other requires an explicit flag and re-runs the attested command under confinement. The fork exists because the two verdicts are not interchangeable: one says the author's claim has not been altered, the other says it reproduces on this machine, and neither substitutes for the other.](../../output/figures/reproduction_lifecycle.png){#fig:reproduction-lifecycle width=95%}
 
 A recipient can engage at three levels of increasing commitment. The last two are the branches that
 fork in [@fig:reproduction-lifecycle]:
@@ -73,7 +73,7 @@ cryptographically verify a reproduction attestation. The sealed `.docx` is {{RT_
 `.odt` {{RT_ODT_BYTES}} bytes, and the packed project payload is *byte-identical between them* — parity that
 holds because the two profiles share the packing code rather than agreeing by inspection.
 
-![A real project tree carried into a container and diffed against what came back. The through-line is what survives byte for byte, including the executable bit — a carried entrypoint that returns non-executable is not carried software. Three diversions leave that line at the point they occur: metadata normalised because determinism is worth more than an mtime, symlinks refused outright because packing one would embed its target, and build directories never packed at all. Counts are read from the harness output at render time, so a fidelity regression changes this figure rather than merely failing a test.](../output/figures/roundtrip_fidelity.png){#fig:fidelity width=95%}
+![A real project tree carried into a container and diffed against what came back. The through-line is what survives byte for byte, including the executable bit — a carried entrypoint that returns non-executable is not carried software. Three diversions leave that line at the point they occur: metadata normalised because determinism is worth more than an mtime, symlinks refused outright because packing one would embed its target, and build directories never packed at all. Counts are read from the harness output at render time, so a fidelity regression changes this figure rather than merely failing a test.](../../output/figures/roundtrip_fidelity.png){#fig:fidelity width=95%}
 
 [@Fig:fidelity] states the contract in full: what is preserved, what is normalised away on purpose, what
 is refused outright, and what never travels at all.
@@ -96,14 +96,14 @@ nested module *inside* a signed `.odt`, opened through a dispatcher that reads t
 rather than trusting the caller to declare it, with the inner document's provenance and project both
 verifying after extraction.
 
-![The two profiles drawn as shells around a shared core. Every capability in the centre block is one implementation both profiles call, which makes parity a structural property rather than a coincidence that survives until someone patches one side. Divergence is confined to the dashed boxes at the transport edge — two constructs ODF does not define, and one analogue that is plausible but not built — and none of it touches how a payload is sealed, digested, signed, or refused. That is what stops the weaker profile becoming the one an attacker chooses to present.](../output/figures/profile_parity.png){#fig:parity width=95%}
+![The two profiles drawn as shells around a shared core. Every capability in the centre block is one implementation both profiles call, which makes parity a structural property rather than a coincidence that survives until someone patches one side. Divergence is confined to the dashed boxes at the transport edge — two constructs ODF does not define, and one analogue that is plausible but not built — and none of it touches how a payload is sealed, digested, signed, or refused. That is what stops the weaker profile becoming the one an attacker chooses to present.](../../output/figures/profile_parity.png){#fig:parity width=95%}
 
 ## Channel Capacity {#sec:capacity}
 
 Capacity spans four orders of magnitude, and the spread is the design's point rather than an artefact:
 different channels answer different needs.
 
-![What bounds each channel, plotted against the axis on which they actually differ. `metadata` has a hard ceiling fixed by the format and flat in carrier size; `stego_media` scales with carrier area and overtakes that ceiling at roughly {{STEGO_CROSSOVER_PX}} pixels a side; the remaining three have no channel-imposed limit at all and are drawn as an open region rather than given an invented number. The marked points are measured rather than computed: a payload of exactly that size was embedded into a real carrier and read back before the point was plotted.](../output/figures/capacity.png){#fig:capacity width=85%}
+![What bounds each channel, plotted against the axis on which they actually differ. `metadata` has a hard ceiling fixed by the format and flat in carrier size; `stego_media` scales with carrier area and overtakes that ceiling at roughly {{STEGO_CROSSOVER_PX}} pixels a side; the remaining three have no channel-imposed limit at all and are drawn as an open region rather than given an invented number. The marked points are measured rather than computed: a payload of exactly that size was embedded into a real carrier and read back before the point was plotted.](../../output/figures/capacity.png){#fig:capacity width=85%}
 
 [@Fig:capacity] plots the spread on a log scale, distinguishing the channels with a real format ceiling
 from those that simply have none:
@@ -137,7 +137,7 @@ Every accepted finding produced both a fix and a regression test that fails with
 record — severities, reproduction steps, and results withdrawn rather than shipped — is maintained in
 `docs/redteam-audit.md` and is not reproduced here.
 
-![Threat classes grouped by the layer each one attacks, with the boundary it fails against drawn between the attack and the invariant. Every arrow stops on the wall. None of the classes is hypothetical — each was reproduced against a running build before its control was written — and the grouping shows what a flat list obscured: the coverage spans the surface contract, the manifest, the sealing layer, and the sandbox, rather than concentrating where the code was easiest to harden.](../output/figures/redteam_matrix.png){#fig:redteam-matrix width=95%}
+![Threat classes grouped by the layer each one attacks, with the boundary it fails against drawn between the attack and the invariant. Every arrow stops on the wall. None of the classes is hypothetical — each was reproduced against a running build before its control was written — and the grouping shows what a flat list obscured: the coverage spans the surface contract, the manifest, the sealing layer, and the sandbox, rather than concentrating where the code was easiest to harden.](../../output/figures/redteam_matrix.png){#fig:redteam-matrix width=95%}
 
 [@Fig:redteam-matrix] maps the classes to their controls. Four findings generalise past this
 implementation, and they are the reason the review is worth reporting at all.

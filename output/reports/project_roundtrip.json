@@ -26,7 +26,7 @@
       "ok": true
     },
     {
-      "detail": "{\"attested\": true, \"signed\": true, \"verified\": true, \"attestation\": {\"output_digest\": \"40997aec9d445275db49e456285057487043fae6e1cd8067689054b9d254b7f1\", \"command\": [\"/Volumes/external_drive/Git/projects/ongoing/DAF/docxplus/.venv/bin/python\", \"compute.py\"], \"toolchain\": {\"implementation\": \"CPython\", \"platform\": \"macOS-26.6.2-arm64-arm-64bit\", \"python\": \"3.12.13\"}}}",
+      "detail": "{\"attested\": true, \"signed\": true, \"verified\": true, \"attestation\": {\"output_digest\": \"40997aec9d445275db49e456285057487043fae6e1cd8067689054b9d254b7f1\", \"command\": [\"/source/docxplus/.venv/bin/python\", \"compute.py\"], \"toolchain\": {\"implementation\": \"CPython\", \"platform\": \"Linux-6.12.115+deb13.1-cloud-arm64-aarch64-with-glibc2.36\", \"python\": \"3.15.2\"}}}",
       "name": "docx.attestation_verified",
       "ok": true
     },
@@ -56,7 +56,7 @@
       "ok": true
     },
     {
-      "detail": "{\"attested\": true, \"signed\": true, \"verified\": true, \"attestation\": {\"output_digest\": \"40997aec9d445275db49e456285057487043fae6e1cd8067689054b9d254b7f1\", \"command\": [\"/Volumes/external_drive/Git/projects/ongoing/DAF/docxplus/.venv/bin/python\", \"compute.py\"], \"toolchain\": {\"implementation\": \"CPython\", \"platform\": \"macOS-26.6.2-arm64-arm-64bit\", \"python\": \"3.12.13\"}}}",
+      "detail": "{\"attested\": true, \"signed\": true, \"verified\": true, \"attestation\": {\"output_digest\": \"40997aec9d445275db49e456285057487043fae6e1cd8067689054b9d254b7f1\", \"command\": [\"/source/docxplus/.venv/bin/python\", \"compute.py\"], \"toolchain\": {\"implementation\": \"CPython\", \"platform\": \"Linux-6.12.115+deb13.1-cloud-arm64-aarch64-with-glibc2.36\", \"python\": \"3.15.2\"}}}",
       "name": "odt.attestation_verified",
       "ok": true
     },
@@ -101,7 +101,7 @@
       "missing_files": [],
       "unexpected_files": []
     },
-    "project_payload_digest": "2484883354115fb22be2f609997d624abecb1b59b0a80a52cf929b2ebb6ac9c7"
+    "project_payload_digest": "21846260a13535f0114c0f8eb8268b37a3b8714a6c8cc8d718fa00149b1bbe07"
   },
   "failures": [],
   "fidelity_boundary": {
@@ -142,21 +142,21 @@
       "attestation": {
         "attestation": {
           "command": [
-            "/Volumes/external_drive/Git/projects/ongoing/DAF/docxplus/.venv/bin/python",
+            "/source/docxplus/.venv/bin/python",
             "compute.py"
           ],
           "output_digest": "40997aec9d445275db49e456285057487043fae6e1cd8067689054b9d254b7f1",
           "toolchain": {
             "implementation": "CPython",
-            "platform": "macOS-26.6.2-arm64-arm-64bit",
-            "python": "3.12.13"
+            "platform": "Linux-6.12.115+deb13.1-cloud-arm64-aarch64-with-glibc2.36",
+            "python": "3.15.2"
           }
         },
         "attested": true,
         "signed": true,
         "verified": true
       },
-      "bytes": 4531,
+      "bytes": 4417,
       "comparison": {
         "content_mismatches": [],
         "executable_bit_mismatches": [],
@@ -175,21 +175,21 @@
       "attestation": {
         "attestation": {
           "command": [
-            "/Volumes/external_drive/Git/projects/ongoing/DAF/docxplus/.venv/bin/python",
+            "/source/docxplus/.venv/bin/python",
             "compute.py"
           ],
           "output_digest": "40997aec9d445275db49e456285057487043fae6e1cd8067689054b9d254b7f1",
           "toolchain": {
             "implementation": "CPython",
-            "platform": "macOS-26.6.2-arm64-arm-64bit",
-            "python": "3.12.13"
+            "platform": "Linux-6.12.115+deb13.1-cloud-arm64-aarch64-with-glibc2.36",
+            "python": "3.15.2"
           }
         },
         "attested": true,
         "signed": true,
         "verified": true
       },
-      "bytes": 3676,
+      "bytes": 3523,
       "comparison": {
         "content_mismatches": [],
         "executable_bit_mismatches": [],

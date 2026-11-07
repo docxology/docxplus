@@ -57,7 +57,7 @@ clever: an author can add, seal, or remove intelligence without ever risking the
 a reader who has never heard of docxplus is never inconvenienced. [@Fig:architecture] shows both contracts as
 parts of a single archive, and where each channel writes.
 
-![The package tree with every transport channel drawn on the row of the part it writes into. A blue marker is a part the surface contract requires, a green one a part only docxplus reads, and a split marker a required part reused as transport — which is how three of the {{CHANNEL_COUNT}} channels carry a payload without adding any part a conforming reader would find surprising. Rows with no badge carry nothing. Capacities are read from the live code constants.](../output/figures/architecture.png){#fig:architecture width=95%}
+![The package tree with every transport channel drawn on the row of the part it writes into. A blue marker is a part the surface contract requires, a green one a part only docxplus reads, and a split marker a required part reused as transport — which is how three of the {{CHANNEL_COUNT}} channels carry a payload without adding any part a conforming reader would find surprising. Rows with no badge carry nothing. Capacities are read from the live code constants.](../../output/figures/architecture.png){#fig:architecture width=95%}
 
 ## Transport Channels {#sec:channels}
 
@@ -115,9 +115,9 @@ and Scripts containers and off-package `xlink:href` targets, not VBA and `altChu
 against an ODF package would pass vacuously, which is worse than not scanning, because it would report clean.
 
 Two channels do not cross over, and saying which is part of the claim. ODF has no custom XML datastore part
-and no Markup Compatibility element, so `custom_xml` and `mce` are OOXML-only; ODT payloads ride as ODF
-package entries, the unbounded channel. Analogues for the metadata and media channels are plausible and not
-yet built.
+and no Markup Compatibility element, so `custom_xml` and `mce` are OOXML-only. ODT offers unbounded
+package-entry payloads and visible PNG `stego_media` carriers. Only the metadata-channel analogue remains
+unbuilt.
 
 The sibling profile is a second front door into the same container, which is why it enforces the same intake
 ceilings as the OPC reader — entry count, decompression ratio, and rejection of traversal or absolute entry

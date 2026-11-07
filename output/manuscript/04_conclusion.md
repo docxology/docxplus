@@ -34,7 +34,7 @@ Concretely:
 The boundaries below are load-bearing. Stating them is part of the contribution, since a security property a
 reader misunderstands is worse than one absent (`docs/security-model.md`).
 
-![What a reader may conclude at each rung of verification, what it costs them, and — the column that usually goes missing — what it still does not buy. The rungs are cumulative and none is skippable. The step from *verify signature* to *pin the key* is the one that carries the weight: until the reader supplies the identity they trust, a valid signature establishes only that the document is internally consistent with itself, which is a property a forger can supply just as easily as an author.](../output/figures/trust_ladder.png){#fig:trust-ladder width=95%}
+![What a reader may conclude at each rung of verification, what it costs them, and — the column that usually goes missing — what it still does not buy. The rungs are cumulative and none is skippable. The step from *verify signature* to *pin the key* is the one that carries the weight: until the reader supplies the identity they trust, a valid signature establishes only that the document is internally consistent with itself, which is a property a forger can supply just as easily as an author.](../../output/figures/trust_ladder.png){#fig:trust-ladder width=95%}
 
 The boundaries below correspond to the rungs in [@fig:trust-ladder]; each one names a conclusion the format
 does *not* license. Stating them precisely is itself a design obligation: cryptographic software fails far
@@ -76,7 +76,7 @@ of the thing it appeared to attest. The validator therefore already rejects any 
 reference set omits a manifest-named part, written before the signing code precisely so the feature cannot
 ship without it.
 
-Beyond that: ODF analogues of the metadata and media channels, so the two profiles differ only where the
+Beyond that: an ODF analogue of the metadata channel, so the two profiles differ only where the
 standards genuinely do; calibrating sample-pair analysis against natural-image carriers, so the withdrawn
 estimator of [@sec:threat-audit] can return with the accuracy its name implies; validating produced documents
 against Office-o-tron and the ODF Toolkit in continuous integration; extending formal verification to the

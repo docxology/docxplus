@@ -21,7 +21,7 @@
       "ok": true
     },
     {
-      "detail": "{\"files_compared\": 126, \"missing\": [], \"unexpected\": [], \"content_mismatches\": [], \"executable_bit_mismatches\": [], \"identical\": true}",
+      "detail": "{\"files_compared\": 136, \"missing\": [], \"unexpected\": [], \"content_mismatches\": [], \"executable_bit_mismatches\": [], \"identical\": true}",
       "name": "docxplus.roundtrip_identical",
       "ok": true
     },
@@ -46,7 +46,7 @@
       "ok": true
     },
     {
-      "detail": "{\"files_compared\": 126, \"missing\": [], \"unexpected\": [], \"content_mismatches\": [], \"executable_bit_mismatches\": [], \"identical\": true}",
+      "detail": "{\"files_compared\": 136, \"missing\": [], \"unexpected\": [], \"content_mismatches\": [], \"executable_bit_mismatches\": [], \"identical\": true}",
       "name": "odtplus.roundtrip_identical",
       "ok": true
     },
@@ -79,42 +79,42 @@
   "failures": [],
   "formats": {
     "docx": {
-      "bytes": 260882,
+      "bytes": 233750,
       "comparison": {
         "content_mismatches": [],
         "executable_bit_mismatches": [],
-        "files_compared": 126,
+        "files_compared": 136,
         "identical": true,
         "missing": [],
         "unexpected": []
       },
       "paths": [
-        "/Volumes/external_drive/Git/projects/ongoing/DAF/docxplus/output/documents/template_code_project.docx",
-        "/Volumes/external_drive/Git/projects/ongoing/DAF/docxplus/output/documents/template_code_project.docxplus"
+        "/source/docxplus/output/documents/template_code_project.docx",
+        "/source/docxplus/output/documents/template_code_project.docxplus"
       ]
     },
     "odt": {
-      "bytes": 260680,
+      "bytes": 233401,
       "comparison": {
         "content_mismatches": [],
         "executable_bit_mismatches": [],
-        "files_compared": 126,
+        "files_compared": 136,
         "identical": true,
         "missing": [],
         "unexpected": []
       },
       "paths": [
-        "/Volumes/external_drive/Git/projects/ongoing/DAF/docxplus/output/documents/template_code_project.odt",
-        "/Volumes/external_drive/Git/projects/ongoing/DAF/docxplus/output/documents/template_code_project.odtplus"
+        "/source/docxplus/output/documents/template_code_project.odt",
+        "/source/docxplus/output/documents/template_code_project.odtplus"
       ]
     }
   },
   "ok": true,
   "project": {
-    "directories": 13,
-    "files_carried": 126,
+    "directories": 19,
+    "files_carried": 136,
     "has_executable": true
   },
-  "project_payload_digest": "40971fe0b8e23654b8bf9ba20870a2f95a434857b1803d692c829335330c4db6",
-  "source": "/Users/4d/Documents/GitHub/template/projects/templates/template_code_project"
+  "project_payload_digest": "8273832bdca810d6439ca568c3fdd568d16e42d6c0b77d49f3b0cf7bea78b851",
+  "source": "/inputs/template"
 }

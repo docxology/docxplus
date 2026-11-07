@@ -138,11 +138,9 @@ def main() -> int:
         pandoc,
         "--metadata-file=" + str(config_out),
         "--pdf-engine=" + str(settings["pdf_engine"]),
-        # Manuscript sources reference figures as ../output/figures/<name>.png, i.e.
-        # relative to docs/manuscript/ (the CONVENTIONS rule authors follow). The rendered
-        # copies live in output/manuscript/ and pandoc runs from the repo root, so
-        # without this the path resolves outside the project and every figure is
-        # silently dropped — the PDF still compiles, just with no images.
+        # Authored docs/manuscript/ and rendered output/manuscript/ both resolve
+        # ../../output/figures/<name>.png to the actual figure directory.
+        # Explicit resource roots keep those links independent of the caller's cwd.
         "--resource-path", os.pathsep.join([str(root), str(src_dir), str(out_dir)]),
     ]
 

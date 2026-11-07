@@ -155,8 +155,8 @@ every link renders black. It is passed as a pandoc variable instead.
 
 * Never type a number that names something numbered. Declare a label; reference it.
 * Never type a drift-prone value. Add it to `manuscript_vars.variables()` as a token.
-* Figures are referenced as `../output/figures/<name>.png`, relative to `docs/manuscript/`.
-  The rendered copies live elsewhere, which is what `--resource-path` reconciles.
+* Figures are referenced as `../../output/figures/<name>.png`, relative to `docs/manuscript/`.
+  The same reference resolves from rendered `output/manuscript/`; `--resource-path` also makes compilation independent of the caller's working directory.
 * Prose is timeless present-state, told once — no session logs, no "fixed this pass".
 
 See [`docs/manuscript/README.md`](manuscript/README.md) for the section inventory.

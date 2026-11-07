@@ -7,7 +7,7 @@
 > Google Docs, while carrying structured payloads through the spec-sanctioned
 > side-channels that the OOXML/ODF standards actually permit.
 
-**v1.0.1** · MIT · Python ≥ 3.10 · [CHANGELOG](CHANGELOG.md) ·
+**v1.1.0** · MIT · Python ≥ 3.11 · [CHANGELOG](CHANGELOG.md) ·
 [docs index](docs/README.md) · [CLI reference](docs/cli.md)
 
 docxplus is a standards-first reference implementation. Every channel it uses is
@@ -181,7 +181,7 @@ disagrees with the live value — the same rule the manuscript follows.
 ## Quick start
 
 ```bash
-uv venv && uv pip install -e '.[dev,media,figures]'
+uv sync --locked --all-extras
 ./run.sh                      # preflight, tests, example, dossier, round trips, manuscript
 
 # Or use the CLI directly:
@@ -198,6 +198,30 @@ plates. Install all three. `scripts/build_figures.py` *skips* when matplotlib is
 absent rather than failing, so a render on a `dev,media`-only environment silently
 reuses whatever figures are already committed — green, and not what you measured.
 CI installs all three for exactly that reason.
+
+### Isolated Linux release validation
+
+`scripts/validate_release.py` separates network-enabled image provisioning from
+offline release computation. Use independently copied, privately captured source
+snapshots, not live vault mounts. The input manifest and capture rules are in
+[`scripts/README.md`](scripts/README.md#release-validation).
+
+```bash
+python3 scripts/validate_release.py provision --inputs "$MANIFEST" \
+    --output "$PRIVATE/provision-new" --docker-context "$DOCKER_CONTEXT"
+python3 scripts/validate_release.py validate --inputs "$MANIFEST" \
+    --provision-record "$PRIVATE/provision-new/provision.json" \
+    --output "$PRIVATE/validation-new" --docker-context "$DOCKER_CONTEXT"
+```
+
+The disposable Linux container must qualify real bubblewrap, network denial and
+read-only source/runtime before running the unchanged coverage floor, full
+pipeline, renderer, real Rust backend, template roundtrips and installed-wheel
+smoke. No host bind/socket mounts, capabilities, inherited credentials or global
+security changes. Container-local `seccomp=unconfined` permits nested user
+namespaces; the other enforced controls and negative probes are mandatory.
+This is a separate qualified project workflow, not a way to disable production
+sandboxing or turn capability absence into a passing release.
 
 ## Security posture
 
@@ -221,7 +245,7 @@ human or agent — editing it.
 | [`src/`](src/README.md) | the import root; holds no modules of its own | [README](src/README.md) · [AGENTS](src/AGENTS.md) |
 | [`src/docxplus/`](src/docxplus/README.md) | the 22 tested domain modules plus `channels/`; all business logic | [README](src/docxplus/README.md) · [AGENTS](src/docxplus/AGENTS.md) |
 | [`src/docxplus/channels/`](src/docxplus/channels/README.md) | the five side-channels behind one `Channel` protocol | [README](src/docxplus/channels/README.md) · [AGENTS](src/docxplus/channels/AGENTS.md) |
-| [`scripts/`](scripts/README.md) | 13 thin orchestrators; the stages `run.sh` drives | [README](scripts/README.md) · [AGENTS](scripts/AGENTS.md) |
+| [`scripts/`](scripts/README.md) | thin pipeline and isolated-release orchestrators | [README](scripts/README.md) · [AGENTS](scripts/AGENTS.md) |
 | [`tests/`](tests/README.md) | the real-data, no-mocks suite behind the 90% gate | [README](tests/README.md) · [AGENTS](tests/AGENTS.md) |
 | [`docs/`](docs/README.md) | spec, architecture, security model, cookbook, audit | [README](docs/README.md) · [AGENTS](docs/AGENTS.md) |
 | [`docs/manuscript/`](docs/manuscript/README.md) | the token-driven format write-up | [README](docs/manuscript/README.md) · [AGENTS](docs/manuscript/AGENTS.md) |

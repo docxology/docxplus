@@ -78,20 +78,30 @@ def test_stego_media_error_paths():
 
 
 @pytest.mark.requires_steganographer
-def test_steganographer_backend_roundtrip(sample_payload):
+@pytest.mark.parametrize("profile", ["docx", "odt"])
+def test_steganographer_backend_roundtrip(sample_payload, profile):
+    """Both serialized document profiles preserve real generic-packet bytes."""
     from docxplus import steg_bridge
 
     if not steg_bridge.available():
         pytest.skip("steganographer CLI not built")
     from docxplus.container import DocxPlusBuilder, DocxPlusReader
+    from docxplus.odt_container import OdtPlusBuilder, OdtPlusReader
+    from docxplus.validate import validate_bytes, validate_odt_bytes
 
-    data = (
-        DocxPlusBuilder(paragraphs=["Signed carrier."])
-        .add_module(
+    if profile == "docx":
+        builder = DocxPlusBuilder(paragraphs=["Signed carrier."]).add_module(
             "signed", "stego_media", sample_payload,
             backend="steganographer", carrier_size=(128, 128),
         )
-        .build()
-    )
-    reader = DocxPlusReader.from_bytes(data)
+        reader_type, validate = DocxPlusReader, validate_bytes
+    else:
+        builder = OdtPlusBuilder(paragraphs=["Signed carrier."]).add_module(
+            "signed", sample_payload, channel_id="stego_media",
+            backend="steganographer", carrier_size=(128, 128),
+        )
+        reader_type, validate = OdtPlusReader, validate_odt_bytes
+    data = builder.build()
+    assert validate(data).ok
+    reader = reader_type.from_bytes(data)
     assert reader.extract("signed") == sample_payload

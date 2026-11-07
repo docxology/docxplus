@@ -1,7 +1,7 @@
 # scripts/ — the pipeline stages
 
-Thirteen thin orchestrators. Each coordinates I/O, calls the domain modules in `src/`,
-and prints the paths it wrote. None contains business logic.
+Thin pipeline and release orchestrators coordinate I/O, call the domain modules in
+`src/`, and print the paths they wrote. None reimplements business logic.
 
 You rarely run them directly — [`../run.sh`](../run.sh) drives them in dependency
 order, and `./run.sh help` prints the stage list from the driver itself. The numbering
@@ -45,11 +45,74 @@ docxology `template_code_project` (126 files, 13 directories) through `.docx`,
 `.docxplus`, `.odt`, and `.odtplus`, reads each back *from that name*, and diffs
 against the original. Both, every run.
 
+## Release validation
+
+| Script | Purpose | Invocation |
+| --- | --- | --- |
+| `validate_release.py` | Bind private source snapshots and acquired image identity; supervise bounded offline Docker compute, verify controls and collect evidence | `python3 scripts/validate_release.py provision\|validate --help` |
+| `release_guest.py` | Image-only qualification, unchanged full checks/pipeline, installed-artifact smoke and bounded evidence export | [`../Dockerfile.release-validation`](../Dockerfile.release-validation) entrypoint |
+
+These are release orchestration, not recursive `run.sh all` stages.
+`provision` may acquire dependencies; `validate` has no network. Use an explicit
+Docker context backed by a disposable Linux VM/engine. Neither command switches
+the active context. All output directories must be new and private.
+Provisioning requires Docker Buildx/BuildKit, never the deprecated legacy builder.
+Install `docker-buildx` on `PATH` (Homebrew: `brew install docker-buildx`) or in
+Docker's system plugin directory. The supervisor exposes a standalone executable
+only through its private client configuration and records its version/hash;
+it does not edit the user's Docker configuration or copy registry credentials.
+
+The required JSON input has `schema: "docxplus.release-inputs.v1"` and a `sources`
+object with exactly `docxplus`, `steganographer` and `template`. Each entry has:
+
+- `root`: absolute path to an independently copied snapshot beneath a private,
+  caller-owned directory; no live checkout, symlinks, history or credential files.
+- `files`: exhaustive relative-POSIX-path map to `{sha256, bytes, mode}`, where
+  `mode` is permission bits (`stat.S_IMODE`) and hashes cover actual file bytes.
+- `dirs`: every relative directory, including empty ones.
+- `sha256`: SHA256 of
+  `json.dumps(files, sort_keys=True, separators=(",", ":")).encode()`.
+- `identity`, `base_commit` and `dirty`: honest source provenance; a dirty
+  snapshot's base commit is not the identity of its actual source bytes.
+
+Capture each source under its repository manager's native short source lease,
+verify it has not drifted, then release the lease before provisioning/compute.
+The template input is the actual `projects/templates/template_code_project`
+tree, excluding its venv/build/output/cache directories; it is read, not executed
+or released. Preserve file modes. The supervisor rechecks exhaustive inventories,
+digests and the acquired image before and after validation.
+
+Given a captured manifest in `$MANIFEST`, a private output parent `$PRIVATE`, and
+explicit `$DOCKER_CONTEXT`, run the commands in
+[`../README.md`](../README.md#isolated-linux-release-validation).
+Provisioning records actual image/runtime/tool/source bindings. Validation
+requires network-none, read-only root/source/runtime, UID 1000, no capabilities,
+no-new-privileges, private PID namespace, no host mounts/sockets and a hard
+30-minute in-container lifetime. Per-container `seccomp=unconfined` exposes the
+namespace syscalls needed by real bubblewrap; it never changes host policy.
+Actual write/network/namespace probes must pass before any release-success claim.
+The guest kernel/LSM must also permit unprivileged user, mount and network
+namespaces. Ubuntu's enforced `unprivileged_userns` AppArmor profile can deny
+bubblewrap even with the per-container seccomp exception. Choose a compatible
+isolated guest; do not change host policy, add capabilities or bypass production
+bubblewrap to make qualification pass.
+
+Evidence streams out before tmpfs disappears: qualification, full logs, coverage,
+real CLI cases, complete `run.sh all`, regenerated PDF/figures/template reports,
+wheel/sdist and installed-wheel roundtrips. The host verifies bounded archive
+contents and stop/reap evidence. Failure remains failure; old outputs are never
+overwritten. Import generated `output/` only after successful qualification,
+source-drift checks and a new native source-integration lease.
+Installed-wheel checks use the wheel's real console script and fresh venv Python.
+The script is interpreted explicitly because writable `/work` remains `noexec`;
+the workflow never grants executable scratch storage to make a smoke test pass.
+
 ## Outputs
 
-Everything lands under [`../output/`](../output/README.md): documents in `documents/`,
-JSON in `reports/`, plates in `figures/`, derived values in `data/`. Nothing is written
-outside the repository, and no script hardcodes a path — they resolve through
-`project_paths.py`.
+Pipeline stages write under [`../output/`](../output/README.md): documents in
+`documents/`, JSON in `reports/`, plates in `figures/`, derived values in `data/`.
+They resolve through `project_paths.py`. Isolated release evidence instead uses
+the caller's explicit private output directories; fixed `/source`, `/opt`,
+`/work` and `/outputs` paths exist only inside the disposable image.
 
 Editing rules: [`AGENTS.md`](AGENTS.md).

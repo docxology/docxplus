@@ -96,6 +96,7 @@ class OdtPlusBuilder:
         recipients: list[bytes] | None = None,
         threshold: tuple[int, int] | None = None,
         kdf: str = "scrypt",
+        recipient_padding: int = 0,
         channel_id: str = "odt_package_part",
         **channel_kwargs,
     ) -> OdtPlusBuilder:
@@ -106,6 +107,9 @@ class OdtPlusBuilder:
         the payload in the LSBs of a PNG the document visibly displays (see
         :mod:`channels.stego_media`). Unknown channel ids fail here, at authoring
         time, not when some reader meets them.
+
+        ``recipient_padding`` raises the apparent recipient count to a fixed bucket;
+        0 leaves it unpadded. It may add recipient slots but cannot remove any.
         """
         if channel_id not in ("odt_package_part", "stego_media"):
             raise ContainerError(f"unknown channel: {channel_id}")
@@ -116,7 +120,7 @@ class OdtPlusBuilder:
         payloads.get_type(payload_type)  # validate early
         self._pending.append(
             _Pending(slot, channel_id, obj, payload_type, password, recipients,
-                     threshold, None, channel_kwargs, kdf=kdf)
+                     threshold, None, channel_kwargs, kdf=kdf, recipient_padding=recipient_padding)
         )
         return self
 

@@ -1,7 +1,7 @@
 ---
 name: docxplus
 description: docxplus intelligent document container — build/read/validate a byte-valid .docx or .odt that also carries a signed, encrypted, modular intelligence layer through spec-sanctioned side-channels, with a steganographer media backend.
-version: 1.0.1
+version: 1.1.0
 author: docxology
 license: MIT
 tags: [ooxml, odf, docx, odt, steganography, document-security, thin-orchestrator]

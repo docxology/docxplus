@@ -1,0 +1,102 @@
+# syntax=docker/dockerfile:1
+# Build context: verified docxplus/, steganographer/, template/ and inputs.json.
+FROM rust:1.99-slim-bookworm@sha256:f2c004e3d2d8b547e8cf7ffbc29205385f4e71d23e53e4e383065db5e9f822cd AS stego
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential nasm pkg-config libssl-dev ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /build
+COPY steganographer/ ./
+RUN cargo build --locked --release -p steganographer-cli --no-default-features \
+    && mkdir -p /opt/steganographer/bin \
+    && cp target/release/steganographer /opt/steganographer/bin/steganographer \
+    && (rustc --version; cargo --version) > /opt/steganographer/build-toolchain.txt
+
+# Crossref has no Linux ARM64 release asset. Compile a coherent older pair,
+# rather than installing an x86 binary or mixing incompatible Pandoc ASTs.
+# https://packages.debian.org/bookworm/pandoc (also available for arm64)
+# https://github.com/lierdakil/pandoc-crossref/blob/v0.3.12.2/pandoc-crossref.cabal
+# That release permits Pandoc >=2.10,<2.18 and pandoc-types >=1.21,<1.23.
+FROM debian:bookworm-slim@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3 AS crossref
+ARG TARGETARCH
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ghc build-essential pkg-config ca-certificates curl xz-utils \
+    libgmp-dev libffi-dev zlib1g-dev liblua5.3-dev \
+    && rm -rf /var/lib/apt/lists/*
+# Pin a maintained Cabal client rather than Debian's 3.4 installer.
+# Pins: https://downloads.haskell.org/~cabal/cabal-install-3.18.2.0/SHA256SUMS
+RUN case "$TARGETARCH" in \
+      arm64) arch=aarch64; checksum=e4d940131ab0b78943a4b5ce64a9ef5acc452ea849df197787eaeecb1c3bf276 ;; \
+      amd64) arch=x86_64; checksum=b4f4c83135da77cfc18ccd6056398ca714a2dad86d5f635621ffdda8f9afe587 ;; \
+      *) printf 'Unsupported Cabal target: %s\n' "$TARGETARCH" >&2; exit 1 ;; \
+    esac \
+    && curl --fail --location --silent --show-error --proto '=https' --proto-redir '=https' --tlsv1.2 \
+       "https://downloads.haskell.org/~cabal/cabal-install-3.18.2.0/cabal-install-3.18.2.0-${arch}-linux-unknown.tar.xz" \
+       --output /tmp/cabal.tar.xz \
+    && printf '%s  /tmp/cabal.tar.xz\n' "$checksum" | sha256sum --check --status \
+    && tar -xJf /tmp/cabal.tar.xz -C /usr/local/bin cabal \
+    && rm /tmp/cabal.tar.xz
+RUN mkdir -p /root/.cabal /opt/crossref/bin \
+    && printf 'repository hackage.haskell.org\n  url: https://hackage.haskell.org/\n  secure: True\nremote-repo-cache: /root/.cabal/packages\nhttp-transport: curl\n' > /root/.cabal/config \
+    && cabal update \
+    && cabal v2-install pandoc-crossref-0.3.12.2 \
+       --index-state=2023-02-01T00:00:00Z \
+       --constraint='pandoc == 2.17.1.1' \
+       --constraint='pandoc-types == 1.22.2.1' \
+       --install-method=copy --installdir=/opt/crossref/bin --jobs=2 \
+    && (ghc --version; cabal --version) > /opt/crossref/build-toolchain.txt
+
+FROM ghcr.io/astral-sh/uv:0.13.7 AS uv
+FROM python:3.15.2-slim-bookworm AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash bubblewrap coreutils util-linux git procps ca-certificates \
+    pandoc=2.17.1.1-2~deb12u1 pandoc-data=2.17.1.1-2~deb12u1 \
+    texlive-xetex texlive-latex-extra texlive-fonts-recommended \
+    texlive-science fonts-dejavu-core fonts-liberation lmodern \
+    libgmp10 libffi8 liblua5.3-0 libyaml-0-2 libssl3 \
+    build-essential pkg-config libssl-dev libffi-dev zlib1g-dev \
+    libjpeg-dev libfreetype-dev libpng-dev \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=uv /uv /usr/local/bin/uv
+COPY --from=stego /opt/steganographer/ /opt/steganographer/
+COPY --from=crossref /opt/crossref/ /opt/crossref/
+COPY --chown=1000:1000 docxplus/ /source/docxplus/
+COPY --chown=1000:1000 steganographer/ /inputs/steganographer/
+COPY --chown=1000:1000 template/ /inputs/template/
+COPY inputs.json /inputs/manifest.json
+COPY docxplus/scripts/release_guest.py /opt/release_guest.py
+WORKDIR /source/docxplus
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
+RUN cp -a /source/docxplus /tmp/docxplus-install \
+    && (cd /tmp/docxplus-install && \
+        uv sync --locked --all-extras --no-editable --python /usr/local/bin/python3) \
+    && uv pip install --python /opt/venv/bin/python --no-deps \
+       setuptools==84.1.0 wheel==0.45.1 \
+    && rm -rf /tmp/docxplus-install \
+    && ln -s /opt/venv .venv \
+    && cp -a output /inputs/docxplus-output \
+    && git init --quiet \
+    && git -c safe.directory=/source/docxplus add --force -- . \
+    && useradd --uid 1000 --user-group --no-create-home --home-dir /work/home validator \
+    && mkdir -p /tmp /work /cache /outputs \
+    && chown 1000:1000 /work /cache /outputs \
+    && rm -rf /root/.cache /root/.cargo /root/.ssh /root/.config \
+    && git config --system --add safe.directory /source/docxplus
+# The private index above is snapshot metadata, NOT copied repository history;
+# no commit or historical identity is synthesized. Input file modes are retained;
+# UID ownership permits private-mode inputs, while the compute root is read-only.
+ENV PATH=/opt/venv/bin:/opt/steganographer/bin:/opt/crossref/bin:/usr/local/bin:/usr/bin:/bin \
+    HOME=/work/home TMPDIR=/tmp TEMP=/tmp TMP=/tmp \
+    XDG_CACHE_HOME=/cache XDG_CONFIG_HOME=/cache/config \
+    MPLBACKEND=Agg MPLCONFIGDIR=/cache/matplotlib \
+    OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+    PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1 UV_OFFLINE=1 \
+    PYTHONPATH=/source/docxplus/src \
+    UV_CACHE_DIR=/cache/uv RUFF_CACHE_DIR=/cache/ruff \
+    COVERAGE_FILE=/outputs/coverage/.coverage \
+    STEGANOGRAPHER_BIN=/opt/steganographer/bin/steganographer \
+    DOCXPLUS_TEMPLATE_PROJECT=/inputs/template SOURCE_DATE_EPOCH=1794009600 \
+    TZ=UTC LANG=C.UTF-8 LC_ALL=C.UTF-8
+# Measure tool identity under the same actual environment used by offline compute.
+RUN /opt/venv/bin/python /opt/release_guest.py --record-runtime
+USER 1000:1000
+ENTRYPOINT ["timeout", "--signal=TERM", "--kill-after=5s", "1800s", "/opt/venv/bin/python", "/opt/release_guest.py"]

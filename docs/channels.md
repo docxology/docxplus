@@ -84,6 +84,15 @@ Two backends, recorded in `location.backend`:
 * `steganographer` — the docxology/steganographer Rust CLI, adding BLAKE3 hashing,
   Ed25519 payload signatures, and Reed–Solomon error correction.
 
+The optional backend uses steganographer 0.8's generic-packet encode/decode CLI.
+Select a built binary with `STEGANOGRAPHER_BIN`; no Rust backend is required for
+`python_lsb`. `steg_bridge.analyze_carrier` consumes the
+`steganographer.cli/v1` success envelope and returns only its analysis `result`
+(including `detected` and `analysis_type`).
+`steganalysis_report()["external_analysis"]` exposes that same dictionary.
+Malformed contracts and nonzero CLI exits raise `StegError`, while an absent
+backend is reported as unavailable by the combined report.
+
 `redundancy=N` replicates the payload across N carriers, so the document survives
 losing all but one; extraction returns the replica whose bytes match the module digest.
 

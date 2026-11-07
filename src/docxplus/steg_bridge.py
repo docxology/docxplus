@@ -20,8 +20,10 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-# Sibling checkout produced by `git clone` into projects/ongoing/DAF/steganographer.
-_DEFAULT_REPO = Path(__file__).resolve().parents[2] / "steganographer"
+from .project_paths import project_root
+
+# Optional sibling source checkout; explicit binaries and PATH retain precedence.
+_DEFAULT_REPO = project_root().parent / "steganographer"
 
 
 class StegError(RuntimeError):
@@ -357,7 +359,11 @@ def analyze_carrier(
     analysis_type: str = "combined",
     tool: StegTool | None = None,
 ) -> dict:
-    """Run steganalysis on ``carrier_png`` via steganographer's ``analyze`` command."""
+    """Return the analysis result from the steganographer 0.8 CLI envelope.
+
+    The public dictionary contains ``detected`` and ``analysis_type``, not CLI
+    envelope metadata. Invalid contracts and nonzero tool exits raise ``StegError``.
+    """
     import json
     resolved = tool or locate()
     if resolved is None:
@@ -375,9 +381,24 @@ def analyze_carrier(
         ],
     )
     try:
-        return json.loads(proc.stdout.decode("utf-8"))
-    except Exception as exc:
+        envelope = json.loads(proc.stdout.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise StegError(f"failed to parse analyze output: {exc}") from exc
+    if (
+        not isinstance(envelope, dict)
+        or envelope.get("schema") != "steganographer.cli/v1"
+        or envelope.get("command") != "analyze"
+        or envelope.get("status") != "success"
+    ):
+        raise StegError("invalid steganographer analyze success envelope")
+    result = envelope.get("result")
+    if (
+        not isinstance(result, dict)
+        or not isinstance(result.get("detected"), bool)
+        or not isinstance(result.get("analysis_type"), str)
+    ):
+        raise StegError("invalid steganographer analyze result")
+    return result
 
 
 __all__ = [

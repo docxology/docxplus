@@ -20,8 +20,8 @@ cd "$(dirname "$0")"
 
 PY=".venv/bin/python"
 if [[ ! -x "${PY}" ]]; then
-  echo "[setup] creating venv"; uv venv >/dev/null; PY=".venv/bin/python"
-  uv pip install -e '.[dev,media]' >/dev/null
+  echo "[setup] provisioning locked development, media and figure dependencies"
+  env -u UV_PYTHON -u UV_PROJECT_ENVIRONMENT uv sync --locked --all-extras
 fi
 
 run_preflight() { "${PY}" scripts/00_preflight.py; }

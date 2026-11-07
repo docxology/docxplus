@@ -24,8 +24,8 @@ from __future__ import annotations
 import gzip
 import io
 import json
-import os
 import shutil
+import stat
 import tarfile
 from collections.abc import Callable
 from pathlib import Path
@@ -210,7 +210,8 @@ def pack_project(
                     f"project total uncompressed size exceeds limit of {max_uncompressed} bytes"
                 )
             info.size = len(data)
-            info.mode = 0o755 if os.access(path, os.X_OK) else 0o644
+            # Preserve archive metadata even when the source filesystem is noexec.
+            info.mode = 0o755 if path.stat().st_mode & stat.S_IXUSR else 0o644
             tar.addfile(info, io.BytesIO(data))
 
     out = io.BytesIO()

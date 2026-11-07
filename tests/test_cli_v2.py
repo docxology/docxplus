@@ -1,4 +1,4 @@
-"""CLI v0.2 commands: project pack/unpack, graph, x25519 keygen, threshold."""
+"""CLI integration: profile round trips, signer policy and append-only logs."""
 
 from __future__ import annotations
 
@@ -389,16 +389,229 @@ def test_cli_error_diagnostics_on_invalid_args(tmp_path):
     assert res.returncode == 1
     assert "refusing to overwrite" in res.stdout or "refusing to overwrite" in res.stderr
 
-    # Opt-in reproduce requires --allow-execution
+
+def test_reproduce_consent_gate_does_not_execute_carried_code(tmp_path):
+    """Declining execution must leave both the carried program and destination untouched."""
+    import json
+
+    sentinel = tmp_path / "executed"
     proj = tmp_path / "repro_proj"
-    (proj / "src").mkdir(parents=True)
-    (proj / "src" / "c.py").write_text("print('hello')\n")
-    (proj / ".docxplus-reproduce.json").write_text('{"command": ["python", "src/c.py"], "outputs": []}')
-    docx_repro = tmp_path / "repro.docx"
-    _run(["build", str(docx_repro), "--project", f"p:{proj}", "--attest"])
-    no_opt_in = _run(["reproduce", str(docx_repro), "p", str(tmp_path / "out_rep")])
+    proj.mkdir()
+    (proj / "run.py").write_text(
+        f"from pathlib import Path\nPath({str(sentinel)!r}).write_text('executed')\n"
+    )
+    (proj / ".docxplus-reproduce.json").write_text(json.dumps({
+        "command": [sys.executable, "run.py"], "outputs": ["result.txt"],
+    }))
+    docx = tmp_path / "repro.docx"
+    built = _run(["build", str(docx), "--project", f"p:{proj}"])
+    assert built.returncode == 0, built.stderr
+    dest = tmp_path / "out_rep"
+    no_opt_in = _run(["reproduce", str(docx), "p", str(dest)])
     assert no_opt_in.returncode == 2
-    assert "--allow-execution" in no_opt_in.stderr
+    assert not sentinel.exists()
+    assert not dest.exists()
 
 
+
+@pytest.mark.parametrize("profile", ["docx", "odt"])
+def test_cli_cosigner_policy_binds_the_serialized_surface(tmp_path, profile):
+    """A required institution must sign these document bytes, not just its manifest."""
+    import json
+
+    from docxplus import crypto
+    from docxplus.odt_container import open_document
+    from docxplus.secure_io import write_secret
+
+    keys = {}
+    for name in ("author", "institution", "stranger"):
+        private, public = crypto.generate_signing_key()
+        secret = write_secret(tmp_path / f"{name}.key", private.hex())
+        pin = tmp_path / f"{name}.pub"
+        pin.write_text(public.hex())
+        keys[name] = (secret, pin)
+
+    document = tmp_path / f"signed.{profile}"
+    build_command = "build" if profile == "docx" else "odt-build"
+    built = _run([
+        build_command, str(document), "--text", "Approved budget 100",
+        "--signing-key", str(keys["author"][0]),
+        "--cosign", str(keys["institution"][0]),
+    ])
+    assert built.returncode == 0, built.stderr
+    verify = [
+        "verify", str(document), "--expected-key", str(keys["author"][1]),
+        "--require-cosigner", str(keys["author"][1]),
+        "--require-cosigner", str(keys["institution"][1]),
+    ]
+    accepted = _run(verify)
+    assert accepted.returncode == 0, accepted.stderr
+    report = json.loads(accepted.stdout)
+    assert report["profile"] == profile
+    assert report["provenance_verified"] is True
+    assert report["cosigners_verified"] is True
+
+    missing = _run([*verify, "--require-cosigner", str(keys["stranger"][1])])
+    assert missing.returncode == 1
+    missing_report = json.loads(missing.stdout)
+    assert missing_report["provenance_verified"] is True
+    assert missing_report["cosigners_verified"] is False
+
+    reader = open_document(document.read_bytes())
+    part = "word/document.xml" if profile == "docx" else "content.xml"
+    reader.package.parts[part] = reader.package.parts[part].replace(
+        b"Approved budget 100", b"Approved budget 900"
+    )
+    document.write_bytes(reader.package.to_bytes())
+    tampered = _run(verify)
+    assert tampered.returncode == 1
+    tampered_report = json.loads(tampered.stdout)
+    assert tampered_report["provenance_verified"] is False
+    assert tampered_report["cosigners_verified"] is False
+
+
+@pytest.mark.parametrize("profile", ["docx", "odt"])
+@pytest.mark.parametrize("key_option", ["--signing-key", "--cosign"])
+@pytest.mark.parametrize("key_failure", ["missing", "nonhex"])
+def test_cli_invalid_signing_material_preserves_existing_document(
+    tmp_path, profile, key_option, key_failure,
+):
+    """A failed signing request must not replace the caller's previous document."""
+    document = tmp_path / f"existing.{profile}"
+    build_command = "build" if profile == "docx" else "odt-build"
+    built = _run([build_command, str(document), "--text", "Keep this signed-off draft"])
+    assert built.returncode == 0, built.stderr
+    original = document.read_bytes()
+    key = tmp_path / "invalid.key"
+    if key_failure == "nonhex":
+        key.write_text("not a serialized signing key")
+
+    rejected = _run([
+        build_command, str(document), "--text", "Unapproved replacement",
+        key_option, str(key),
+    ])
+    assert rejected.returncode == 2
+    assert document.read_bytes() == original
+
+
+@pytest.mark.parametrize("profile", ["docx", "odt"])
+def test_cli_padded_recipients_hide_count_without_losing_access(tmp_path, profile):
+    """CLI padding must reach the envelope, not only the argument parser."""
+    from docxplus import crypto
+    from docxplus.odt_container import open_document
+    from docxplus.secure_io import is_secret_mode, write_secret
+
+    recipients = [crypto.generate_recipient_key() for _ in range(2)]
+    payload = tmp_path / "payload.bin"
+    payload.write_bytes(b"Confidential review\x00\xff\n")
+    module = f"review:package_part:{payload}" if profile == "docx" else f"review:{payload}"
+    build_command = "build" if profile == "docx" else "odt-build"
+    extract_command = "extract" if profile == "docx" else "odt-extract"
+    sizes = []
+    for count in (1, 2):
+        document = tmp_path / f"recipients-{count}.{profile}"
+        recipient_args = [
+            arg for _, public in recipients[:count] for arg in ("--recipient", public.hex())
+        ]
+        built = _run([
+            build_command, str(document), "--module", module,
+            "--pad-recipients", "4", *recipient_args,
+        ])
+        assert built.returncode == 0, built.stderr
+        record = open_document(document.read_bytes()).manifest.slot("review")
+        sizes.append(record.size)
+        assert record.sealing == {"mode": "recipients"}
+
+    assert sizes[0] == sizes[1]
+    for index, (private, _) in enumerate(recipients):
+        key = write_secret(tmp_path / f"recipient-{index}.key", private.hex())
+        out = tmp_path / f"recipient-{index}.bin"
+        extracted = _run([
+            extract_command, str(document), "review", "--private-key", str(key), "--out", str(out),
+        ])
+        assert extracted.returncode == 0, extracted.stderr
+        assert out.read_bytes() == payload.read_bytes()
+        assert is_secret_mode(out)
+
+    outsider, _ = crypto.generate_recipient_key()
+    key = write_secret(tmp_path / "outsider.key", outsider.hex())
+    out = tmp_path / "outsider.bin"
+    out.write_bytes(b"previously recovered bytes")
+    rejected = _run([
+        extract_command, str(document), "review", "--private-key", str(key), "--out", str(out),
+    ])
+    assert rejected.returncode == 1
+    assert out.read_bytes() == b"previously recovered bytes"
+    assert rejected.stdout == ""
+
+
+@pytest.mark.parametrize("profile", ["docx", "odt"])
+def test_cli_recipient_padding_cannot_discard_recipients(tmp_path, profile):
+    """An undersized recipient bucket must fail without replacing the document."""
+    from docxplus import crypto
+
+    payload = tmp_path / "payload.bin"
+    payload.write_bytes(b"Confidential review\x00\xff\n")
+    document = tmp_path / f"existing.{profile}"
+    original = b"Previously approved document"
+    document.write_bytes(original)
+    module = f"review:package_part:{payload}" if profile == "docx" else f"review:{payload}"
+    build_command = "build" if profile == "docx" else "odt-build"
+    recipients = [crypto.generate_recipient_key() for _ in range(2)]
+    recipient_args = [
+        arg for _, public in recipients for arg in ("--recipient", public.hex())
+    ]
+
+    rejected = _run([
+        build_command, str(document), "--module", module,
+        "--pad-recipients", "1", *recipient_args,
+    ])
+
+    assert rejected.returncode != 0
+    assert document.read_bytes() == original
+
+
+def test_cli_consistency_proof_survives_growth_and_rejects_a_resigned_fork(tmp_path):
+    """A newly valid STH cannot excuse rewriting the history pinned by an old proof."""
+    import json
+
+    from docxplus import crypto
+    from docxplus.transparency import TransparencyLog
+
+    log_path, log, sth, key = _write_log(tmp_path)
+    proof = tmp_path / "earlier-proof.json"
+    first = _run([
+        "verify-transparency", str(log_path), "--sth", str(sth),
+        "--expected-key", str(key), "--emit-proof", str(proof),
+    ])
+    assert first.returncode == 0, first.stderr
+    assert json.loads(proof.read_text())["old_root"] == log.merkle_tree_root()
+
+    private, public = crypto.generate_signing_key()
+    key.write_text(public.hex())
+    log.append({"output_digest": "new-result", "toolchain": {}}, timestamp=200)
+    log_path.write_text(log.to_json())
+    sth.write_text(json.dumps(log.signed_tree_head(private, timestamp=300)))
+    verify = [
+        "verify-transparency", str(log_path), "--sth", str(sth),
+        "--expected-key", str(key), "--consistent-with", str(proof),
+    ]
+    extended = _run(verify)
+    assert extended.returncode == 0, extended.stderr
+    assert json.loads(extended.stdout)["append_only_verified"] is True
+
+    fork = TransparencyLog()
+    for index in range(len(log.entries)):
+        fork.append(
+            {"output_digest": f"rewritten-history-{index}", "toolchain": {}},
+            timestamp=100 + index,
+        )
+    log_path.write_text(fork.to_json())
+    sth.write_text(json.dumps(fork.signed_tree_head(private, timestamp=301)))
+    rejected = _run(verify)
+    assert rejected.returncode == 1
+    report = json.loads(rejected.stdout)
+    assert report["chain_verified"] is True
+    assert report["sth_verified"] is True
+    assert report["append_only_verified"] is False
 

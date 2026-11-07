@@ -1,5 +1,5 @@
 {
-  "document": "/Volumes/external_drive/Git/projects/ongoing/DAF/docxplus/output/documents/dossier.docx",
+  "document": "/source/docxplus/output/documents/dossier.docx",
   "modules": [
     "annex",
     "notes",
@@ -10,7 +10,7 @@
   "checks": {
     "opc_valid": true,
     "provenance": true,
-    "merkle_root": "8427ed85afb4db39\u2026",
+    "merkle_root": "d00e281ebebf6bb5\u2026",
     "project_reproduced": true,
     "nested_opened": true,
     "multi_recipient": true,

@@ -77,7 +77,7 @@ def _doc_date(root: Path) -> str:
     try:
         out = subprocess.run(
             ["git", "-C", str(root), "log", "-1", "--format=%cs"],
-            capture_output=True, text=True, timeout=10, check=False,
+            capture_output=True, text=True, timeout=10, check=False, stdin=subprocess.DEVNULL,
         )
         if out.returncode == 0 and out.stdout.strip():
             return out.stdout.strip()
@@ -86,9 +86,9 @@ def _doc_date(root: Path) -> str:
     epoch = os.environ.get("SOURCE_DATE_EPOCH")
     if epoch and epoch.isdigit():
         return datetime.datetime.fromtimestamp(
-            int(epoch), tz=datetime.timezone.utc
+            int(epoch), tz=datetime.UTC
         ).strftime("%Y-%m-%d")
-    return datetime.datetime.now(tz=datetime.timezone.utc).date().isoformat()
+    return datetime.datetime.now(tz=datetime.UTC).date().isoformat()
 
 
 def _cli_commands(root: Path) -> list[str]:

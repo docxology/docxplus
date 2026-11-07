@@ -816,20 +816,24 @@ def build_parity_figure(out_path: Path, v: dict) -> None:
                                         lw=1.4, linestyle=(0, (4, 3))))
     ax.text(10.11, 3.78, "ODF transport", color=INTEL, fontsize=8.6,
             fontweight="bold", ha="center", va="center")
-    ax.text(8.94, 3.36, "odt_package_part", color=INTEL, fontsize=8.0, fontweight="bold",
+    ax.text(8.94, 3.40, "odt_package_part", color=INTEL, fontsize=8.0, fontweight="bold",
             va="center", fontfamily="monospace")
-    ax.text(8.94, 3.14, "carries every module, declared in\nMETA-INF/manifest.xml",
-            color=MUTED, fontsize=7.1, va="center", linespacing=1.4)
+    ax.text(8.94, 3.18, "module bytes in package entries",
+            color=MUTED, fontsize=6.9, va="center")
+    ax.text(8.94, 2.88, "stego_media", color=CHANNEL_COLOR["stego_media"], fontsize=8.0,
+            fontweight="bold", va="center", fontfamily="monospace")
+    ax.text(8.94, 2.66, "payloads in displayed PNG pixels",
+            color=MUTED, fontsize=6.9, va="center")
     by_standard = [c for c, _, r in ooxml_only if r == "standard"]
     unbuilt = [c for c, _, r in ooxml_only if r == "unbuilt"]
-    ax.text(8.94, 2.62, f"no analogue by the standard ({len(by_standard)})", color=RISK,
+    ax.text(8.94, 2.30, f"no analogue by the standard ({len(by_standard)})", color=RISK,
             fontsize=7.6, fontweight="bold", va="center")
-    ax.text(8.94, 2.30, "ODF defines no custom XML datastore\nand no Markup Compatibility element",
-            color=MUTED, fontsize=7.1, va="center", linespacing=1.4)
-    ax.text(8.94, 1.86, f"no analogue yet built ({len(unbuilt)})", color=WARN, fontsize=7.6,
+    ax.text(8.94, 2.08, "custom XML datastore · MCE",
+            color=MUTED, fontsize=6.9, va="center")
+    ax.text(8.94, 1.74, f"no analogue yet built ({len(unbuilt)})", color=WARN, fontsize=7.6,
             fontweight="bold", va="center")
-    ax.text(8.94, 1.58, "meta.xml user-defined fields\nare plausible and tracked, not shipped",
-            color=MUTED, fontsize=7.1, va="center", linespacing=1.4)
+    ax.text(8.94, 1.52, "meta.xml user fields: not shipped",
+            color=MUTED, fontsize=6.9, va="center")
 
     _arrow(ax, 1.69, 4.08, 1.69, 4.30, SURFACE, lw=1.4)
     _arrow(ax, 10.11, 4.08, 10.11, 4.30, INTEL, lw=1.4)

@@ -7,6 +7,30 @@ Findings referenced by number are recorded in full in [`docs/redteam-audit.md`](
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-11-07
+
+### Changed
+
+- The optional steganographer bridge consumes the 0.8 CLI success envelope and
+  returns its analysis `result`, preserving `analyze_carrier` and
+  `steganalysis_report()["external_analysis"]` as analysis dictionaries with
+  `detected` and `analysis_type`. Invalid response contracts and real CLI failures
+  raise `StegError`; legacy unwrapped output is not supported. Generic-packet
+  encode/decode and the DOCX/ODT media layouts are unchanged.
+- Default sibling-checkout discovery uses `project_paths.project_root()` instead
+  of a stale package-parent depth. Fresh pipeline setup installs all locked
+  development, media and figure extras rather than silently omitting rendering.
+- Citation metadata no longer assigns [1.0.1's archived DOI](https://zenodo.org/records/21985580)
+  to 1.1.0. The project concept badge remains; a new version DOI requires its own
+  archival record.
+- Release validation separates source-bound image acquisition from offline,
+  unprivileged Linux compute with real bubblewrap qualification, read-only
+  source/runtime, no host mounts, hard lifetime bounds and verified evidence
+  custody. The full pipeline retains its 90% coverage floor and real renderer.
+- Regression coverage checks decoded cover opacity/contrast and consumer-visible
+  signer, tamper, privacy-padding, extraction-preservation and append-only proof
+  boundaries instead of file-size growth or mocked forwarding.
+
 ### Added
 
 - **The `stego_media` channel crosses to ODF.** `OdtStegMediaChannel` (in
@@ -23,6 +47,18 @@ Findings referenced by number are recorded in full in [`docs/redteam-audit.md`](
   caption, and `TODO.md` all updated (one unbuilt analogue remains: `metadata`).
 
 ### Fixed
+
+- ODT recipient padding now reaches shared sealing rather than being swallowed as
+  channel options, so fixed buckets conceal count and undersized buckets fail
+  without replacing an existing document, as in DOCX.
+- Project archives preserve the source executable metadata bit on `noexec`
+  storage instead of mistaking mount policy for file permissions.
+- The rendered ODF parity panel now includes both package-entry and `stego_media`
+  transports. Artifact-level regressions check channel/crypto claims, mixed
+  fidelity outcomes and readable security/reproduction boundaries.
+- Authored manuscript figure links now resolve from `docs/manuscript/` and the
+  generated manuscript tree. Missing-image diagnostics remain fatal; PDF
+  compilation cannot silently substitute descriptions for the eight figures.
 
 - **Four stale `manuscript/` paths survived the `docs/manuscript/` migration.**
   `tests/test_numbering.py`, `tests/test_manuscript_vars.py` (three call sites),
