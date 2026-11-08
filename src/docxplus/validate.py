@@ -1,14 +1,8 @@
-"""Conformance validation for docxplus packages.
+"""Structural validation for docxplus packages.
 
-Two layers, matching the report's producer/intake checklists (§14.1, §14.3):
-
-1. **OPC conformance** — the surface .docx must be a valid Office package:
-   mandatory ``[Content_Types].xml`` and root relationships, a main document
-   part, every part reachable by following relationships, no duplicate entries,
-   every part typed.
-2. **Intelligence conformance** — if a manifest is present, every module it lists
-   must resolve to real bytes with a matching digest, and the signature (when
-   present) must validate.
+Check the OPC/ODF surface structure and intelligence-layer consistency, not full
+Office/ODF schemas or XML-DSig/X.509 authenticity. Manifest signatures establish
+self-consistency only, unless a separate authenticity API pins the signing key.
 
 The validator returns a structured report rather than raising, so a pipeline can
 record findings; :func:`assert_valid` is the strict wrapper.
@@ -16,12 +10,28 @@ record findings; :func:`assert_valid` is the strict wrapper.
 
 from __future__ import annotations
 
+import posixpath
+import struct
 import zipfile
+import zlib
 from dataclasses import dataclass, field
+from urllib.parse import unquote, urlsplit
+from xml.etree.ElementTree import ParseError
+
+from defusedxml.common import DefusedXmlException
+from defusedxml.ElementTree import fromstring as _safe_fromstring
 
 from .manifest import read_manifest
-from .opc import CONTENT_TYPES_PART, OpcError, OpcPackage, read_package
-from .wordml import CT_DOCUMENT
+from .opc import CONTENT_TYPES_PART, OpcPackage, read_package
+from .wordml import CT_DOCUMENT, NS_WORDML, REL_OFFICE_DOCUMENT
+
+# Expected failures decoding untrusted package, XML, JSON, and manifest fields.
+_MALFORMED_INPUT = (
+    ValueError, TypeError, LookupError, UnicodeError, ParseError, DefusedXmlException,
+    zipfile.BadZipFile, zipfile.LargeZipFile, EOFError, OSError, struct.error, zlib.error,
+    NotImplementedError,  # unsupported ZIP compression
+    RuntimeError,  # encrypted ZIP entries without a password
+)
 
 
 @dataclass
@@ -49,17 +59,23 @@ def validate_bytes(data: bytes) -> ValidationReport:
     report = ValidationReport()
     try:
         pkg = read_package(data)
-    except (OpcError, zipfile.BadZipFile) as exc:
+    except _MALFORMED_INPUT as exc:
         report.fail(report.opc_errors, f"unreadable package: {exc}")
         return report
     return validate_package(pkg, report)
 
 
 def validate_package(pkg: OpcPackage, report: ValidationReport | None = None) -> ValidationReport:
-    """Validate an in-memory :class:`OpcPackage`."""
+    """Check package structure and manifest consistency, returning all findings."""
     report = report or ValidationReport()
-    _check_opc(pkg, report)
-    _check_intelligence(pkg, report)
+    try:
+        _check_opc(pkg, report)
+    except _MALFORMED_INPUT as exc:
+        report.fail(report.opc_errors, f"malformed package surface: {exc}")
+    try:
+        _check_intelligence(pkg, report)
+    except _MALFORMED_INPUT as exc:
+        report.fail(report.intelligence_errors, f"malformed intelligence manifest: {exc}")
     check_opc_signature_coverage(pkg, report)
     return report
 
@@ -68,10 +84,16 @@ def _check_opc(pkg: OpcPackage, report: ValidationReport) -> None:
     if not pkg.relationships.get(""):
         report.fail(report.opc_errors, "missing root relationships (_rels/.rels)")
 
-    # A main WordprocessingML document part must exist and be typed as such.
-    main_parts = [p for p in pkg.parts if pkg.content_type_for(p) == CT_DOCUMENT]
-    if not main_parts:
-        report.fail(report.opc_errors, "no main document part (word/document.xml)")
+    main_edges = [r for r in pkg.relationships.get("", []) if r.type == REL_OFFICE_DOCUMENT]
+    if len(main_edges) != 1:
+        report.fail(report.opc_errors, "expected one root officeDocument relationship to the main document")
+    else:
+        edge = main_edges[0]
+        main = _root_target(edge.target) if edge.mode == "Internal" else None
+        if main not in pkg.parts or pkg.content_type_for(main) != CT_DOCUMENT:
+            report.fail(report.opc_errors, "root officeDocument relationship has no correctly typed main document")
+        else:
+            _check_xml_root(pkg.parts[main], f"{{{NS_WORDML}}}document", main, report)
 
     for part in pkg.parts:
         if part == CONTENT_TYPES_PART:
@@ -84,6 +106,25 @@ def _check_opc(pkg: OpcPackage, report: ValidationReport) -> None:
             report.opc_errors,
             "not every part is reachable by following relationships",
         )
+
+
+def _root_target(target: str) -> str | None:
+    """Resolve an internal package-root edge without treating external URIs as parts."""
+    uri = urlsplit(target)
+    if uri.scheme or uri.netloc or uri.query or uri.fragment:
+        return None
+    path = posixpath.normpath(unquote(uri.path, errors="strict").lstrip("/"))
+    return path if path not in (".", "..") and not path.startswith("../") else None
+
+
+def _check_xml_root(blob: bytes, expected: str, part: str, report: ValidationReport) -> None:
+    try:
+        root = _safe_fromstring(blob)
+    except (ParseError, DefusedXmlException, ValueError, LookupError) as exc:
+        report.fail(report.opc_errors, f"{part}: malformed surface XML: {exc}")
+        return
+    if root.tag != expected:
+        report.fail(report.opc_errors, f"{part}: unexpected surface XML root {root.tag!r}; expected {expected}")
 
 
 def _all_parts_reachable(pkg: OpcPackage) -> bool:
@@ -123,6 +164,18 @@ def _all_parts_reachable(pkg: OpcPackage) -> bool:
 
 
 def _check_intelligence(pkg: OpcPackage, report: ValidationReport) -> None:
+    from .manifest import CT_MANIFEST, MANIFEST_PART, REL_MANIFEST
+
+    edges = [r for r in pkg.relationships.get("", []) if r.type == REL_MANIFEST]
+    if MANIFEST_PART in pkg.parts or edges:
+        if pkg.content_type_for(MANIFEST_PART) != CT_MANIFEST:
+            report.fail(report.intelligence_errors, "intelligence manifest has the wrong content type")
+        if (len(edges) != 1 or edges[0].mode != "Internal"
+                or _root_target(edges[0].target) != MANIFEST_PART):
+            report.fail(report.intelligence_errors, "intelligence manifest requires its root authority relationship")
+        if MANIFEST_PART not in pkg.parts:
+            report.fail(report.intelligence_errors, "intelligence manifest authority names a missing part")
+            return
     manifest = read_manifest(pkg)
     if manifest is None:
         report.notes.append("no intelligence manifest (plain document)")
@@ -174,7 +227,7 @@ def _check_intelligence(pkg: OpcPackage, report: ValidationReport) -> None:
                 "document or its part graph has been altered since signing",
             )
 
-    if manifest.is_signed():
+    if manifest.signature or manifest.public_key:
         if not manifest.verify_signature():
             report.fail(report.intelligence_errors, "manifest signature is invalid")
     else:
@@ -209,11 +262,14 @@ def validate_odt_bytes(data: bytes) -> ValidationReport:
         from .odt import OdtPackage
 
         pkg = OdtPackage.from_bytes(data)
-    except Exception as exc:  # noqa: BLE001 - report, don't crash the validator
+    except _MALFORMED_INPUT as exc:
         report.fail(report.opc_errors, f"unreadable ODT package: {exc}")
         return report
     _check_odf(data, pkg, report)
-    _check_odt_intelligence(pkg, report)
+    try:
+        _check_odt_intelligence(pkg, report)
+    except _MALFORMED_INPUT as exc:
+        report.fail(report.intelligence_errors, f"malformed intelligence manifest: {exc}")
     return report
 
 
@@ -222,7 +278,7 @@ def _check_odf(data: bytes, pkg, report: ValidationReport) -> None:
     import io
     import zipfile as _zip
 
-    from .odt import MIMETYPE_ODT
+    from .odt import MIMETYPE_ODT, NS_OFFICE
 
     with _zip.ZipFile(io.BytesIO(data)) as zf:
         infos = zf.infolist()
@@ -241,6 +297,8 @@ def _check_odf(data: bytes, pkg, report: ValidationReport) -> None:
         report.fail(report.opc_errors, "missing META-INF/manifest.xml")
     if "content.xml" not in pkg.parts:
         report.fail(report.opc_errors, "missing content.xml")
+    else:
+        _check_xml_root(pkg.parts["content.xml"], f"{{{NS_OFFICE}}}document-content", "content.xml", report)
 
     # Every carried part must be declared, or a reader following the manifest
     # would never find it — the ODF analogue of OPC reachability.
@@ -257,18 +315,23 @@ def _check_odt_intelligence(pkg, report: ValidationReport) -> None:
 
     from .crypto import digest as _digest
     from .manifest import Manifest
-    from .odt_container import ODT_MANIFEST_PART
+    from .odt_container import CT_MANIFEST, ODT_MANIFEST_PART
 
     blob = pkg.parts.get(ODT_MANIFEST_PART)
     if blob is None:
         report.notes.append("no intelligence manifest (plain ODT document)")
         return
+    if pkg.media_types.get(ODT_MANIFEST_PART) != CT_MANIFEST:
+        report.fail(report.intelligence_errors, "intelligence manifest has the wrong ODF media-type declaration")
     manifest = Manifest.from_bytes(blob)
     report.notes.append(f"intelligence modules: {len(manifest.records)}")
 
     from .channels.stego_media import OdtStegMediaChannel
 
     for record in manifest.records:
+        if record.channel not in ("odt_package_part", "stego_media"):
+            report.fail(report.intelligence_errors, f"{record.slot}: unsupported ODT channel: {record.channel}")
+            continue
         if record.channel == "stego_media":
             # A concealed module travels inside its carrier's pixels, not as a
             # standalone part; the channel's extract verifies against the record
@@ -303,7 +366,7 @@ def _check_odt_intelligence(pkg, report: ValidationReport) -> None:
                 "document or its part graph has been altered since signing",
             )
 
-    if manifest.is_signed():
+    if manifest.signature or manifest.public_key:
         if not manifest.verify_signature():
             report.fail(report.intelligence_errors, "manifest signature is invalid")
     else:
@@ -320,18 +383,11 @@ OPC_SIGNATURE_ORIGIN = "_xmlsignatures/origin.sigs"
 
 
 def check_opc_signature_coverage(pkg: OpcPackage, report: ValidationReport) -> None:
-    """Fail closed when an OPC package signature does not cover the payloads.
+    """Check syntactic coverage of every intelligence carrier, not XML-DSig validity.
 
-    An OPC signature enumerates the parts it covers. A signature listing only the
-    conventional Word parts would display as valid in a desktop office suite over
-    a package whose intelligence layer had been stripped or swapped — the trust
-    indicator would then be attesting the absence of the thing a reader assumes it
-    covers. That is strictly worse than carrying no signature at all, so the rule
-    is written before any signing support exists: if a package carries OPC
-    signatures, their combined reference set must include every part the
-    intelligence manifest names, plus the manifest itself.
-
-    See ``docs/opc-signatures.md``. Packages with no OPC signature are unaffected.
+    Only namespace-qualified references reachable from SignedInfo and referenced
+    Manifest/Object nodes count. No cryptographic XML-DSig or X.509 check occurs.
+    Packages without an OPC signature are unaffected.
     """
     signature_parts = [p for p in pkg.parts if p.startswith("_xmlsignatures/") and p.endswith(".xml")]
     if OPC_SIGNATURE_ORIGIN not in pkg.parts and not signature_parts:
@@ -339,49 +395,98 @@ def check_opc_signature_coverage(pkg: OpcPackage, report: ValidationReport) -> N
 
     from .manifest import MANIFEST_PART, read_manifest
 
-    manifest = read_manifest(pkg)
-    if manifest is None:
-        return  # a plain signed document is the office suite's business, not ours
-
     covered: set[str] = set()
     for sig_part in signature_parts:
-        covered |= _signed_part_names(pkg.parts[sig_part])
+        try:
+            covered |= _signed_part_names(pkg.parts[sig_part])
+        except _MALFORMED_INPUT as exc:
+            report.fail(report.intelligence_errors, f"{sig_part}: malformed OPC signature XML: {exc}")
+    report.notes.append("OPC signature coverage is syntactic only; XML-DSig and X.509 are not verified")
+    try:
+        manifest = read_manifest(pkg)
+    except _MALFORMED_INPUT as exc:
+        report.fail(report.intelligence_errors, f"cannot check OPC coverage: malformed manifest: {exc}")
+        return
+    if manifest is None:
+        return
 
-    required = {MANIFEST_PART} | {
-        part for r in manifest.records if (part := r.location.get("part"))
-    }
+
+    from .channels.metadata import CUSTOM_PART
+
+    required = {MANIFEST_PART}
+    for record in manifest.records:
+        carriers = []
+        if record.channel == "metadata":
+            carriers.append(CUSTOM_PART)
+        if record.channel == "mce":
+            carriers.append(record.location.get("part", "word/document.xml"))
+        if "part" in record.location:
+            carriers.append(record.location["part"])
+        replicas = record.location.get("parts", [])
+        if not isinstance(replicas, list):
+            report.fail(report.intelligence_errors, f"{record.slot}: carrier parts must be a list")
+            continue
+        carriers.extend(replicas)
+        if any(not isinstance(part, str) or not part for part in carriers):
+            report.fail(report.intelligence_errors, f"{record.slot}: carrier names must be nonempty strings")
+            continue
+        required.update(carriers)
     missing = sorted(required - covered)
     if missing:
         report.fail(
             report.intelligence_errors,
             "OPC signature does not cover intelligence parts "
-            f"({', '.join(missing)}) — a validating signature over a stripped "
-            "payload set is worse than none; see docs/opc-signatures.md",
+            f"({', '.join(missing)}) — syntactic coverage only; see docs/opc-signatures.md",
         )
 
 
 def _signed_part_names(blob: bytes) -> set[str]:
-    """Part names referenced by an XML-DSig signature part.
+    """Collect package references reachable through the XML-DSig signed topology.
 
-    OPC references a part as a URI with an optional ``?ContentType=`` query, so
-    the query is stripped before comparison.
+    A signed Object may contain a Manifest, which in turn references package parts
+    or another Manifest. Unsigned Objects and unrelated extension nodes do not
+    contribute. This examines topology only, not digests, transforms or signatures.
     """
-    from urllib.parse import unquote
-
-    from defusedxml.ElementTree import fromstring as _safe_fromstring
+    ds = "{http://www.w3.org/2000/09/xmldsig#}"
+    root = _safe_fromstring(blob)
+    if root.tag != ds + "Signature":
+        raise ValueError("expected an XML-DSig Signature root")
+    signed_info = root.findall(ds + "SignedInfo")
+    if len(signed_info) != 1:
+        raise ValueError("expected exactly one XML-DSig SignedInfo")
+    ids = {}
+    for elem in root.iter():
+        if ident := elem.get("Id"):
+            if ident in ids:
+                raise ValueError(f"duplicate signature Id: {ident}")
+            ids[ident] = elem
 
     names: set[str] = set()
-    try:
-        root = _safe_fromstring(blob)
-    except Exception:  # noqa: BLE001 - a malformed signature covers nothing
-        return names
-    for elem in root.iter():
-        if not elem.tag.endswith("}Reference") and not elem.tag.endswith("Reference"):
+    pending = list(signed_info[0].findall(ds + "Reference"))
+    visited: set[str] = set()
+    while pending:
+        reference = pending.pop()
+        uri = reference.get("URI", "")
+        if uri.startswith("#"):
+            ident = unquote(uri[1:], errors="strict")
+            if ident in visited:
+                continue
+            visited.add(ident)
+            target = ids.get(ident)
+            if target is None:
+                raise ValueError(f"unresolved signature reference: {uri}")
+            if target.tag == ds + "Manifest":
+                pending.extend(target.findall(ds + "Reference"))
+            elif target.tag == ds + "Object":
+                for manifest in target.findall(ds + "Manifest"):
+                    pending.extend(manifest.findall(ds + "Reference"))
             continue
-        uri = elem.get("URI")
-        if not uri:
-            continue
-        names.add(unquote(uri.split("?", 1)[0]).lstrip("/"))
+        parsed = urlsplit(uri)
+        if (not parsed.scheme and not parsed.netloc and not parsed.fragment
+                and parsed.path.startswith("/")):
+            part = _root_target(parsed.path)
+            if part is not None:
+                names.add(part)
     return names
 
 

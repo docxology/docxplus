@@ -8,7 +8,7 @@
 \vspace{0.35in}
 {\Huge\bfseries docxplus: An Intelligent Document Container\par}
 \vspace{0.12in}
-{\Large\itshape Carrying Signed, Encrypted, Modular, Self-Verifying Payloads Inside an Ordinary .docx\par}
+{\Large\itshape Carrying Signed, Encrypted, Modular Payloads Inside Ordinary DOCX and ODT Files\par}
 \vspace{0.25in}
 {\large\bfseries Daniel Ari Friedman\par}
 \vspace{0.06in}
@@ -19,7 +19,7 @@
 {\normalsize Standard Reference: ISO/IEC 29500-2 (OPC) · OASIS OpenDocument v1.3/v1.4\par}
 {{DOI_LINE}}
 \vfill
-{\small Licensed under MIT · Deterministic, Mock-Free Verification Gate: {{COVERAGE_GATE}}\% Coverage\par}
+{\small Licensed under MIT · Coverage policy: {{COVERAGE_GATE}}\% · fresh qualification requires source-bound evidence\par}
 \end{center}
 \end{titlepage}
 \clearpage
@@ -30,7 +30,7 @@
   <img src="figures/cover.png" alt="docxplus Cover Art: Dual-Contract Container Architecture" style="width:100%; max-width:900px;" />
   <div class="cover-copy">
     <h1>docxplus: An Intelligent Document Container</h1>
-    <p class="cover-subtitle">Carrying Signed, Encrypted, Modular, Self-Verifying Payloads Inside an Ordinary .docx</p>
+    <p class="cover-subtitle">Carrying Signed, Encrypted, Modular Payloads Inside Ordinary DOCX and ODT Files</p>
     <p class="cover-author"><strong>Daniel Ari Friedman</strong> (Active Inference Institute)</p>
     <dl>
       <dt>ORCID</dt><dd>0000-0001-6232-9096</dd>

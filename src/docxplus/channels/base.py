@@ -24,14 +24,21 @@ from ..opc import OpcPackage
 class ChannelRecord:
     """One entry in the intelligence manifest describing a placed payload.
 
-    ``digest`` is over the plaintext, packed payload (after payload-type packing,
-    before sealing). ``sealing`` describes the crypto envelope:
+    ``digest`` and ``size`` describe the stored bytes after packing and sealing:
+    ciphertext for encrypted modules, never an offline plaintext-confirmation
+    digest. ``sealing`` records the mode without recipient identities/counts or
+    a decoy marker:
 
-        {"mode": "plain"}                                  # no encryption
-        {"mode": "password"}                               # DXE1 (AES-GCM/PBKDF2)
-        {"mode": "recipients", "recipients": [hex, ...]}   # DXE2 (X25519 multi)
-        {"mode": "threshold", "k": 3, "n": 5}              # Shamir over content key
-        {"mode": "decoy"}                                  # two secrets, two passwords
+        {"mode": "plain"}                         # no encryption
+        {"mode": "password"}                      # exactly two padded DXE1 frames
+        {"mode": "recipients"}                    # DXE2 classical / DXE3 hybrid
+        {"mode": "threshold", "k": 3, "n": 5,
+         "checksummed_shares": True,
+         "share_digests": [...]}                  # complete issued-share digests
+
+    Password and decoy frames share bounded KDF/padding policy, not a universal
+    deniability guarantee. Share tags are unkeyed checksums; issued-share
+    authenticity requires verifying the signed commitments under a pinned key.
     """
 
     channel: str
@@ -87,8 +94,10 @@ class Channel(Protocol):
     def extract(self, pkg: OpcPackage, record: ChannelRecord) -> bytes: ...
 
     def capacity(self, pkg: OpcPackage) -> int | None:
-        """Bytes this channel can still hold in ``pkg``; ``None`` = effectively
-        unbounded (a new part can always be added)."""
+        """Channel capacity in ``pkg``; ``None`` means no channel-local limit.
+
+        Package entry/total/count and intake budgets still apply.
+        """
         ...
 
 

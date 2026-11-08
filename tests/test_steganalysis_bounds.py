@@ -1,20 +1,8 @@
-"""What the shipped steganalysis finds, what it misses, and what breaks a carrier.
+"""Deterministic statistical limitations and actual PNG carrier boundaries.
 
-The security model claims concealment is obfuscation rather than secrecy and offers
-`analyze-carrier` as the way to check. A claim like that is only worth what its
-boundary is worth, and the boundary here is sharp and counter-intuitive: the
-chi-squared pairs-of-values attack keys on the histogram flattening that a **uniform**
-bit stream causes, so it finds the sealed payloads that are already protected and
-misses the unsealed low-entropy ones that are not.
-
-That asymmetry is easy to state and easy to lose. Someone tuning the detector, or
-swapping in a different one, could improve the average case and silently erase the
-documented regime. These tests pin the regime itself, so the documentation and the
-code cannot drift apart: if the detector ever does catch a constant-fill payload, the
-test that says it does not will fail, and the docs must be rewritten deliberately.
-
-Everything here embeds into a real PNG and reads it back. No mocks, no fixtures
-standing in for a carrier.
+Pair equality is compatible with LSB replacement but is not proof of embedding:
+an untouched balanced cover has p_value=1, and a supported low-entropy payload
+can be compatible too. These controls do not establish natural-cover accuracy.
 """
 
 from __future__ import annotations
@@ -40,82 +28,92 @@ def _capacity() -> int:
     return lsb.capacity_bytes(*CARRIER)
 
 
-# -- the detector finds what it is supposed to find ---------------------------
+def _flat_carrier(tmp_path, name="flat.png"):
+    path = tmp_path / name
+    Image.new("RGB", CARRIER, (100, 100, 100)).save(path)
+    return path
 
 
-def test_a_clean_carrier_is_not_flagged(tmp_path):
-    result = steg_bridge.chi_square_lsb(_carrier(tmp_path))
-    assert not result["suspicious"], f"false positive on an untouched carrier: {result}"
+def test_untouched_balanced_cover_is_compatible_not_proof_of_embedding(tmp_path):
+    """F4: a known cover yields the maximum compatibility p-value."""
+    path = tmp_path / "balanced.png"
+    image = Image.new("RGB", CARRIER)
+    image.putdata([(100, 101, 100), (101, 100, 101)] * (CARRIER[0] * CARRIER[1] // 2))
+    image.save(path)
+    result = steg_bridge.chi_square_lsb(path)
+    assert result["available"] is True
+    assert result["chi2"] == 0.0
+    assert result["dof"] == 1
+    assert result["p_value"] == 1.0
+    assert result["suspicious"] is True
+    sweep = steg_bridge.chi_square_sweep(path)
+    assert sweep["largest_flagged_prefix"] == 1.0
+    with pytest.raises(ValueError, match="no DXL1 payload"):
+        lsb.extract(path)
 
 
-def test_a_fully_embedded_random_payload_is_flagged(tmp_path):
-    """The default path: docxplus seals modules, and ciphertext is uniform."""
-    carrier = _carrier(tmp_path)
-    stego = lsb.embed(carrier, os.urandom(_capacity()), tmp_path / "full.png")
+def test_tiny_and_sparse_images_are_unavailable(tmp_path):
+    """An unsupported approximation must not become a completed negative."""
+    for name, size, colour in [
+        ("tiny", (1, 1), (100, 101, 100)),
+        ("sparse", (16, 16), (100, 100, 100)),
+    ]:
+        path = tmp_path / f"{name}.png"
+        image = Image.new("RGB", size, colour)
+        if name == "sparse":
+            image.putpixel((0, 0), (2, 100, 100))
+        image.save(path)
+        result = steg_bridge.chi_square_lsb(path)
+        assert result["available"] is False
+        assert result["p_value"] is None
+        assert result["suspicious"] is False
+        sweep = steg_bridge.chi_square_sweep(path)
+        assert sweep["available"] is False
+        assert sweep["max_p_value"] is None
+        assert sweep["largest_flagged_prefix"] == 0.0
+
+
+def test_asymmetric_cover_and_constant_zero_payload_are_not_compatible(tmp_path):
+    """A real extractable payload can fail the pair-equality compatibility test."""
+    carrier = _flat_carrier(tmp_path)
+    payload = b"\x00" * _capacity()
+    stego = lsb.embed(carrier, payload, tmp_path / "zero.png")
+    assert lsb.extract(stego) == payload
+    for path in (carrier, stego):
+        result = steg_bridge.chi_square_lsb(path)
+        assert result["available"] is True
+        assert result["p_value"] < steg_bridge.SUSPICION_THRESHOLD
+        assert result["suspicious"] is False
+        sweep = steg_bridge.chi_square_sweep(path)
+        assert sweep["largest_flagged_prefix"] == 0.0
+
+
+def test_low_entropy_alternating_payload_can_be_compatible(tmp_path):
+    """Compatibility does not establish encryption or high payload entropy."""
+    carrier = _flat_carrier(tmp_path)
+    payload = b"\x55" * _capacity()
+    stego = lsb.embed(carrier, payload, tmp_path / "alternating.png")
+    assert lsb.extract(stego) == payload
     result = steg_bridge.chi_square_lsb(stego)
-    assert result["suspicious"], f"missed a fully embedded random payload: {result}"
+    assert result["available"] is True
+    assert result["p_value"] >= steg_bridge.SUSPICION_THRESHOLD
+    assert result["suspicious"] is True
 
 
 @pytest.mark.parametrize("fill", [0.25, 0.5])
-def test_the_sweep_catches_partial_fills_the_whole_image_statistic_misses(tmp_path, fill):
-    """A sequentially filled carrier hides in aggregate; the untouched tail dominates.
-
-    Both halves of this are asserted, because the sweep only earns its place if the
-    whole-image statistic genuinely fails on the same carrier.
-    """
-    carrier = _carrier(tmp_path)
-    stego = lsb.embed(carrier, os.urandom(int(_capacity() * fill)), tmp_path / "part.png")
-    assert not steg_bridge.chi_square_lsb(stego)["suspicious"], (
-        "whole-image analysis caught a partial fill; the sweep's justification is gone "
-        "and the manuscript's explanation of it is now wrong"
-    )
-    assert steg_bridge.chi_square_sweep(stego)["suspicious"], (
-        f"the prefix sweep missed a {fill:.0%} fill"
-    )
-
-
-# -- and does not find what it cannot find ------------------------------------
-
-
-@pytest.mark.parametrize(
-    "name,payload_for",
-    [
-        ("ascii text", lambda n: (b"the quick brown fox jumps over the lazy dog. " * (n // 45 + 1))[:n]),
-        ("constant fill", lambda n: b"\xA5" * n),
-        ("zero fill", lambda n: b"\x00" * n),
-    ],
-)
-def test_a_low_entropy_payload_is_not_detected_even_at_full_fill(tmp_path, name, payload_for):
-    """The documented false-negative regime, pinned as measured behaviour.
-
-    This is not the detector failing at its job; PoV analysis has no signal to read
-    when the embedded bits are structured. It is pinned so the `security-model.md`
-    statement that a clean verdict proves nothing stays true of the shipped code.
-    """
-    carrier = _carrier(tmp_path)
-    stego = lsb.embed(carrier, payload_for(_capacity()), tmp_path / "low.png")
-    whole = steg_bridge.chi_square_lsb(stego)
-    sweep = steg_bridge.chi_square_sweep(stego)
-    assert not whole["suspicious"] and not sweep["suspicious"], (
-        f"the detector now catches a {name} payload. That is an improvement, but "
-        f"docs/security-model.md, docs/channels.md, docs/cli.md and the manuscript all "
-        f"state it does not. Update them, then update this test."
-    )
-
-
-def test_sealing_a_module_makes_it_more_detectable_not_less(tmp_path):
-    """The trade the channel actually offers, stated as a comparison.
-
-    Worth asserting because the intuition runs the other way: encrypting a payload
-    protects its contents while making its *presence* maximally visible to this test.
-    """
-    carrier = _carrier(tmp_path)
-    n = _capacity()
-    sealed = lsb.embed(carrier, os.urandom(n), tmp_path / "sealed.png")
-    plain = lsb.embed(carrier, b"\x00" * n, tmp_path / "plain.png")
-    assert (
-        steg_bridge.chi_square_lsb(sealed)["p_embedding"]
-        > steg_bridge.chi_square_lsb(plain)["p_embedding"]
+def test_sweep_preserves_largest_flagged_prefix_for_sequential_control(tmp_path, fill):
+    """A deterministic embedded prefix is visible before the asymmetric tail."""
+    carrier = _flat_carrier(tmp_path)
+    payload = b"\x55" * int(_capacity() * fill)
+    stego = lsb.embed(carrier, payload, tmp_path / "partial.png")
+    assert lsb.extract(stego) == payload
+    assert steg_bridge.chi_square_lsb(stego)["suspicious"] is False
+    sweep = steg_bridge.chi_square_sweep(stego, steps=20)
+    assert sweep["available"] is True
+    assert sweep["suspicious"] is True
+    assert sweep["largest_flagged_prefix"] == fill
+    assert sweep["largest_flagged_prefix"] == max(
+        row["fraction"] for row in sweep["steps"] if row["suspicious"]
     )
 
 

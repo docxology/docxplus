@@ -12,6 +12,7 @@ An ODF package is a ZIP containing:
 from __future__ import annotations
 
 import io
+import re
 import zipfile
 from dataclasses import dataclass, field
 from xml.sax.saxutils import escape, quoteattr
@@ -54,50 +55,74 @@ def build_meta_xml(title: str, creator: str, custom_properties: dict[str, str] |
 # itself, and the mimetype stream is located positionally (first, STORED) rather
 # than through the manifest — LibreOffice omits both.
 _UNLISTED_IN_MANIFEST = frozenset({"/", "mimetype", "META-INF/manifest.xml"})
+_ENTRY_ATTRIBUTES = frozenset({"version", "size", "preferred-view-mode"})
 
 
-def build_manifest_xml(entries: list[tuple[str, str]]) -> bytes:
-    """Build META-INF/manifest.xml containing file-entry elements."""
-    entries_xml = ['<manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.text"/>']
-    for path, media_type in entries:
-        if path not in _UNLISTED_IN_MANIFEST:
-            entries_xml.append(
-                f'<manifest:file-entry manifest:full-path={quoteattr(path)} manifest:media-type={quoteattr(media_type)}/>'
-            )
+def _validate_entry_attributes(path: str, values: dict[str, str]) -> None:
+    from .opc import OpcError
+
+    if set(values) - _ENTRY_ATTRIBUTES or any(not isinstance(value, str) for value in values.values()):
+        raise OpcError("unsupported ODF file-entry attributes")
+    if "size" in values and re.fullmatch(r"(?:\+?[0-9]+|-0+)", values["size"].strip(" \t\r\n")) is None:
+        raise OpcError("invalid ODF file-entry size")
+    if "preferred-view-mode" in values and (
+        path != "/" or values["preferred-view-mode"] not in {"edit", "presentation-slide-show", "read-only"}
+    ):
+        # QName modes depend on namespace context, which this model cannot
+        # preserve. Refuse them rather than authenticate a lossy projection.
+        raise OpcError("unsupported ODF preferred view mode")
+
+
+def build_manifest_xml(
+    entries: list[tuple[str, str]], *, version: str | None = "1.3",
+    entry_attributes: dict[str, dict[str, str]] | None = None,
+) -> bytes:
+    """Build an index without dropping supported file-entry authority metadata."""
+    listed = [("/", MIMETYPE_ODT.decode("ascii"))] + [
+        (path, media_type) for path, media_type in entries if path not in _UNLISTED_IN_MANIFEST
+    ]
+    attributes = entry_attributes or {}
+    if set(attributes) - {path for path, _ in listed}:
+        from .opc import OpcError
+
+        raise OpcError("ODF attributes refer to an unlisted file-entry")
+    entries_xml = []
+    for path, media_type in listed:
+        values = attributes.get(path, {})
+        _validate_entry_attributes(path, values)
+        extra = "".join(f" manifest:{key}={quoteattr(value)}" for key, value in sorted(values.items()))
+        entries_xml.append(
+            f'<manifest:file-entry manifest:full-path={quoteattr(path)} manifest:media-type={quoteattr(media_type)}{extra}/>'
+        )
+    version_attribute = "" if version is None else f" manifest:version={quoteattr(version)}"
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
-        f'<manifest:manifest xmlns:manifest="{NS_MANIFEST}" manifest:version="1.3">'
+        f'<manifest:manifest xmlns:manifest="{NS_MANIFEST}"{version_attribute}>'
         f'{"".join(entries_xml)}'
         '</manifest:manifest>'
     ).encode()
 
 
 def _reject_unsafe_entry(name: str) -> None:
-    """Refuse ZIP entry names that escape the package root or are absolute.
+    """Require an already-canonical file entry, never a ZIP directory alias."""
+    from .opc import _reject_noncanonical_entry_name
 
-    Backslashes are normalised first so a Windows-style ``..\\..\\x`` cannot slip
-    past a check that only looks for forward slashes.
-    """
-    import posixpath
-
-    from .opc import OpcError
-
-    if not name or name.endswith("/"):
-        return  # directory marker: carries no bytes
-    candidate = name.replace("\\", "/")
-    if candidate.startswith("/") or (len(candidate) > 1 and candidate[1] == ":"):
-        raise OpcError(f"absolute ODT entry name rejected: {name!r}")
-    normalised = posixpath.normpath(candidate)
-    if normalised == ".." or normalised.startswith(("../", "/")):
-        raise OpcError(f"path-traversal ODT entry name rejected: {name!r}")
+    _reject_noncanonical_entry_name(name)
 
 
 @dataclass
 class OdtPackage:
     parts: dict[str, bytes] = field(default_factory=dict)
     media_types: dict[str, str] = field(default_factory=dict)
+    manifest_version: str | None = "1.3"
+    entry_attributes: dict[str, dict[str, str]] = field(default_factory=dict)
 
     def add_part(self, path: str, data: bytes, media_type: str = "application/octet-stream") -> None:
+        from .opc import OpcError
+
+        _reject_unsafe_entry(path)
+        if path in self.parts:
+            raise OpcError(f"duplicate ODT part name: {path!r}")
         self.parts[path] = data
         self.media_types[path] = media_type
 
@@ -105,7 +130,7 @@ class OdtPackage:
         """Produce a deterministic, spec-conforming ODT zip archive.
         mimetype must be the first entry, uncompressed.
         """
-        from .opc import _FIXED_ZIP_TIME
+        from .opc import _FIXED_ZIP_TIME, _compression_for, _guard_writer_entries
 
         def _info(name: str, compress: int) -> zipfile.ZipInfo:
             # Same determinism contract as the OPC path: the 1980-01-01 DOS epoch
@@ -116,21 +141,41 @@ class OdtPackage:
             info.external_attr = 0o600 << 16
             return info
 
+        if self.media_types.get("/", MIMETYPE_ODT.decode()) != MIMETYPE_ODT.decode():
+            from .opc import OpcError
+
+            raise OpcError("ODT root media type disagrees with mimetype")
+        for path in self.media_types:
+            if path == "/":
+                continue
+            _reject_unsafe_entry(path.removesuffix("/"))
+            if path in _UNLISTED_IN_MANIFEST:
+                from .opc import OpcError
+
+                raise OpcError(f"reserved ODF file-entry: {path!r}")
+        manifest_entries = [(p, self.media_types.get(p, "application/octet-stream"))
+                            for p in sorted(self.parts.keys() | self.media_types.keys())]
+        manifest_xml = build_manifest_xml(
+            manifest_entries, version=self.manifest_version, entry_attributes=self.entry_attributes
+        )
+        rendered = {p: data for p, data in self.parts.items()
+                    if p not in ("mimetype", "META-INF/manifest.xml")}
+        rendered["mimetype"] = MIMETYPE_ODT
+        rendered["META-INF/manifest.xml"] = manifest_xml
+        _guard_writer_entries(rendered, case_sensitive=True)
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as zf:
             # 1. mimetype first, uncompressed (ZIP_STORED)
             zf.writestr(_info("mimetype", zipfile.ZIP_STORED), MIMETYPE_ODT)
 
             # Ensure META-INF/manifest.xml is present and accurate
-            manifest_entries = [(p, self.media_types.get(p, "application/octet-stream")) for p in sorted(self.parts)]
-            manifest_xml = build_manifest_xml(manifest_entries)
-            zf.writestr(_info("META-INF/manifest.xml", zipfile.ZIP_DEFLATED), manifest_xml)
+            zf.writestr(_info("META-INF/manifest.xml", _compression_for(manifest_xml)), manifest_xml)
 
             # 2. Write other parts sorted
             for path in sorted(self.parts):
                 if path in ("mimetype", "META-INF/manifest.xml"):
                     continue
-                zf.writestr(_info(path, zipfile.ZIP_DEFLATED), self.parts[path])
+                zf.writestr(_info(path, _compression_for(self.parts[path])), self.parts[path])
         return buf.getvalue()
 
     @classmethod
@@ -144,13 +189,13 @@ class OdtPackage:
         that later materialises them to disk must not be the thing that discovers
         the package was hostile.
         """
-        from .opc import MAX_ENTRIES, OpcError, _guard_zip_bomb
+        from .opc import OpcError, _guard_zip_bomb, _preflight_zip
 
         pkg = cls()
+        expected_entries = _preflight_zip(data)
         with zipfile.ZipFile(io.BytesIO(data), "r") as zf:
+            _guard_zip_bomb(zf.infolist(), expected_entries)
             names = zf.namelist()
-            if len(names) > MAX_ENTRIES:
-                raise OpcError(f"ODT package has too many entries ({len(names)} > {MAX_ENTRIES})")
             # Two entries under one name — or two names that normalise to one key,
             # like `content.xml` and `./content.xml` — let a signed package carry a
             # second stream. Which one a consumer renders depends on whether it reads
@@ -168,19 +213,62 @@ class OdtPackage:
                         f"colliding ODT entry names: {normalised[key]!r} and {name!r}"
                     )
                 normalised[key] = name
-            _guard_zip_bomb(zf.infolist(), len(data))
+            _guard_mimetype(zf)
             for name in names:
-                _reject_unsafe_entry(name)
+                if name.endswith("/"):
+                    continue  # validated empty directory markers are not package parts
                 pkg.parts[name] = zf.read(name)
         # Parse META-INF/manifest.xml if present
         if "META-INF/manifest.xml" in pkg.parts:
             root = _safe_fromstring(pkg.parts["META-INF/manifest.xml"])
-            for elem in root.iter(f"{{{NS_MANIFEST}}}file-entry"):
-                path = elem.get(f"{{{NS_MANIFEST}}}full-path") or elem.get("manifest:full-path")
-                mtype = elem.get(f"{{{NS_MANIFEST}}}media-type") or elem.get("manifest:media-type")
-                if path and mtype:
-                    pkg.media_types[path] = mtype
+            if root.tag != f"{{{NS_MANIFEST}}}manifest" or set(root.attrib) - {
+                f"{{{NS_MANIFEST}}}version"
+            }:
+                raise OpcError("invalid ODF manifest namespace or attributes")
+            pkg.manifest_version = root.get(f"{{{NS_MANIFEST}}}version")
+            for elem in root:
+                if elem.tag != f"{{{NS_MANIFEST}}}file-entry" or len(elem):
+                    raise OpcError("unsupported ODF manifest element or namespace")
+                required = {f"{{{NS_MANIFEST}}}full-path", f"{{{NS_MANIFEST}}}media-type"}
+                optional = {f"{{{NS_MANIFEST}}}{key}" for key in _ENTRY_ATTRIBUTES}
+                if not required <= set(elem.attrib) or set(elem.attrib) - required - optional:
+                    raise OpcError("invalid ODF file-entry attributes")
+                path = elem.attrib[f"{{{NS_MANIFEST}}}full-path"]
+                mtype = elem.attrib[f"{{{NS_MANIFEST}}}media-type"]
+                if path in _UNLISTED_IN_MANIFEST and path != "/":
+                    raise OpcError(f"reserved ODF file-entry: {path!r}")
+                if path != "/":
+                    _reject_unsafe_entry(path.removesuffix("/"))
+                if path in pkg.media_types:
+                    raise OpcError(f"duplicate ODF file-entry: {path!r}")
+                pkg.media_types[path] = mtype
+                attributes = {
+                    key: elem.attrib[f"{{{NS_MANIFEST}}}{key}"] for key in _ENTRY_ATTRIBUTES
+                    if f"{{{NS_MANIFEST}}}{key}" in elem.attrib
+                }
+                _validate_entry_attributes(path, attributes)
+                if attributes:
+                    pkg.entry_attributes[path] = attributes
+        if pkg.media_types.get("/") != MIMETYPE_ODT.decode():
+            raise OpcError("ODT root media type disagrees with mimetype")
         return pkg
+
+
+def _guard_mimetype(zf: zipfile.ZipFile) -> None:
+    """Admit the positional fixed-size STORED ODT marker before reading it."""
+    from .opc import OpcError
+
+    infos = zf.infolist()
+    if not infos or infos[0].filename != "mimetype" or infos[0].header_offset != 0:
+        raise OpcError("ODT first ZIP entry must be mimetype")
+    info = infos[0]
+    if (info.compress_type != zipfile.ZIP_STORED
+            or info.file_size != len(MIMETYPE_ODT)
+            or info.compress_size != len(MIMETYPE_ODT)):
+        raise OpcError("ODT mimetype must be fixed-size and STORED")
+    with zf.open(info) as stream:
+        if stream.read(len(MIMETYPE_ODT) + 1) != MIMETYPE_ODT:
+            raise OpcError("not an OpenDocument Text mimetype")
 
 
 def new_base_odt(

@@ -75,18 +75,18 @@ The two signatures also fail in opposite directions, which is the useful part:
 
 | | Covers intelligence layer | Covers OPC part graph | Verified by Word |
 | --- | --- | --- | --- |
-| Manifest Ed25519 signature | yes | no | no |
-| OPC XML-DSig | only if explicitly enumerated | yes | yes |
+| Manifest Ed25519 signature | yes | yes, normalized format-3 commitment including relationship IDs | no |
+| OPC XML-DSig (not implemented here) | only if explicitly enumerated | according to signed references/transforms | application-dependent |
 
 ## Recommendation
 
-If this is built, the invariant is: **the OPC reference set must be a superset of
-every part the manifest names.** Concretely, derive the reference list from
-`manifest.records[*].location` rather than from a fixed list of Word parts, and
-add a validator rule in `src/docxplus/validate.py` that fails closed when a package
-carries an OPC signature whose reference set omits any manifest-named part. That
-rule is worth writing *before* the signing code, because it is what stops the
-feature from becoming a trust-laundering surface.
+The enforced syntactic gate requires the reachable namespace-qualified SignedInfo/
+Manifest reference set to cover the intelligence manifest and every carrier part
+(including metadata, MCE and plural media locations). Arbitrary Reference-like
+elements do not count. `validate.py` checks this coverage, **not** XML-DSig
+cryptography, X.509 trust, transform correctness or a native trusted-signature result.
+The future signer must derive coverage from actual manifest locations, not a
+fixed list of conventional Word parts. Passing this gate is necessary, not sufficient.
 
 Not scheduled: the C14N and X.509 dependencies are disproportionate to the
 research value, and the dual-key story (Ed25519 for intelligence, RSA/ECDSA for

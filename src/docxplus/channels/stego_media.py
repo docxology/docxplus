@@ -11,8 +11,9 @@ Two real backends:
 * ``python_lsb`` (default) — the pure-Python LSB codec in :mod:`lsb`, needing only
   Pillow. Zero external setup; deterministic and reversible.
 * ``steganographer`` — the docxology/steganographer Rust CLI (see
-  :mod:`steg_bridge`), which additionally BLAKE3-hashes, Ed25519-signs and can
-  Reed-Solomon-protect the packet. Requires the built binary.
+  :mod:`steg_bridge`), which BLAKE3-checks the packet and optionally Ed25519-signs
+  it with a supplied key. Default packets are unsigned/non-ECC. Requires the binary;
+  trusting a signer identity separately requires a pinned key.
 
 Both are genuine steganographic embeddings; the backend is recorded in the
 manifest so extraction uses the matching decoder.
@@ -25,7 +26,7 @@ from pathlib import Path
 
 from .. import lsb, steg_bridge
 from ..crypto import digest as _digest
-from ..opc import OpcPackage, Relationship
+from ..opc import OpcPackage, Relationship, _insert_xml_fragment
 from .base import ChannelRecord
 
 CT_PNG = "image/png"
@@ -46,15 +47,30 @@ def _insert_drawing(pkg: OpcPackage, rid: str, size: tuple[int, int]) -> None:
     EMU is the WordprocessingML unit: 914400 per inch, and a PNG with no declared DPI
     is conventionally read at 96, giving 9525 EMU per pixel.
     """
-    from .mce import _body_insertion_point
+    from defusedxml import ElementTree as ET
+    from defusedxml.common import DefusedXmlException
+
+    from .mce import NS_WORDML
+
+    used_ids = set()
+    tag = "{http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing}docPr"
+    for part, blob in pkg.parts.items():
+        if part.startswith("word/") and part.endswith(".xml"):
+            try:
+                used_ids.update(int(node.get("id", "")) for node in ET.fromstring(blob).iter(tag))
+            except (ET.ParseError, DefusedXmlException, ValueError) as exc:
+                raise ValueError(f"cannot allocate a drawing identifier in {part}") from exc
+    drawing_id = 1
+    while drawing_id in used_ids:
+        drawing_id += 1
 
     width_emu, height_emu = size[0] * 9525, size[1] * 9525
     drawing = (
-        '<w:p><w:r><w:drawing>'
+        f'<w:p xmlns:w="{NS_WORDML}"><w:r><w:drawing>'
         '<wp:inline distT="0" distB="0" distL="0" distR="0" '
         'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">'
         f'<wp:extent cx="{width_emu}" cy="{height_emu}"/>'
-        '<wp:docPr id="1" name="Figure"/>'
+        f'<wp:docPr id="{drawing_id}" name="Figure"/>'
         '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
         '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
         '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">'
@@ -70,8 +86,10 @@ def _insert_drawing(pkg: OpcPackage, rid: str, size: tuple[int, int]) -> None:
         '</w:drawing></w:r></w:p>'
     )
     doc_xml = pkg.parts["word/document.xml"].decode("utf-8")
-    pos = _body_insertion_point(doc_xml)
-    pkg.parts["word/document.xml"] = (doc_xml[:pos] + drawing + doc_xml[pos:]).encode("utf-8")
+    pkg.parts["word/document.xml"] = _insert_xml_fragment(
+        doc_xml, (f"{{{NS_WORDML}}}document", f"{{{NS_WORDML}}}body"), drawing,
+        terminal_tag=f"{{{NS_WORDML}}}sectPr",
+    ).encode("utf-8")
 
 
 class StegMediaChannel:
@@ -79,7 +97,7 @@ class StegMediaChannel:
 
     ``backend`` selects the codec. ``carrier_png`` may be supplied; otherwise a
     deterministic carrier is generated (needs Pillow). ``signing_key`` is an
-    optional path to a raw Ed25519 key file used by the steganographer backend.
+    optional path to a CLI-supported Ed25519 signing key file.
     """
 
     id = "stego_media"
@@ -144,16 +162,17 @@ class StegMediaChannel:
         # premise is that the carrier is a figure the document *visibly displays* —
         # that is what makes it plausible cover rather than an obviously spare part —
         # so the body gets a drawing that references it.
-        _insert_drawing(pkg, rid, self.carrier_size)
+        _insert_drawing(pkg, rid, self._carrier_dimensions())
         return part_name
 
     def extract(self, pkg: OpcPackage, record: ChannelRecord) -> bytes:
-        backend = record.location.get("backend", "python_lsb")
-        # Back-compat: a single "part", or the redundant "parts" list. Try each
-        # surviving carrier and return the first whose decoded bytes match the
-        # module digest — so a corrupted-but-still-decodable replica is skipped in
-        # favour of an intact one, not returned silently.
-        parts = record.location.get("parts") or [record.location["part"]]
+        backend = record.location.get("backend")
+        if backend not in BACKENDS:
+            raise ValueError(f"unknown or missing stego backend: {backend}")
+        parts = record.location.get("parts")
+        if not isinstance(parts, list) or not parts:
+            raise ValueError("media location requires a nonempty parts list")
+        # Try each surviving replica; only digest-matching bytes may be returned.
         last: Exception | None = None
         for part in parts:
             if part not in pkg.parts:
@@ -178,9 +197,21 @@ class StegMediaChannel:
                 raise steg_bridge.StegError("steganographer CLI not available")
             return steg_bridge.extract_payload(stego_png, Path(td) / "out.bin")
 
-    def capacity(self, pkg: OpcPackage | None = None) -> int | None:
-        w, h = self.carrier_size
-        return lsb.capacity_bytes(w, h)
+    def _carrier_dimensions(self) -> tuple[int, int]:
+        """Read supplied PNG dimensions; generated carriers use configured size."""
+        if self.carrier_png is None:
+            return self.carrier_size
+        from PIL import Image
+
+        with Image.open(self.carrier_png) as image:
+            return image.size
+
+    def capacity(self, pkg: OpcPackage | None = None) -> int:
+        """Return exact logical capacity for this carrier, backend and key policy."""
+        w, h = self._carrier_dimensions()
+        if self.backend == "python_lsb":
+            return lsb.capacity_bytes(w, h)
+        return steg_bridge.capacity(w * h * 3, signing_key=self.signing_key)["max_payload_bytes"]
 
 
 class OdtStegMediaChannel(StegMediaChannel):
@@ -216,12 +247,9 @@ class OdtStegMediaChannel(StegMediaChannel):
                 )
             stego_bytes = out_png.read_bytes()
         pkg.add_part(part_name, stego_bytes, CT_PNG)
-        _insert_odt_frame(pkg, part_name, self.carrier_size)
+        _insert_odt_frame(pkg, part_name, self._carrier_dimensions())
         return part_name
 
-    def capacity(self, pkg=None) -> int | None:
-        w, h = self.carrier_size
-        return lsb.capacity_bytes(w, h)
 
 
 def _next_odt_media_index(pkg) -> int:
@@ -242,10 +270,10 @@ def _insert_odt_frame(pkg, part_name: str, size: tuple[int, int]) -> None:
     width_cm = size[0] / 96.0 * 2.54
     height_cm = size[1] / 96.0 * 2.54
     frame = (
-        '<text:p><draw:frame draw:name="Figure" '
+        '<text:p xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">'
+        '<draw:frame draw:name="Figure" '
         'xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" '
         'xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" '
-        'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" '
         'xmlns:xlink="http://www.w3.org/1999/xlink" '
         f'svg:width="{width_cm:.3f}cm" svg:height="{height_cm:.3f}cm" '
         'text:anchor-type="as-char">'
@@ -254,23 +282,12 @@ def _insert_odt_frame(pkg, part_name: str, size: tuple[int, int]) -> None:
         "</draw:frame></text:p>"
     )
     doc_xml = pkg.parts["content.xml"].decode("utf-8")
-    pos = _odt_body_insertion_point(doc_xml)
-    pkg.parts["content.xml"] = (doc_xml[:pos] + frame + doc_xml[pos:]).encode("utf-8")
+    office = "urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+    pkg.parts["content.xml"] = _insert_xml_fragment(
+        doc_xml, tuple(f"{{{office}}}{tag}" for tag in ("document-content", "body", "text")), frame,
+    ).encode("utf-8")
 
 
-def _odt_body_insertion_point(doc_xml: str) -> int:
-    """Offset before ``</office:text>`` so the frame stays inside the visible body.
-
-    ODF content models differ from WordprocessingML's, and the OPC helper in
-    :mod:`mce` looks for ``</w:body>`` — reusing it here would refuse every ODF
-    document. ``</office:text>`` closes the visible text body; appending before it
-    keeps the frame inside ``office:body``, which is what a conforming consumer
-    renders.
-    """
-    end = doc_xml.rfind("</office:text>")
-    if end == -1:
-        raise ValueError("invalid content.xml: missing </office:text>")
-    return end
 
 
 def _next_media_index(pkg: OpcPackage) -> int:

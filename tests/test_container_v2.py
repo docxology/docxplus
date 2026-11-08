@@ -151,7 +151,7 @@ def test_tampering_a_module_digest_breaks_signature():
     # Flip the recorded digest; recomputed Merkle root then mismatches the signature.
     import re
 
-    manifest = re.sub(rb'"digest": "[0-9a-f]+"', b'"digest": "00"', manifest, count=1)
+    manifest = re.sub(rb'"digest": "[0-9a-f]+"', b'"digest": "' + b"00" * 32 + b'"', manifest, count=1)
     pkg.parts["intelligence/manifest.json"] = manifest
     reader = DocxPlusReader(package=pkg, manifest=__import__("docxplus.manifest", fromlist=["x"]).read_manifest(pkg))
     assert reader.verify_provenance() is False

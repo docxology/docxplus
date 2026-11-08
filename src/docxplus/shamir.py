@@ -1,4 +1,4 @@
-"""Shamir k-of-n secret sharing over GF(256) with share integrity verification.
+"""Shamir k-of-n secret sharing over GF(256) with optional public checksums.
 
 Splits a secret (e.g. a content-encryption key) into ``n`` shares such that any
 ``k`` reconstruct it and any ``k-1`` learn nothing. Pure Python, byte-wise over the
@@ -7,32 +7,34 @@ AES field GF(2^8) with the standard reducing polynomial 0x11B. Used for the
 
 Share wire format (per share):
 - Legacy format: ``x(1) || share_bytes(len(secret))``
-- Verifiable format (VSS): ``0xFF (magic) || x(1) || digest(32) || share_bytes(len(secret))``
+- Checksummed format: ``0xFF (magic) || x(1) || digest(32) || share_bytes(len(secret))``
   where digest = blake2b-256(x || share_bytes).
 
 Because the two formats are told apart by sniffing the first byte, ``x`` is capped
 at 254 so that a legacy share can never begin with the 0xFF magic. Without that
 cap a legacy share holding a secret of 33 bytes or more would be misread as a
-verifiable one and rejected as "tampered" when nothing had touched it.
+checksummed one and rejected as "tampered" when nothing had touched it.
 
-The tag is only a guarantee if the verifier insists on it. An attacker holding a
-verifiable share can strip the eight-byte header back to ``x || payload`` and
-hand over a legacy share, and a verifier that accepts either format will happily
-reconstruct from the tampered bytes. Callers that issued verifiable shares must
-therefore pass ``require_verifiable=True`` to :func:`combine`; the container reads
-that requirement out of the *signed* manifest, so it cannot be downgraded.
+These public hashes detect accidental corruption, not malicious replacement:
+anyone can recompute a checksum. They are not polynomial commitments or issuer
+authentication. ``require_checksum=True`` refuses header stripping. Container
+readers check full-share digest commitments in the manifest before reconstruction;
+authenticity requires a verified, pinned manifest. Standalone callers need their
+own trusted commitments. AES-GCM separately refuses incorrect reconstructed
+content keys or altered ciphertext.
 """
 
 from __future__ import annotations
 
 import hashlib
+import hmac
 import os
 
-# Largest share x-coordinate. 255 (0xFF) is reserved as the VSS magic byte so the
+# Largest share x-coordinate. 255 (0xFF) is reserved as the checksum magic byte so the
 # two wire formats stay unambiguous.
 MAX_X = 254
-VSS_MAGIC = 0xFF
-_VSS_HEADER = 34  # magic(1) + x(1) + digest(32)
+CHECKSUM_MAGIC = 0xFF
+_CHECKSUM_HEADER = 34  # magic(1) + x(1) + digest(32)
 
 # GF(256) exp/log tables built from generator 3 over the AES polynomial 0x11B.
 _EXP = [0] * 512
@@ -88,10 +90,10 @@ def _eval_poly(coeffs: list[int], x: int) -> int:
     return y
 
 
-def split(secret: bytes, k: int, n: int, *, verifiable: bool = False) -> list[bytes]:
+def split(secret: bytes, k: int, n: int, *, checksummed: bool = False) -> list[bytes]:
     """Split ``secret`` into ``n`` shares, any ``k`` of which reconstruct it.
 
-    If ``verifiable=True``, prepends integrity commitment headers to each share.
+    If ``checksummed=True``, prepend public corruption-detection checksums.
     """
     if not 1 <= k <= n <= MAX_X:
         raise ValueError(f"require 1 <= k <= n <= {MAX_X}")
@@ -106,7 +108,7 @@ def split(secret: bytes, k: int, n: int, *, verifiable: bool = False) -> list[by
     out: list[bytes] = []
     for s in raw_shares:
         raw_b = bytes(s)
-        if verifiable:
+        if checksummed:
             # 0xFF || x(1) || blake2b(raw_b)(32) || raw_b[1:]
             tag = hashlib.blake2b(raw_b, digest_size=32).digest()
             out.append(b"\xff" + bytes([raw_b[0]]) + tag + raw_b[1:])
@@ -115,60 +117,62 @@ def split(secret: bytes, k: int, n: int, *, verifiable: bool = False) -> list[by
     return out
 
 
-def is_verifiable(share: bytes) -> bool:
-    """True when ``share`` carries a VSS header (magic + x + digest)."""
-    return len(share) >= _VSS_HEADER and share[0] == VSS_MAGIC
+def is_checksummed(share: bytes) -> bool:
+    """True when ``share`` carries a checksum header (magic + x + digest)."""
+    return len(share) > _CHECKSUM_HEADER and share[0] == CHECKSUM_MAGIC
 
 
-def _unwrap_share(s: bytes, *, require_verifiable: bool = False) -> tuple[int, bytes]:
-    """Unwrap a share (whether legacy or verifiable). Returns (x, payload).
+def _unwrap_share(s: bytes, *, require_checksum: bool = False) -> tuple[int, bytes]:
+    """Unwrap a share (whether legacy or checksummed). Returns (x, payload).
 
-    With ``require_verifiable`` set, a share lacking the VSS header is refused
+    With ``require_checksum`` set, a share lacking the checksum header is refused
     outright rather than accepted as legacy — this is what blocks the
     strip-the-header downgrade described in the module docstring.
     """
     if not s:
         raise ValueError("empty share")
-    if is_verifiable(s):
+    if s[0] == CHECKSUM_MAGIC and not is_checksummed(s):
+        raise ValueError("truncated checksummed share")
+    if is_checksummed(s):
         x = s[1]
-        tag = s[2:_VSS_HEADER]
-        payload = s[_VSS_HEADER:]
+        tag = s[2:_CHECKSUM_HEADER]
+        payload = s[_CHECKSUM_HEADER:]
+        if not 1 <= x <= MAX_X:
+            raise ValueError("share x-coordinate outside accepted range")
         expected_tag = hashlib.blake2b(bytes([x]) + payload, digest_size=32).digest()
         if tag != expected_tag:
             raise ValueError(f"tampered share detected for x={x} (share integrity check failed)")
         return x, payload
-    if require_verifiable:
+    if require_checksum:
         raise ValueError(
-            "share is not in verifiable (VSS) format but verification was required — "
-            "refusing to reconstruct from an unauthenticated share"
+            "share is not in checksummed format but a checksum was required"
         )
     # Legacy format: x(1) || payload
+    if not 1 <= s[0] <= MAX_X or len(s) < 2:
+        raise ValueError("malformed raw share")
     return s[0], s[1:]
 
 
-def verify_share(share: bytes, *, require_verifiable: bool = False) -> bool:
-    """Check a share's integrity tag.
-
-    Legacy shares carry no tag, so they return ``True`` unless
-    ``require_verifiable`` is set — absence of a tag is not evidence of integrity.
-    """
+def verify_share_checksum(share: bytes) -> bool:
+    """Return whether a present checksum matches; never authenticate an issuer."""
     try:
-        _unwrap_share(share, require_verifiable=require_verifiable)
+        _unwrap_share(share, require_checksum=True)
         return True
     except ValueError:
         return False
 
 
-def combine(shares: list[bytes], *, require_verifiable: bool = False) -> bytes:
+def combine(shares: list[bytes], *, require_checksum: bool = False) -> bytes:
     """Reconstruct the secret from ``k`` (or more) shares via Lagrange at x=0.
 
-    Set ``require_verifiable`` whenever the shares were issued in VSS format, so a
-    downgraded share cannot smuggle tampered bytes past the integrity tag.
+    Set ``require_checksum`` whenever the shares were issued in checksum format.
+    This refuses header stripping, not malicious replacement with a recomputed
+    checksum; authenticity requires independently trusted full-share commitments.
     """
     if len(shares) < 1:
         raise ValueError("need at least one share")
 
-    unwrapped = [_unwrap_share(s, require_verifiable=require_verifiable) for s in shares]
+    unwrapped = [_unwrap_share(s, require_checksum=require_checksum) for s in shares]
     xs = [u[0] for u in unwrapped]
     if len(set(xs)) != len(xs):
         raise ValueError("shares must have distinct x-coordinates")
@@ -197,7 +201,7 @@ def _lagrange_at_zero(xs: list[int], ys: list[int]) -> int:
 
 
 def split_weighted(
-    secret: bytes, threshold_weight: int, weights: list[int], *, verifiable: bool = False
+    secret: bytes, threshold_weight: int, weights: list[int], *, checksummed: bool = False
 ) -> list[list[bytes]]:
     """Split ``secret`` among custodians with integer weights.
 
@@ -215,7 +219,7 @@ def split_weighted(
     if total_n > MAX_X:
         raise ValueError(f"total weight {total_n} exceeds maximum allowed shares ({MAX_X})")
 
-    all_shares = split(secret, threshold_weight, total_n, verifiable=verifiable)
+    all_shares = split(secret, threshold_weight, total_n, checksummed=checksummed)
     custodian_shares: list[list[bytes]] = []
     idx = 0
     for w in weights:
@@ -225,27 +229,34 @@ def split_weighted(
 
 
 def combine_weighted(
-    custodian_shares: list[list[bytes]], *, require_verifiable: bool = False, expected_secret: bytes | None = None
+    custodian_shares: list[list[bytes]], *, require_checksum: bool = False,
+    expected_secret: bytes | None = None,
 ) -> bytes:
-    """Reconstruct secret from a collection of custodian shares in a weighted scheme."""
+    """Reconstruct weighted shares, optionally checking an independently known secret.
+
+    ``expected_secret`` refuses wrong or below-quorum reconstructions; a carried
+    public checksum alone does not authenticate a share or establish a quorum.
+    """
     flat_shares: list[bytes] = []
     for sh_group in custodian_shares:
         flat_shares.extend(sh_group)
     if not flat_shares:
         raise ValueError("need at least one share")
-    res = combine(flat_shares, require_verifiable=require_verifiable)
-    return res
+    result = combine(flat_shares, require_checksum=require_checksum)
+    if expected_secret is not None and not hmac.compare_digest(result, expected_secret):
+        raise ValueError("reconstructed secret does not match expected_secret")
+    return result
 
 
 __all__ = [
+    "CHECKSUM_MAGIC",
     "MAX_X",
-    "VSS_MAGIC",
     "combine",
     "combine_weighted",
-    "is_verifiable",
+    "is_checksummed",
     "split",
     "split_weighted",
-    "verify_share",
+    "verify_share_checksum",
 ]
 
 

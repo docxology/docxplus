@@ -1,8 +1,7 @@
 """Cryptographic transparency log for reproduction attestations.
 
-Produces an append-only, tamper-evident hash chain and Merkle inclusion proofs
-for reproduction attestations, enabling distributed zero-knowledge verification
-and auditability across independent verification nodes.
+Produces a hash chain and Merkle inclusion proofs over claimed reproduction
+attestations; it does not prove execution or independently establish time.
 
 **A hash chain alone proves nothing about authenticity.** ``verify_chain`` only
 establishes that the log is *self-consistent*: every entry's ``prev_hash`` equals
@@ -12,9 +11,9 @@ no entry references the tip — the *last* entry's body can be edited in place
 without breaking any linkage at all. Self-consistency is therefore necessary and
 nowhere near sufficient.
 
-The trust anchor is the **signed tree head** (STH): an Ed25519 signature over
-``(log_size, root_hash)``. Pinning a signer's public key and checking the STH is
-what upgrades "this log does not contradict itself" into "this log is the one that
+The trust anchor is the **signed tree head** (STH): an Ed25519 or genuine hybrid
+signature over ``(log_size, root_hash, timestamp)``. Pinning a signer's public key
+is what upgrades "this log does not contradict itself" into "this log is the one that
 signer published, at this exact length". Verifiers that skip the STH are running an
 integrity check, not an authenticity check, and the CLI says so out loud.
 """
@@ -33,6 +32,17 @@ from .provenance import inclusion_proof, merkle_root
 # Domain-separation prefix so an STH signature can never be replayed as a
 # manifest signature (or vice versa) under the same Ed25519 key.
 STH_DOMAIN = b"docxplus-transparency-sth-v1\x00"
+
+
+def attestation_digest(attestation: dict) -> str:
+    """Commit to the complete claimed recipe, source, outputs and toolchain.
+
+    This authenticates a logged claim only under a pinned signed tree head; it
+    neither witnesses execution nor establishes when a document was signed.
+    """
+    body = json.dumps(attestation, sort_keys=True, separators=(",", ":"),
+                      allow_nan=False).encode("utf-8")
+    return crypto.digest(b"docxplus/attestation/v2\0" + body)
 
 
 @dataclass(frozen=True)
@@ -105,7 +115,7 @@ class TransparencyLog:
     ) -> LogEntry:
         idx = len(self.entries)
         prev_h = self.entries[-1].entry_hash() if self.entries else "0" * 64
-        att_digest = attestation.get("output_digest", "")
+        att_digest = attestation_digest(attestation)
         tc_raw = json.dumps(attestation.get("toolchain", {}), sort_keys=True).encode("utf-8")
         tc_hash = hashlib.blake2b(tc_raw, digest_size=32).hexdigest()
         ts = _resolve_timestamp(timestamp)
@@ -159,9 +169,7 @@ class TransparencyLog:
         because the size it commits to would not match.
         """
         ts = _resolve_timestamp(timestamp)
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
-        pub = Ed25519PrivateKey.from_private_bytes(private_key).public_key().public_bytes_raw()
+        pub = crypto.signing_public_key(private_key)
         return {
             "log_size": len(self.entries),
             "root_hash": self.merkle_tree_root(),
@@ -301,6 +309,7 @@ __all__ = [
     "STH_DOMAIN",
     "LogEntry",
     "TransparencyLog",
+    "attestation_digest",
 ]
 
 

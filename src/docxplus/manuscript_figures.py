@@ -21,7 +21,7 @@ from pathlib import Path
 
 import matplotlib
 
-from docxplus.project_paths import ensure_output_dirs
+from docxplus.project_paths import ensure_output_dirs, project_root
 
 matplotlib.use("Agg")  # headless: plates are written to disk, never shown
 import matplotlib.pyplot as plt
@@ -115,7 +115,7 @@ def build_cover_art(out_path: Path, v: dict) -> None:
 
     ax.text(5.5, 5.98, "D O C X +", color="#38BDF8", fontsize=33, fontweight="heavy",
             ha="center", va="center", zorder=10)
-    ax.text(5.5, 5.42, "An Intelligent Document Container over Standards-Conforming OOXML",
+    ax.text(5.5, 5.42, "An Intelligent Document Container over OOXML and ODF Extension Points",
             color="#E2E8F0", fontsize=12.5, fontweight="semibold", ha="center", va="center", zorder=10)
     ax.text(5.5, 5.04, "Daniel Ari Friedman  ·  Active Inference Institute  ·  ORCID: 0000-0001-6232-9096",
             color="#94A3B8", fontsize=9.5, ha="center", va="center", zorder=10)
@@ -137,15 +137,15 @@ def build_cover_art(out_path: Path, v: dict) -> None:
         ("Structural index", "[Content_Types].xml, _rels/.rels"),
         ("Visible narrative", "word/document.xml and story parts"),
         ("Document metadata", "docProps/core.xml, docProps/app.xml"),
-        ("Conforming consumers", "Word, LibreOffice, Google Docs, Pages"),
-        ("Archival openability", "no whole-package MS-OFFCRYPTO wrapper"),
+        ("Consumer compatibility", "application/version-specific evidence needed"),
+        ("Public document surface", "no whole-package MS-OFFCRYPTO wrapper"),
     ])
     card(6.5, "#34D399", "#059669", "Intelligence Contract (modular payloads)", [
         ("Authoritative manifest", "intelligence/manifest.json"),
         ("Sealing lineages", f"Argon2id / Scrypt + AES-{v['KEY_BITS']}-GCM / X25519"),
-        ("Threshold quorums", f"(k, n) Shamir with VSS, n \u2264 {v['SHAMIR_MAX_SHARES']}"),
+        ("Threshold quorums", f"(k, n) Shamir, signed shares, n \u2264 {v['SHAMIR_MAX_SHARES']}"),
         ("Narrative provenance", "signed Merkle root + surface digest"),
-        ("Reproducible execution", "opt-in sandbox + anchored transparency log"),
+        ("Recipe claims", "pinned verification; opt-in local comparison"),
     ])
 
     ax.add_patch(patches.FancyBboxPatch((4.78, 2.25), 1.44, 1.15, boxstyle="round,pad=0.09",
@@ -268,10 +268,10 @@ def build_architecture_diagram(out_path: Path, v: dict) -> None:
         lx += 0.50 + 0.062 * len(text)
 
     ax.text(5.9, 0.10,
-            f"All {v['CHANNEL_COUNT']} channels are spec-sanctioned: each writes a construct its "
-            "format defines and conforming consumers already ignore. A row with no badge is a part\n"
-            "that stays pure surface. The manifest is authoritative — a reader resolves modules by "
-            "declaration, never by scanning ZIP entries for things that look like payloads.",
+            f"All {v['CHANNEL_COUNT']} channels use documented extension points; consumer behavior "
+            "and full schema conformance still need separate evidence. A row with no badge is a part\n"
+            "that stays pure surface. The manifest is authoritative — modules resolve by declaration, "
+            "not by scanning ZIP entries for things that look like payloads.",
             color=INK, fontsize=7.9, ha="center", va="bottom", style="italic",
             linespacing=1.5)
 
@@ -326,8 +326,8 @@ def build_crypto_diagram(out_path: Path, v: dict) -> None:
     lanes = [
         ("plain", "no envelope", "#64748B", "#F8FAFC"),
         ("recipients", "DXE2 · X25519\none wrapped key per recipient", "#0891B2", "#ECFEFF"),
-        ("threshold", f"content key split k-of-n\nVSS tagged, n \u2264 {v['SHAMIR_MAX_SHARES']}", SEAL, "#F5F3FF"),
-        ("password", f"DXE1 · AES-{v['KEY_BITS']}-GCM\n+ an indistinguishable chaff frame", INTEL, "#ECFDF5"),
+        ("threshold", f"content key split k-of-n\nsigned shares, n \u2264 {v['SHAMIR_MAX_SHARES']}", SEAL, "#F5F3FF"),
+        ("password", f"DXE1 · AES-{v['KEY_BITS']}-GCM\n+ same-layout chaff frame", INTEL, "#ECFDF5"),
     ]
     lane_x, lane_w, lane_h = 4.30, 2.55, 0.76
     for i, (name, sub, col, fill) in enumerate(lanes):
@@ -450,28 +450,28 @@ def build_reproduction_diagram(out_path: Path, v: dict) -> None:
     ax.text(8.20, 2.23, "refused without it, with the reason printed",
             color=BODY, fontsize=7.6, ha="left", va="center", style="italic")
     for i, line in enumerate([
-        "network denied · writes confined to a scratch tree",
-        "environment scrubbed · rlimits and a hard timeout set",
-        "declared outputs re-digested and compared one by one",
+        "missing confinement refuses · host root remains readable",
+        "private scratch · per-process limits, not aggregate quotas",
+        "bounded regular changed outputs framed and compared",
     ]):
         ax.text(6.35, 1.86 - i * 0.20, f"·  {line}", color=BODY, fontsize=7.7, va="center")
 
     # -- the two verdicts, which are the reason the branch exists ------------
     for x, w, col, verdict in [
-        (0.30, 4.50, SEAL, ("this attestation is authentic and intact —\n"
-                           "the author's claim has not been altered")),
-        (6.05, 5.45, RISK, ("the outputs reproduce on this machine —\n"
-                           "the author's claim has now been re-run")),
+        (0.30, 4.50, SEAL, ("with a pinned key: authentic claim —\n"
+                           "not independent evidence of execution")),
+        (6.05, 5.45, RISK, ("selected outputs compared in this environment —\n"
+                           "not full-project or scientific reproducibility")),
     ]:
         _arrow(ax, x + w / 2, 1.26, x + w / 2, 1.06, col, lw=1.6)
         ax.text(x + w / 2, 0.82, verdict, color=col, fontsize=8.2, fontweight="bold",
                 ha="center", va="center", linespacing=1.5)
 
     ax.text(5.9, 0.04,
-            "The two verdicts are not interchangeable, which is the reason the branch exists at all. "
-            f"Negative controls hold each honest: one altered source byte, a declared\noutput the run "
-            "never produces, an output that is a carried input unchanged, and a timeout beyond "
-            f"{v['REPRO_TIMEOUT_MAX']} s must each be reported as a failure.",
+            "The verdicts are not interchangeable. The living example hashes selected source, "
+            "not the full test/figure pipeline. Controls reject\nunchanged carried outputs, missing "
+            "declared matches and collection beyond the deadline; "
+            f"the reader timeout ceiling is {v['REPRO_TIMEOUT_MAX']} s.",
             color=INK, fontsize=7.7, ha="center", va="bottom", style="italic", linespacing=1.5)
 
     fig.savefig(out_path, dpi=300, bbox_inches="tight")
@@ -523,10 +523,10 @@ def build_redteam_matrix(out_path: Path, v: dict) -> None:
              "relocates a sealed ciphertext into a different slot",
              ("the slot name is authenticated data, so the GCM tag fails\n"
              "closed on a moved payload")),
-            ("Verifiable-share downgrade",
-             "strips the VSS header off a tampered Shamir share",
-             ("the signed manifest demands the tag, so the demand itself\n"
-             "cannot be downgraded")),
+            ("Issued-share substitution",
+             "recomputes a public checksum after changing a share",
+             ("signed full-share digests authenticate issued bytes;\n"
+             "the standalone checksum is not polynomial VSS")),
             ("Algorithmic denial of service",
              "declares KDF work factors no honest author would",
              f"scrypt is bounded on memory as well as iterations:\n128·N·r ≤ {v['MAX_SCRYPT_MEMORY_MIB']} MiB"),
@@ -544,13 +544,13 @@ def build_redteam_matrix(out_path: Path, v: dict) -> None:
     top = 1.05 + total
     fig, ax = _canvas(11.8, top + 1.32)
 
-    _titles(ax, 5.9, "Where each threat attacks, and what refuses it",
-            "Every class below was found by adversarial review of this codebase, and each is pinned by a regression test",
+    _titles(ax, 5.9, "Threat classes and their intended controls",
+            "Recorded review evidence is not a fresh release pass or a proof of every boundary",
             top + 1.02, top + 0.66)
 
     ax.text(0.40, top + 0.24, "THREAT CLASS", color=MUTED, fontsize=7.4, fontweight="bold")
     ax.text(2.95, top + 0.24, "WHAT THE ATTACKER DOES", color=MUTED, fontsize=7.4, fontweight="bold")
-    ax.text(6.18, top + 0.24, "THE INVARIANT IT FAILS AGAINST", color=MUTED, fontsize=7.4,
+    ax.text(6.18, top + 0.24, "CONTROL / ASSUMPTION", color=MUTED, fontsize=7.4,
             fontweight="bold")
     ax.plot([0.35, 11.45], [top + 0.10, top + 0.10], color=INK, lw=1.1)
 
@@ -580,10 +580,10 @@ def build_redteam_matrix(out_path: Path, v: dict) -> None:
 
     ax.plot([0.35, 11.45], [y - 0.12, y - 0.12], color=RULE, lw=0.9)
     ax.text(5.9, 0.14,
-            f"{v['REDTEAM_FINDING_COUNT']} confirmed findings across {v['REDTEAM_AUDIT_COUNT']} rounds of review "
-            f"stand behind these classes, and {v['TEST_COUNT']} test functions keep them closed. Three of the entries "
-            "are second passes:\nan earlier fix bounded scrypt's iteration count but not its memory, shipped "
-            "verifiable shares the container never asked for, and documented a profile that had no code path.",
+            f"The record contains {v['REDTEAM_FINDING_COUNT']} confirmed findings across {v['REDTEAM_AUDIT_COUNT']} review cycles; "
+            f"{v['TEST_COUNT']} is a source test-function count, not fresh passes.\n"
+            "Historical incomplete mitigations include scrypt memory limits, share-checksum authentication "
+            "and an ODF capability that once lacked a consuming path.",
             color=MUTED, fontsize=7.7, ha="center", va="bottom", style="italic", linespacing=1.5)
 
     fig.savefig(out_path, dpi=300, bbox_inches="tight")
@@ -606,12 +606,12 @@ def build_trust_ladder(out_path: Path, v: dict) -> None:
             7.60, 7.24)
 
     rungs = [
-        ("open it", 0.70, "It is a valid\ndocument.", "Nothing about\nthe payloads.", SURFACE),
-        ("validate", 1.40, "Structure conforms;\nstored digests match.", "Self-consistent,\nnot authentic.", INTEL),
+        ("open it", 0.70, "A consumer rendered\nthis surface.", "Not universal schema\nor application proof.", SURFACE),
+        ("validate", 1.40, "Selected structure;\nstored digests match.", "Self-consistent,\nnot authentic.", INTEL),
         ("verify signature", 2.10, "SOME key signed this\npackage and its text.", "You do not know\nwhose key.", SEAL),
         ("pin the key", 3.70, "THAT signer signed it.\nAuthenticity.", "Nothing about whether\noutputs follow from code.", "#0891B2"),
-        ("verify-reproduction", 4.40, "The attestation binds\nexactly these bytes.", "You trust the\nsigner's run.", WARN),
-        ("reproduce", 5.10, "It reproduces here,\non your hardware.", "Process, never\nscientific validity.", RISK),
+        ("verify-reproduction", 4.40, "Pinned: intact claim\nbound to these bytes.", "No independent\nexecution witness.", WARN),
+        ("reproduce", 5.10, "Selected outputs\ncompared locally.", "Not full-project or\nscientific validity.", RISK),
     ]
 
     step_w, x0, BASE = 1.78, 0.42, 1.02
@@ -657,10 +657,11 @@ def build_fidelity_figure(out_path: Path, v: dict, report: dict | None) -> None:
     """
     import textwrap
 
-    fb = (report or {}).get("fidelity_boundary", {})
-    checks = (report or {}).get("checks", [])
-    passed = sum(1 for c in checks if c.get("ok"))
-    proj = (report or {}).get("project", {})
+    report = manuscript_vars.require_successful_roundtrip(report)
+    fb = report["fidelity_boundary"]
+    checks = report["checks"]
+    passed = len(checks)
+    proj = report["project"]
 
     fig, ax = _canvas(11.6, 6.6)
     _titles(ax, 5.8, "What survives the round trip",
@@ -762,13 +763,13 @@ def build_parity_figure(out_path: Path, v: dict) -> None:
                                         boxstyle="round,pad=0.10", ec=INK, fc=PANEL, lw=2.2))
     ax.text(CORE_X + CORE_W / 2, 5.56, "ONE SHARED IMPLEMENTATION", color=INK,
             fontsize=10, fontweight="bold", ha="center", va="center")
-    ax.text(CORE_X + CORE_W / 2, 5.28, "both profiles call these, so they cannot drift apart",
+    ax.text(CORE_X + CORE_W / 2, 5.28, "shared code narrows drift; both profile consumers still need evidence",
             color=MUTED, fontsize=7.6, ha="center", va="center", style="italic")
 
     shared = [
         ("signed manifest + Merkle root", "manifest.py · provenance.py"),
         ("four sealing lineages", "container.seal_module"),
-        ("unsealing, VSS refusal, threshold recombination", "DocxPlusReader._unseal"),
+        ("unsealing, share commitments, threshold combine", "DocxPlusReader._unseal"),
         ("co-signatures and log inclusion proofs", "transparency.py"),
         ("carried project trees and attestations", "payloads.pack_project"),
         ("nested containers, dispatched by content", "odt_container.open_document"),
@@ -863,12 +864,8 @@ def main() -> int:
     build_trust_ladder(fig_dir / "trust_ladder.png", v)
     build_parity_figure(fig_dir / "profile_parity.png", v)
 
-    # The fidelity figure reports measurements, so it reads the harness output rather
-    # than restating it. Absent report -> the figure still renders, visibly empty.
-    import json as _json
-
-    report_path = ensure_output_dirs()["reports"] / "project_roundtrip.json"
-    report = _json.loads(report_path.read_text()) if report_path.is_file() else None
+    # A measurement figure requires the same successful captured evidence as prose.
+    report = manuscript_vars.load_roundtrip_report(project_root())
     build_fidelity_figure(fig_dir / "roundtrip_fidelity.png", v, report)
 
     return 0

@@ -23,6 +23,7 @@ import stat
 import subprocess
 import sys
 import tarfile
+import tempfile
 import time
 import tomllib
 import traceback
@@ -120,11 +121,38 @@ def verify_sources(manifest: dict) -> dict:
     return bindings
 
 
-def tool_version(argv: list[str]) -> str:
-    result = subprocess.run(argv, check=True, stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT, timeout=30)
+def tool_version(argv: list[str], *, env: dict | None = None, cwd: Path | None = None) -> str:
+    result = subprocess.run(argv, check=True, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, timeout=30, env=env, cwd=cwd)
     require(len(result.stdout) <= 1024 * 1024, f"oversized tool version: {argv[0]}")
     return result.stdout.decode(errors="replace").strip()
+
+
+def office_settings(private: Path, base_env: dict | None = None) -> tuple[list[str], dict]:
+    """Each Office process owns all mutable profile, home, cache and temp state."""
+    private.mkdir(parents=True, mode=0o700, exist_ok=True)
+    env = dict(os.environ if base_env is None else base_env)
+    for key, name in (("HOME", "home"), ("XDG_CONFIG_HOME", "config"),
+                      ("XDG_CACHE_HOME", "cache"), ("XDG_DATA_HOME", "data"),
+                      ("XDG_RUNTIME_DIR", "runtime"), ("TMPDIR", "tmp")):
+        directory = private / name
+        directory.mkdir(mode=0o700)
+        env[key] = str(directory)
+    env["TMP"] = env["TEMP"] = env["TMPDIR"]
+    command = ["/usr/bin/libreoffice", f"-env:UserInstallation={(private / 'profile').as_uri()}",
+               "--headless", "--nologo", "--nodefault", "--nofirststartwizard", "--norestore"]
+    return command, env
+
+
+def office_versions() -> dict:
+    with tempfile.TemporaryDirectory(prefix="release-office-", dir="/tmp") as td:
+        private = Path(td)
+        command, env = office_settings(private)
+        versions = {"libreoffice": tool_version([*command, "--version"], env=env, cwd=private)}
+        versions.update({name: tool_version([f"/usr/bin/{name}", "-v"], env=env, cwd=private)
+                         for name in ("pdftotext", "pdftoppm", "pdfimages")})
+    require(all(versions.values()), "actual Office/poppler tool versions are absent")
+    return versions
 
 
 def runtime_metadata() -> dict:
@@ -148,6 +176,7 @@ def runtime_metadata() -> dict:
         "pillow": Image.__version__,
         "matplotlib": matplotlib.__version__,
     }
+    tools.update(office_versions())
     require(tools["pandoc"].splitlines()[0] == "pandoc 2.17.1.1", "Pandoc pin drift")
     require("0.3.12.2" in tools["pandoc-crossref"], "crossref pin drift")
     require(cargo["workspace"]["package"]["version"] in tools["steganographer"],
@@ -177,6 +206,8 @@ def runtime_metadata() -> dict:
         "debian_packages": tool_version(["dpkg-query", "-W", "-f=${Package}\t${Version}\n"]),
         "snapshot_index": "private git init/add only; no history or original commit synthesized",
         "acquisition_sources": [
+            "https://packages.debian.org/bookworm/libreoffice-writer",
+            "https://packages.debian.org/bookworm/poppler-utils",
             "https://packages.debian.org/bookworm/pandoc",
             "https://downloads.haskell.org/~cabal/cabal-install-3.18.2.0/SHA256SUMS",
             "https://hackage.haskell.org/package/pandoc-crossref-0.3.12.2",
@@ -187,11 +218,13 @@ def runtime_metadata() -> dict:
     }
 
 
-def write_refused(path: Path) -> dict:
+def write_refused(path: Path, *, allow_missing: bool = False) -> dict:
     try:
-        fd = os.open(path, os.O_WRONLY)  # no truncate, even if a boundary is broken
+        # Never create, truncate or write, even if a kernel boundary is broken.
+        fd = os.open(path, os.O_WRONLY | os.O_CLOEXEC)
     except OSError as exc:
-        require(exc.errno in {errno.EROFS, errno.EACCES, errno.EPERM},
+        require(exc.errno in {errno.EROFS, errno.EACCES, errno.EPERM}
+                or (allow_missing and exc.errno == errno.ENOENT),
                 f"write refusal was not protection: {path}: {exc}")
         return {"path": str(path), "errno": exc.errno, "error": str(exc)}
     else:
@@ -272,6 +305,111 @@ class Runner:
         return log.read_text() if log.stat().st_size <= 2 * 1024 * 1024 else ""
 
 
+def qualify_reproduction(project: Path, runner: Runner) -> dict:
+    """Exercise the production Linux sandbox and successful-leader custody."""
+    from docxplus.reproduce import OUTPUT_DIGEST_SCHEME, ReproSpec, _sandbox_wrap, run_and_digest
+
+    project.mkdir()
+    scratch = project.parent / f"{project.name}-tmp"
+    scratch.mkdir(mode=0o700)
+    canary = OUTPUTS / "outer-write-canary"
+    signal_canary = OUTPUTS / "outer-signal-canary"
+    canary.write_text("allowed outer write\n")
+    ancestor_fd = os.open(canary, os.O_WRONLY)
+    helper_code = (
+        "import json,os,signal,time\n"
+        f"fd=os.open({str(canary)!r},os.O_WRONLY)\n"
+        f"signal.signal(signal.SIGUSR1,lambda *_:open({str(signal_canary)!r},'w').write('signaled'))\n"
+        "print(json.dumps({'pid':os.getpid(),'fd':fd}),flush=True)\n"
+        "while True: time.sleep(1)\n"
+    )
+    helper = subprocess.Popen([PYTHON, "-c", helper_code], stdout=subprocess.PIPE,
+                              stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+    try:
+        require(helper.stdout is not None, "outer proc helper has no capture pipe")
+        identity = json.loads(helper.stdout.readline(4096))
+        pid, fd = identity["pid"], identity["fd"]
+        probe = (
+            "import errno,json,os,pathlib,signal\n"
+            "denied=[]\n"
+            f"paths={[str(canary), f'/proc/{pid}/root{canary}', f'/proc/{pid}/fd/{fd}', f'/proc/{os.getpid()}/root{canary}', f'/proc/{os.getpid()}/fd/{ancestor_fd}']!r}\n"
+            "for name in paths:\n"
+            " try: pathlib.Path(name).write_text('forbidden wrapped write')\n"
+            " except OSError as e:\n"
+            "  assert e.errno in (errno.EROFS,errno.EACCES,errno.EPERM,errno.ENOENT,errno.ESRCH)\n"
+            "  denied.append(name)\n"
+            " else: raise AssertionError('outer proc write succeeded: '+name)\n"
+            f"assert not pathlib.Path('/proc/{pid}').exists(), 'outer helper visible in private proc'\n"
+            f"try: os.kill({pid},signal.SIGUSR1)\n"
+            "except OSError as e: assert e.errno in (errno.ESRCH,errno.EPERM)\n"
+            "else: raise AssertionError('outer helper signal succeeded')\n"
+            "pathlib.Path('project-canary').write_text('project writable')\n"
+            f"pathlib.Path({str(scratch / 'bwrap-tmp-canary')!r}).write_text('tmp writable')\n"
+            "print(json.dumps({'network_namespace':os.readlink('/proc/self/ns/net'),"
+            "'pid_namespace':os.readlink('/proc/self/ns/pid'),'denied_writes':denied,"
+            "'outer_signal_denied':True,'project_write':True,'tmp_write':True}))\n"
+        )
+        wrapped = _sandbox_wrap([PYTHON, "-c", probe], project, scratch)
+        require(Path(wrapped[0]).name == "bwrap", "production bwrap sandbox is unavailable")
+        result = json.loads(runner.run("bwrap-qualification", wrapped, cwd=project, seconds=30))
+        for name, field in (("net", "network_namespace"), ("pid", "pid_namespace")):
+            require(result[field] != os.readlink(f"/proc/self/ns/{name}"),
+                    f"bwrap did not create a distinct {name} namespace")
+        require(canary.read_text() == "allowed outer write\n", "bwrap changed outer canary")
+        require(not signal_canary.exists() and helper.poll() is None,
+                "bwrap signaled the controlled outer process")
+        require((project / "project-canary").read_text() == "project writable",
+                "bwrap project positive control failed")
+        require((scratch / "bwrap-tmp-canary").read_text() == "tmp writable",
+                "bwrap private temporary positive control failed")
+    finally:
+        os.close(ancestor_fd)
+        helper.terminate()
+        helper.wait(timeout=5)
+        if helper.stdout is not None:
+            helper.stdout.close()
+
+    # A detached child must die when its successful leader exits, before digesting.
+    child_code = (
+        "import pathlib,time\n"
+        "pathlib.Path('child-ready').write_text('ready')\n"
+        "time.sleep(1)\n"
+        "pathlib.Path('post-return-write').write_text('custody failed')\n"
+        "time.sleep(30)\n"
+    )
+    custody_code = (
+        "import os,pathlib,subprocess,sys,time\n"
+        "pathlib.Path('pid-namespace').write_text(os.readlink('/proc/self/ns/pid'))\n"
+        f"subprocess.Popen([sys.executable,'-c',{child_code!r}],start_new_session=True)\n"
+        "deadline=time.monotonic()+5\n"
+        "while not pathlib.Path('child-ready').exists():\n"
+        " assert time.monotonic()<deadline, 'detached child did not start'\n"
+        " time.sleep(.01)\n"
+        "pathlib.Path('result.txt').write_text('successful leader')\n"
+    )
+    spec = ReproSpec(command=[PYTHON, "-c", custody_code], outputs=["result.txt"], timeout=15)
+    output_digest = run_and_digest(project, spec)
+    namespace = (project / "pid-namespace").read_text()
+    survivors = []
+    for proc in Path("/proc").iterdir():
+        if not proc.name.isdigit():
+            continue
+        try:
+            if os.readlink(proc / "ns/pid") == namespace:
+                survivors.append(int(proc.name))
+        except FileNotFoundError:
+            continue
+    require(not survivors, f"production reproduction retained private-PID members: {survivors}")
+    time.sleep(1.1)
+    require(not (project / "post-return-write").exists(), "detached child wrote after leader exit")
+    return {"argv": wrapped, **result, "successful_leader_detached_child": {
+        "output_digest_scheme": OUTPUT_DIGEST_SCHEME,
+        "output_digest": output_digest, "pid_namespace": namespace,
+        "remaining_namespace_members": survivors, "post_return_write": False,
+    }}
+
+
+
 def qualify(manifest: dict, runner: Runner, report: dict) -> None:
     report["sources"] = verify_sources(manifest)
     report["runtime"] = runtime_metadata()
@@ -293,10 +431,10 @@ def qualify(manifest: dict, runner: Runner, report: dict) -> None:
     report["read_only_filesystems"] = {
         str(path): bool(os.statvfs(path).f_flag & os.ST_RDONLY)
         for path in (Path("/"), SOURCE, Path("/inputs/template"), Path("/opt/venv"),
-                     Path("/opt/steganographer"))
+                     Path("/opt/steganographer"), Path("/sys"))
     }
     require(all(report["read_only_filesystems"].values()),
-            "source/runtime/root filesystem is not kernel read-only")
+            "source/runtime/root/sys filesystem is not kernel read-only")
     report["namespaces"] = {name: os.readlink(f"/proc/self/ns/{name}")
                             for name in ("pid", "net", "mnt", "user")}
     report["write_refusals"] = [write_refused(path) for path in (
@@ -305,6 +443,10 @@ def qualify(manifest: dict, runner: Runner, report: dict) -> None:
         Path(PYTHON).resolve(), Path(CLI), Path("/opt/release_guest.py"),
         Path("/opt/venv/pyvenv.cfg"),
     )]
+    report["kernel_write_refusals"] = []
+    for path in (Path("/proc/sys/kernel/hostname"), Path("/proc/sysrq-trigger"),
+                 Path("/sys/kernel/uevent_helper")):
+        report["kernel_write_refusals"].append(write_refused(path, allow_missing=True))
     forbidden = {"/var/run/docker.sock", "/run/docker.sock", "/run/secrets",
                  "/root/.ssh", "/root/.aws", "/root/.config/gcloud", "/root/.docker/config.json"}
     forbidden.update(source["root"] for source in manifest["sources"].values())
@@ -320,35 +462,7 @@ def qualify(manifest: dict, runner: Runner, report: dict) -> None:
     secret_vars = {key for key in os.environ if key.startswith(("AWS_", "AZURE_", "GOOGLE_"))
                    or key in {"GH_TOKEN", "GITHUB_TOKEN", "SSH_AUTH_SOCK", "DOCKER_HOST"}}
     require(not secret_vars, f"credential/daemon environment leaked: {sorted(secret_vars)}")
-    project = Path("/work/bwrap-project")
-    project.mkdir()
-    canary = OUTPUTS / "outer-write-canary"
-    canary.write_text("allowed outer write\n")
-    from docxplus.reproduce import _sandbox_wrap
-
-    probe = (
-        "import errno,json,os,pathlib; "
-        "p=pathlib.Path('/outputs/outer-write-canary'); "
-        "denied=False; "
-        "\ntry:\n p.write_text('forbidden wrapped write')\n"
-        "except OSError as e:\n denied=e.errno in (errno.EROFS,errno.EACCES,errno.EPERM)\n"
-        "assert denied, 'bwrap allowed an outer writable canary'; "
-        "pathlib.Path('project-canary').write_text('project writable'); "
-        "pathlib.Path('/tmp/bwrap-tmp-canary').write_text('tmp writable'); "
-        "print(json.dumps({'network_namespace':os.readlink('/proc/self/ns/net'),"
-        "'outer_write_denied':denied,'project_write':True,'tmp_write':True}))"
-    )
-    wrapped = _sandbox_wrap([PYTHON, "-c", probe], project)
-    require(Path(wrapped[0]).name == "bwrap", "production bwrap sandbox is unavailable")
-    result = json.loads(runner.run("bwrap-qualification", wrapped, cwd=project, seconds=30))
-    require(result["network_namespace"] != report["namespaces"]["net"],
-            "bwrap did not create a distinct network namespace")
-    require(canary.read_text() == "allowed outer write\n", "bwrap changed outer canary")
-    require((project / "project-canary").read_text() == "project writable",
-            "bwrap project positive control failed")
-    require(Path("/tmp/bwrap-tmp-canary").read_text() == "tmp writable",
-            "bwrap temporary positive control failed")
-    report["bwrap"] = {"argv": wrapped, **result}
+    report["bwrap"] = qualify_reproduction(Path("/work/bwrap-project"), runner)
     report["ok"] = True
 
 
@@ -376,8 +490,21 @@ def junit_summary(path: Path) -> dict:
     reproduction = [case for case in cases if "reproduc" in case.get("classname", "")
                     and case.find("skipped") is None]
     require(reproduction, "no real reproduction tests ran")
+    custody = [case for case in cases
+               if case.get("classname", "").endswith("test_reproduce_custody")]
+    require(custody and all(case.find("skipped") is None for case in custody),
+            "production reproduction custody cases were absent or skipped")
+    office = [case for case in cases if case.get("classname", "").endswith("test_interop")]
+    expected_office = {f"test_libreoffice_headless_render[{carrier}-{profile}]"
+                       for carrier in ("none", "python_lsb", "steganographer")
+                       for profile in ("docx", "odt")}
+    require(expected_office <= {case.get("name") for case in office}
+            and all(case.find("skipped") is None for case in office),
+            "required real DOCX/ODT text and carrier Office interoperability cases did not run")
     return {"tests": len(cases), "failures": failed, "skipped": skipped,
             "reproduction_executed": [case.attrib for case in reproduction],
+            "custody_executed": [case.attrib for case in custody],
+            "office_executed": [case.attrib for case in office],
             "real_cli_executed": [case.attrib for case in real_cli]}
 
 
@@ -391,6 +518,67 @@ def copy_package_source(manifest: dict) -> Path:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source_file("docxplus", name), target)
     return destination
+
+
+def office_roundtrip(runner: Runner, document: Path, root: Path, env: dict,
+                     visible: str, hidden: str) -> dict:
+    """Render real wheel output, save it with Writer, then render the edited package."""
+    from PIL import Image
+
+    profile = document.suffix[1:]
+    destination = OUTPUTS / "office" / profile
+    original = destination / "original"
+    saved = destination / "saved"
+    original.mkdir(parents=True)
+    saved.mkdir()
+    original_document = original / document.name
+    shutil.copy2(document, original_document)
+    save_filter = "docx:Office Open XML Text" if profile == "docx" else "odt:writer8"
+    artifacts = {}
+    outcomes = {}
+    for phase in ("original", "saved"):
+        source = original_document if phase == "original" else saved / document.name
+        directory = original if phase == "original" else saved
+        if phase == "saved":
+            private = root / "office-invocations" / profile / "save"
+            command, private_env = office_settings(private, env)
+            runner.run(f"office-{profile}-save", [*command, "--convert-to", save_filter,
+                       "--outdir", str(saved), str(original_document)],
+                       cwd=private, env=private_env, seconds=60)
+            require(source.is_file(), f"Office did not save {profile}")
+        private = root / "office-invocations" / profile / phase
+        command, private_env = office_settings(private, env)
+        runner.run(f"office-{profile}-{phase}-pdf", [*command, "--convert-to",
+                   "pdf:writer_pdf_Export", "--outdir", str(directory), str(source)],
+                   cwd=private, env=private_env, seconds=60)
+        pdf = directory / "installed.pdf"
+        require(pdf.is_file(), f"Office did not render {profile}/{phase}")
+        with pdf.open("rb") as stream:
+            require(stream.read(5) == b"%PDF-", f"invalid Office PDF: {pdf}")
+        text = directory / "installed.txt"
+        runner.run(f"office-{profile}-{phase}-text", ["/usr/bin/pdftotext", "-layout",
+                   str(pdf), str(text)], cwd=private, env=private_env, seconds=30)
+        extracted = text.read_text()
+        require(visible in extracted, f"visible sentinel missing in {profile}/{phase}")
+        require(hidden not in extracted, f"hidden payload rendered in {profile}/{phase}")
+        preview = directory / "first-page"
+        runner.run(f"office-{profile}-{phase}-preview", ["/usr/bin/pdftoppm", "-f", "1",
+                   "-singlefile", "-scale-to", "1200", "-png", str(pdf), str(preview)],
+                   cwd=private, env=private_env, seconds=30)
+        png = preview.with_suffix(".png")
+        with Image.open(png) as image:
+            require(image.format == "PNG" and min(image.size) > 100,
+                    f"invalid Office preview: {png}")
+            dark = sum(1 for r, g, b in image.convert("RGB").getdata()
+                       if max(r, g, b) < 200)
+        require(dark > 100, f"Office preview is blank: {png}")
+        for kind, path in (("document", source), ("pdf", pdf), ("text", text), ("preview", png)):
+            artifacts[f"{phase}_{kind}"] = {"path": path.relative_to(OUTPUTS).as_posix(),
+                                            "sha256": digest(path), "bytes": path.stat().st_size}
+        outcomes[phase] = {"visible_text_preserved": True, "hidden_payload_absent": True,
+                           "preview_nonblank": True, "preview_dark_pixels": dark, "ok": True}
+    return {"visible_sentinel": visible, "hidden_sentinel": hidden, "save_filter": save_filter,
+            "artifacts": artifacts, **outcomes, "ok": True}
 
 
 def installed_smoke(runner: Runner, wheel: Path) -> dict:
@@ -414,29 +602,50 @@ def installed_smoke(runner: Runner, wheel: Path) -> dict:
          "print(json.dumps({'module':docxplus.__file__,"
          "'version':importlib.metadata.version('docxplus')}))")], cwd=root, env=env)
     payload = root / "payload.bin"
-    payload.write_bytes(b"installed wheel roundtrip\x00\xff\n")
+    hidden = "DOCXPLUS_HIDDEN_INSTALLED_WHEEL_SECRET"
+    visible = "DOCXPLUS INSTALLED WHEEL VISIBLE SENTINEL"
+    payload.write_bytes(hidden.encode() + b"\x00\xff\n")
     # /work remains noexec. Interpret the actual installed console script with
     # its own venv Python, rather than granting executability to writable scratch.
     command = [python, str(venv / "bin/docxplus")]
     runner.run("wheel-entrypoint", [*command, "--help"], cwd=root, env=env)
     artifacts = OUTPUTS / "installed-wheel"
     artifacts.mkdir()
+    office = {"schema": "docxplus.release-office.v1", "tools": office_versions(),
+              "tool_sha256": {name: digest(Path(f"/usr/bin/{name}").resolve())
+                              for name in ("libreoffice", "pdftotext", "pdftoppm", "pdfimages")},
+              "profiles": {}, "ok": False,
+              "payload_preservation": "Not asserted after Office save: editing may strip payloads "
+                                      "or invalidate signatures; only visible rendering is qualified."}
+    dump(OUTPUTS / "office/evidence.json", office)
+    profile_modules = {}
     for profile in ("docx", "odt"):
         document = artifacts / f"installed.{profile}"
-        module = f"probe:custom_xml:{payload}" if profile == "docx" else f"probe:{payload}"
+        channels = [("probe", "custom_xml"), ("package", "package_part"),
+                    ("properties", "metadata"), ("compatibility", "mce")]
+        slots = [slot for slot, _ in channels] if profile == "docx" else ["probe"]
+        modules = [f"{slot}:{channel}:{payload}" for slot, channel in channels] if profile == "docx" else [f"probe:{payload}"]
+        module_args = [argument for module in modules for argument in ("--module", module)]
+        profile_modules[profile] = slots
         build = "build" if profile == "docx" else "odt-build"
         extract = "extract" if profile == "docx" else "odt-extract"
         validate = "validate" if profile == "docx" else "odt-validate"
-        runner.run(f"wheel-{profile}-build", [*command, build, str(document), "--module", module,
-                                            "--password", "release-smoke"], cwd=root, env=env)
-        runner.run(f"wheel-{profile}-validate", [*command, validate, str(document)], cwd=root, env=env)
-        recovered = root / f"recovered-{profile}.bin"
-        runner.run(f"wheel-{profile}-extract", [*command, extract, str(document), "probe", "--out",
-                                              str(recovered), "--password", "release-smoke"],
+        runner.run(f"wheel-{profile}-build", [*command, build, str(document), *module_args,
+                                            "--password", "release-smoke", "--text", visible],
                    cwd=root, env=env)
-        require(recovered.read_bytes() == payload.read_bytes(), f"installed {profile} roundtrip failed")
+        runner.run(f"wheel-{profile}-validate", [*command, validate, str(document)], cwd=root, env=env)
+        for slot in slots:
+            recovered = root / f"recovered-{profile}-{slot}.bin"
+            runner.run(f"wheel-{profile}-extract-{slot}", [*command, extract, str(document), slot,
+                       "--out", str(recovered), "--password", "release-smoke"], cwd=root, env=env)
+            require(recovered.read_bytes() == payload.read_bytes(),
+                    f"installed {profile}/{slot} roundtrip failed")
+        office["profiles"][profile] = office_roundtrip(runner, document, root, env, visible, hidden)
+        dump(OUTPUTS / "office/evidence.json", office)
+    office["ok"] = True
+    dump(OUTPUTS / "office/evidence.json", office)
     return {"origin": json.loads(origin), "payload_sha256": digest(payload),
-            "profiles": ["docx", "odt"], "ok": True}
+            "profiles": ["docx", "odt"], "modules": profile_modules, "office": office, "ok": True}
 
 
 def artifact_checks(pipeline_started_ns: int) -> dict:
@@ -461,18 +670,93 @@ def artifact_checks(pipeline_started_ns: int) -> dict:
                 for value in report["formats"].values()), "template file comparison is not identical")
     require({"dispatch.docx", "dispatch.docxplus", "dispatch.odt", "dispatch.odtplus"} <=
             {check["name"] for check in report["checks"]}, "template omits four-format dispatch")
+    from docxplus.manuscript_vars import load_roundtrip_report
+    from docxplus.reproduce import require_output_digest_scheme
+
+    synthetic_path = generated / "reports/project_roundtrip.json"
+    require(synthetic_path.stat().st_mtime_ns >= pipeline_started_ns,
+            "project comparison report was not regenerated")
+    synthetic = load_roundtrip_report(SOURCE)
+    dossier_path = generated / "reports/dossier.json"
+    require(dossier_path.stat().st_mtime_ns >= pipeline_started_ns, "dossier report was not regenerated")
+    dossier = json.loads(dossier_path.read_text())
+    require(dossier["ok"] is True and all(v is True for k, v in dossier["checks"].items()
+                                        if k != "merkle_root"), "dossier evaluation failed")
+    for name in ("dossier", "living_manuscript"):
+        require((generated / f"documents/{name}.docx").is_file(),
+                f"showcase document is missing: {name}")
+    living_path = generated / "reports/living_manuscript.json"
+    require(living_path.stat().st_mtime_ns >= pipeline_started_ns,
+            "living manuscript report was not regenerated")
+    living = json.loads(living_path.read_text())
+    require(living["opc_valid"] is True and living["reproduced_match"] is True,
+            "living manuscript failed validation or reproduction")
+    verified = living["verify_reproduction"]
+    require(all(verified[k] is True for k in ("attested", "signed", "verified")),
+            "living manuscript attestation failed")
+    reproduced = living["reproduction"]
+    require(reproduced["source_match"] is True and reproduced["match"] is True,
+            "living manuscript did not reproduce its carried source")
+    require_output_digest_scheme(reproduced)
+    require(reproduced["expected"] == verified["attestation"]["output_digest"]
+            and reproduced["actual"] == reproduced["expected"],
+            "living manuscript output digest comparison failed")
+    attestations = [verified["attestation"]]
+    attestations.extend(v["attestation"]["attestation"] for v in synthetic["profiles"].values())
+    for attestation in attestations:
+        require_output_digest_scheme(attestation)
+        require(attestation["command"][0] == "python3",
+                "newly authored example recipe is not portable")
+    require(verified["attestation"]["command"] == living["authored_command"],
+            "living manuscript did not attest its authored command")
+    require(all(v["attestation"]["attestation"]["command"] == synthetic["authored_command"]
+                for v in synthetic["profiles"].values()),
+            "project examples did not attest the authored command")
+    require(all(v["comparison"].get("missing_directories") == []
+                and v["comparison"].get("unexpected_directories") == []
+                and v["comparison"].get("directories_compared") == report["project"]["directories"]
+                for v in report["formats"].values()), "template directory comparison failed")
     pairs = []
     for root in (generated / "documents", OUTPUTS / "installed-wheel"):
-        for base, plus in ((".docx", ".docxplus"), (".odt", ".odtplus")):
-            counterparts = list(root.glob(f"*{plus}"))
-            require(counterparts, f"missing dual-name {plus} artifacts in {root}")
-            for counterpart in counterparts:
-                path = counterpart.with_suffix(base)
-                require(path.is_file(), f"dual-name surface is missing: {path}")
-                require(digest(path) == digest(counterpart), f"dual names differ: {path}")
-                pairs.append({"surface": str(path), "plus": str(counterpart), "sha256": digest(path)})
+        pairs.extend(document_pair_checks(root))
+    office = json.loads((OUTPUTS / "office/evidence.json").read_text())
+    require(office["schema"] == "docxplus.release-office.v1" and office["ok"] is True
+            and set(office["profiles"]) == {"docx", "odt"}, "Office evidence is incomplete")
+    require(set(office["tools"]) == {"libreoffice", "pdftotext", "pdftoppm", "pdfimages"}
+            and all(office["tools"].values()), "Office tool evidence is incomplete")
+    expected_artifacts = {f"{phase}_{kind}" for phase in ("original", "saved")
+                          for kind in ("document", "pdf", "text", "preview")}
+    for profile, proof in office["profiles"].items():
+        require(proof["ok"] is True and set(proof["artifacts"]) == expected_artifacts,
+                f"Office artifacts are incomplete: {profile}")
+        for phase in ("original", "saved"):
+            require(all(proof[phase][key] is True for key in (
+                "ok", "visible_text_preserved", "hidden_payload_absent", "preview_nonblank"
+            )), f"Office rendering outcomes failed: {profile}/{phase}")
+        for artifact in proof["artifacts"].values():
+            path = OUTPUTS / relative_path(artifact["path"])
+            require(path.is_file() and path.stat().st_size == artifact["bytes"]
+                    and digest(path) == artifact["sha256"], f"Office artifact drift: {path}")
     return {"pdf_sha256": digest(pdf), "figures": [p.name for p in figures],
-            "template_report": report, "dual_names": pairs, "ok": True}
+            "template_report": report, "project_report": synthetic,
+            "living_report": living, "dossier_report": dossier, "dual_names": pairs, "office": office, "ok": True}
+
+
+def document_pair_checks(root: Path) -> list[dict]:
+    """Require complete byte-identical pairs in both export directions."""
+    pairs = []
+    for base, plus in ((".docx", ".docxplus"), (".odt", ".odtplus")):
+        surfaces = {p.with_suffix("") for p in root.glob(f"*{base}")}
+        counterparts = {p.with_suffix("") for p in root.glob(f"*{plus}")}
+        require(surfaces or counterparts, f"missing dual-name {base} artifacts in {root}")
+        require(surfaces == counterparts, f"incomplete dual-name {base}/{plus} exports in {root}")
+        for stem in sorted(surfaces):
+            path, counterpart = Path(str(stem) + base), Path(str(stem) + plus)
+            require(path.is_file() and counterpart.is_file(), f"missing document pair: {stem}")
+            sha256 = digest(path)
+            require(sha256 == digest(counterpart), f"dual names differ: {path}")
+            pairs.append({"surface": str(path), "plus": str(counterpart), "sha256": sha256})
+    return pairs
 
 
 def become_subreaper() -> None:
@@ -568,6 +852,7 @@ def main() -> int:
                  OUTPUTS / "coverage"):
         path.mkdir(parents=True, exist_ok=True)
     os.environ["PYTEST_ADDOPTS"] = "-o cache_dir=/cache/pytest --basetemp=/work/pytest"
+    os.environ["DOCXPLUS_REQUIRE_OFFICE"] = "1"
     runner = Runner()
     qualification = {"schema": "docxplus.release-qualification.v1", "ok": False}
     result = {"schema": "docxplus.release-results.v1", "ok": False, "stages": runner.stages}
@@ -576,12 +861,14 @@ def main() -> int:
         dump(OUTPUTS / "qualification.json", qualification)
         seed_outputs()
         runner.run("ruff", [PYTHON, "-m", "ruff", "check", "src", "scripts", "tests"])
-        runner.run("pytest", [PYTHON, "-m", "pytest", "--cov=src", "--cov-report=term-missing",
+        runner.run("pytest", [PYTHON, "-m", "pytest", "--cov=src", "--cov-branch",
+                              "--cov-report=term-missing",
                               "--cov-report=json:/outputs/coverage/pytest.json",
                               "--junitxml=/outputs/pytest.xml", "-q"])
         result["pytest"] = junit_summary(OUTPUTS / "pytest.xml")
         coverage = json.loads((OUTPUTS / "coverage/pytest.json").read_text())
         result["coverage_percent"] = coverage["totals"]["percent_covered"]
+        require(coverage["totals"]["num_branches"] > 0, "branch coverage was not measured")
         require(result["coverage_percent"] >= 90, "whole-suite coverage is below 90%")
         os.environ["PYTEST_ADDOPTS"] += " --junitxml=/outputs/pipeline-pytest.xml"
         result["pipeline_started_ns"] = time.time_ns()

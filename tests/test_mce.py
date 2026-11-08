@@ -113,30 +113,80 @@ def test_concealing_a_module_adds_no_visible_paragraph():
     assert [c for c in with_mce if c == "p"] == [c for c in plain if c == "p"]
 
 
-def test_a_section_break_inside_a_paragraph_is_not_mistaken_for_the_body_sectpr():
-    """Only a body-level sectPr terminates the body; a `w:pPr` one is a section break."""
-    from docxplus.channels.mce import _body_insertion_point
-
-    doc = (
-        "<w:body><w:p><w:pPr><w:sectPr><w:type/></w:sectPr></w:pPr></w:p>"
-        "<w:p>tail</w:p></w:body>"
-    )
-    # No body-level sectPr here, so content belongs immediately before </w:body>.
-    assert _body_insertion_point(doc) == doc.rfind("</w:body>")
 
 
 def test_mce_varied_prefixes_and_namespaces():
-    """Verify extraction resilience when MCE XML is loaded with alternative prefix aliases."""
+    """Prefix aliases retain the namespace and QName-valued MCE attributes."""
     pkg = new_base_document(["Main text."])
-    chan = MceChannel()
-    rec = chan.embed(pkg, b"flexible-mce-data", slot="flex_slot")
+    channel = MceChannel()
+    record = channel.embed(pkg, b"flexible-mce-data", slot="flex_slot")
+    xml = pkg.parts["word/document.xml"].decode("utf-8")
+    xml = (xml.replace("xmlns:dxm=", "xmlns:alt=")
+           .replace("<dxm:payload", "<alt:payload")
+           .replace("</dxm:payload>", "</alt:payload>")
+           .replace('Requires="dxm"', 'Requires="alt"')
+           .replace('mc:Ignorable="dxm"', 'mc:Ignorable="alt"'))
+    pkg.parts["word/document.xml"] = xml.encode("utf-8")
+    assert channel.extract(pkg, record) == b"flexible-mce-data"
 
-    # Manually rewrite namespace prefix in document.xml from dxm to alt
-    doc_xml = pkg.parts["word/document.xml"].decode("utf-8")
-    doc_xml = doc_xml.replace("xmlns:dxm=", "xmlns:alt=").replace("<dxm:payload", "<alt:payload").replace("</dxm:payload>", "</alt:payload>")
-    pkg.parts["word/document.xml"] = doc_xml.encode("utf-8")
 
-    # Extraction must still find it
-    extracted = chan.extract(pkg, rec)
-    assert extracted == b"flexible-mce-data"
 
+@pytest.mark.parametrize("terminal", ["paragraph_break", "wrapped_terminal"])
+def test_namespace_alias_body_insertion_preserves_qname_bindings_and_sections(terminal):
+    import io
+    import xml.etree.ElementTree as ET
+
+    from docxplus.channels.mce import NS_DXP_MCE, NS_MC, NS_WORDML
+
+    paragraph = ('<q:p><q:pPr><q:sectPr><q:type q:val="continuous"/></q:sectPr>'
+                 '</q:pPr><q:r><q:t>visible µ</q:t></q:r></q:p>')
+    ending = '<q:p><q:r><q:t>tail</q:t></q:r></q:p>'
+    if terminal == "wrapped_terminal":
+        ending += ('<compat:AlternateContent><compat:Choice Requires="legacy"><q:sectPr/>'
+                   '</compat:Choice><compat:Fallback><q:sectPr/></compat:Fallback>'
+                   '</compat:AlternateContent>')
+    pkg = new_base_document()
+    pkg.parts["word/document.xml"] = (
+        f'<q:document xmlns:q="{NS_WORDML}" xmlns:compat="{NS_MC}" '
+        'xmlns:legacy="urn:unrelated:future" compat:Ignorable="legacy">'
+        f'<q:body>{paragraph}{ending}</q:body></q:document>').encode()
+    channel = MceChannel()
+    record = channel.embed(pkg, b"actual payload", slot="m")
+    assert channel.extract(pkg, record) == b"actual payload"
+    namespaces = dict(item for event, item in ET.iterparse(
+        io.BytesIO(pkg.parts["word/document.xml"]), events=("start-ns",)))
+    root = ET.fromstring(pkg.parts["word/document.xml"])
+    assert namespaces[root.attrib[f"{{{NS_MC}}}Ignorable"]] == "urn:unrelated:future"
+    body = root.find(f"{{{NS_WORDML}}}body")
+    assert [item.text for item in body.iter(f"{{{NS_WORDML}}}t")] == ["visible µ", "tail"]
+    if terminal == "wrapped_terminal":
+        assert list(body)[-1].find(f".//{{{NS_WORDML}}}sectPr") is not None
+        assert list(body)[-2].find(f".//{{{NS_DXP_MCE}}}payload") is not None
+    else:
+        assert list(body)[-1].find(f".//{{{NS_DXP_MCE}}}payload") is not None
+
+
+
+def test_unrelated_payload_namespace_cannot_shadow_the_mce_module():
+    import base64
+
+    pkg = new_base_document(["visible"])
+    channel = MceChannel()
+    record = channel.embed(pkg, b"expected", slot="m")
+    assert channel.extract(pkg, record) == b"expected"
+    shadow = ('<other:payload xmlns:other="urn:unrelated" slot="m">'
+              + base64.b64encode(b"different namespace").decode()
+              + '</other:payload>')
+    pkg.parts["word/document.xml"] = pkg.parts["word/document.xml"].replace(
+        b"<dxm:payload", (shadow + "<dxm:payload").encode(), 1)
+    assert channel.extract(pkg, record) == b"expected"
+
+
+def test_mce_missing_part_is_not_guessed():
+    pkg = new_base_document(["visible"])
+    channel = MceChannel()
+    record = channel.embed(pkg, b"expected", slot="m")
+    assert channel.extract(pkg, record) == b"expected"
+    del record.location["part"]
+    with pytest.raises(ValueError):
+        channel.extract(pkg, record)

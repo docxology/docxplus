@@ -5,7 +5,7 @@ Tests edge cases across:
 - Truncated crypto envelopes (DXE1, DXE2, DXE3)
 - Path-traversal payloads and malicious entry names
 - Malformed XML / MCE namespace variations
-- Shamir share corruption and verifiable downgrade attacks
+- Shamir share corruption and checksummed downgrade attacks
 - Fuzzed metadata properties
 """
 
@@ -94,24 +94,24 @@ def test_fuzz_dxe3_hybrid_envelope_tamper():
 def test_fuzz_shamir_weighted_and_shares():
     """Fuzz threshold shares: random byte mutations and share dropping."""
     secret = os.urandom(32)
-    shares = shamir.split(secret, 3, 5, verifiable=True)
+    shares = shamir.split(secret, 3, 5, checksummed=True)
 
     # 3 of 5 works
-    assert shamir.combine(shares[:3], require_verifiable=True) == secret
+    assert shamir.combine(shares[:3], require_checksum=True) == secret
 
-    # Bit-flip in verifiable share tag
+    # Bit-flip in checksummed share tag
     tampered_share = bytearray(shares[0])
     tampered_share[10] ^= 0xAA
     with pytest.raises(ValueError, match="tampered share detected"):
-        shamir.combine([bytes(tampered_share), shares[1], shares[2]], require_verifiable=True)
+        shamir.combine([bytes(tampered_share), shares[1], shares[2]], require_checksum=True)
 
     # Weighted scheme fuzzing
-    w_shares = shamir.split_weighted(secret, threshold_weight=5, weights=[2, 2, 1], verifiable=True)
+    w_shares = shamir.split_weighted(secret, threshold_weight=5, weights=[2, 2, 1], checksummed=True)
     # Custodian 0 (wt 2) + Custodian 1 (wt 2) = 4 < 5 gives wrong secret
-    assert shamir.combine_weighted([w_shares[0], w_shares[1]], require_verifiable=True) != secret
+    assert shamir.combine_weighted([w_shares[0], w_shares[1]], require_checksum=True) != secret
 
     # Custodian 0 (wt 2) + Custodian 1 (wt 2) + Custodian 2 (wt 1) = 5 >= 5 succeeds
-    assert shamir.combine_weighted([w_shares[0], w_shares[1], w_shares[2]], require_verifiable=True) == secret
+    assert shamir.combine_weighted([w_shares[0], w_shares[1], w_shares[2]], require_checksum=True) == secret
 
 
 def test_fuzz_corrupted_zip_opc_and_odt():

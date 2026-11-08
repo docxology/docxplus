@@ -5,6 +5,8 @@ from __future__ import annotations
 import io
 import zipfile
 
+import pytest
+
 from docxplus.channels.mce import MceChannel
 from docxplus.container import DocxPlusBuilder
 from docxplus.crypto import generate_signing_key
@@ -65,15 +67,15 @@ def test_tampered_custom_xml_digest_mismatch():
 
 
 def test_invalid_signature_flagged():
-    priv, pub = generate_signing_key()
+    priv, _pub = generate_signing_key()
     data = DocxPlusBuilder().add_module("a", "custom_xml", b"payload").sign(priv).build()
     pkg = read_package(data)
-    # Corrupt the signature in the manifest part.
-    manifest = pkg.parts["intelligence/manifest.json"].replace(
-        pub.hex().encode(), pub.hex().encode()
-    )
-    manifest = manifest.replace(b'"value": "', b'"value": "00', 1)
-    pkg.parts["intelligence/manifest.json"] = manifest
+    import json
+
+    manifest = json.loads(pkg.parts["intelligence/manifest.json"])
+    value = bytes.fromhex(manifest["signature"]["value"])
+    manifest["signature"]["value"] = (bytes([value[0] ^ 1]) + value[1:]).hex()
+    pkg.parts["intelligence/manifest.json"] = json.dumps(manifest).encode()
     report = validate_package(pkg)
     assert not report.ok
     assert any("signature is invalid" in e for e in report.intelligence_errors)
@@ -145,8 +147,9 @@ def _docx_with_signature(uris: list[str]) -> tuple:
     builder.add_module("brief", "package_part", b"payload")
     builder.sign(priv)
     pkg = read_package(builder.build())
-    pkg.parts["_xmlsignatures/origin.sigs"] = b""
-    pkg.parts["_xmlsignatures/sig1.xml"] = _signature_part(uris)
+    pkg.add_part("_xmlsignatures/origin.sigs", b"", "application/vnd.openxmlformats-package.digital-signature-origin")
+    pkg.add_part("_xmlsignatures/sig1.xml", _signature_part(uris), "application/vnd.openxmlformats-package.digital-signature-xmlsignature+xml")
+    pkg = read_package(pkg.to_bytes())
     report = ValidationReport()
     check_opc_signature_coverage(pkg, report)
     return pkg, report
@@ -213,3 +216,31 @@ def test_validation_report_notes_and_failures():
     assert rep.ok is False
     assert "opc failure" in rep.to_dict()["opc_errors"]
 
+
+
+@pytest.mark.parametrize("channel", ["metadata", "stego_media"])
+def test_opc_signature_coverage_enumerates_actual_channel_storage(channel):
+    """C19: custom properties and every media replica require part references."""
+    from docxplus.manifest import MANIFEST_PART, read_manifest
+    from docxplus.validate import ValidationReport, check_opc_signature_coverage
+
+    if channel == "stego_media":
+        pytest.importorskip("PIL")
+    kwargs = {"redundancy": 2} if channel == "stego_media" else {}
+    builder = DocxPlusBuilder().add_module("s", channel, b"stored payload", **kwargs)
+    pkg = read_package(builder.build())
+    record = read_manifest(pkg).slot("s")
+    storage = (set(record.location["parts"]) if channel == "stego_media"
+               else {"docProps/custom.xml"})
+    pkg.parts["_xmlsignatures/origin.sigs"] = b""
+    pkg.parts["_xmlsignatures/sig1.xml"] = _signature_part([f"/{MANIFEST_PART}"])
+    report = ValidationReport()
+    check_opc_signature_coverage(pkg, report)
+    assert not report.ok
+    assert all(part in " ".join(report.intelligence_errors) for part in storage)
+    pkg.parts["_xmlsignatures/sig1.xml"] = _signature_part(
+        [f"/{MANIFEST_PART}", *(f"/{part}" for part in sorted(storage))]
+    )
+    report = ValidationReport()
+    check_opc_signature_coverage(pkg, report)
+    assert report.ok

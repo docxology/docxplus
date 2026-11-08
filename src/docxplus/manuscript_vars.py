@@ -99,30 +99,90 @@ def _cli_commands(root: Path) -> list[str]:
     return sorted(set(re.findall(r'add_parser\(\s*"([a-z-]+)"', text)))
 
 
-def _roundtrip_stats(root: Path) -> dict[str, str]:
-    """Read the measured round-trip report, so results are cited rather than typed.
+def require_successful_roundtrip(report: object) -> dict:
+    """Admit successful captured measurements, not proof of current-source freshness.
 
-    Returns zeroes when the harness has not been run, which makes an unrun harness
-    visible in the rendered manuscript instead of silently plausible.
+    Direct rendering does not rerun the experiment. Qualification separately
+    requires fresh reports from the actual pipeline and binds its source/runtime.
     """
+    def refuse() -> None:
+        raise ValueError("round-trip measurements are missing, malformed, or failed; rerun the harness")
+
+    if not isinstance(report, dict):
+        refuse()
+    if report.get("ok") is not True or report.get("failures") != []:
+        refuse()
+    checks = report.get("checks")
+    if not isinstance(checks, list) or not checks:
+        refuse()
+    if any(not isinstance(c, dict) or not isinstance(c.get("name"), str)
+           or c.get("ok") is not True for c in checks):
+        refuse()
+    names = [c["name"] for c in checks]
+    required = {
+        f"{profile}.{suffix}" for profile in ("docx", "odt")
+        for suffix in ("validates", "provenance_pinned_key", "rejects_wrong_key",
+                       "roundtrip_identical", "excludes_junk", "attestation_verified")
+    } | {"cross.same_project_bytes", "cross.nested_docx_in_odt",
+         "cross.nested_inner_provenance", "cross.nested_roundtrip_identical",
+         "cross.dispatch_docx", "cross.dispatch_odt"}
+    if len(set(names)) != len(names) or not required <= set(names):
+        refuse()
+    project = report.get("project")
+    profiles = report.get("profiles")
+    cross = report.get("cross_profile")
+    if (not isinstance(project, dict) or not isinstance(profiles, dict)
+            or set(profiles) != {"docx", "odt"} or not isinstance(cross, dict)):
+        refuse()
+    for key in ("files", "directories"):
+        if type(project.get(key)) is not int or project[key] < 0:
+            refuse()
+    comparisons = [cross.get("nested")]
+    for profile in profiles.values():
+        if not isinstance(profile, dict) or type(profile.get("bytes")) is not int:
+            refuse()
+        if profile["bytes"] <= 0:
+            refuse()
+        attestation = profile.get("attestation")
+        if not isinstance(attestation, dict) or any(
+            attestation.get(k) is not True for k in ("attested", "signed", "verified")
+        ):
+            refuse()
+        comparisons.append(profile.get("comparison"))
+    for comparison in comparisons:
+        if (not isinstance(comparison, dict) or comparison.get("identical") is not True
+                or type(comparison.get("files_compared")) is not int
+                or comparison["files_compared"] <= 0):
+            refuse()
+        for key in ("missing_files", "unexpected_files", "content_mismatches",
+                    "executable_bit_mismatches", "lost_empty_directories"):
+            if comparison.get(key) != []:
+                refuse()
+    return report
+
+
+def load_roundtrip_report(root: Path) -> dict:
+    """Read an existing successful report; never manufacture measurements."""
     import json
 
     path = root / "output" / "reports" / "project_roundtrip.json"
     if not path.is_file():
-        return {"RT_CHECKS": "0", "RT_PASSED": "0", "RT_FILES": "0", "RT_DIRS": "0",
-                "RT_DOCX_BYTES": "0", "RT_ODT_BYTES": "0", "RT_COMPARED": "0"}
-    d = json.loads(path.read_text())
-    checks = d.get("checks", [])
+        raise ValueError("round-trip measurements unavailable; run scripts/06_project_roundtrip.py")
+    return require_successful_roundtrip(json.loads(path.read_text()))
+
+
+def _roundtrip_stats(root: Path) -> dict[str, str]:
+    """Render successful recorded measurements, without asserting they are fresh."""
+    d = load_roundtrip_report(root)
+    checks = d["checks"]
     return {
         "RT_CHECKS": str(len(checks)),
-        "RT_PASSED": str(sum(1 for c in checks if c.get("ok"))),
-        "RT_FILES": str(d.get("project", {}).get("files", 0)),
-        "RT_DIRS": str(d.get("project", {}).get("directories", 0)),
-        "RT_DOCX_BYTES": f"{d.get('profiles', {}).get('docx', {}).get('bytes', 0):,}",
-        "RT_ODT_BYTES": f"{d.get('profiles', {}).get('odt', {}).get('bytes', 0):,}",
-        "RT_COMPARED": str(
-            d.get("profiles", {}).get("docx", {}).get("comparison", {}).get("files_compared", 0)
-        ),
+        "RT_PASSED": str(len(checks)),
+        "RT_FILES": str(d["project"]["files"]),
+        "RT_DIRS": str(d["project"]["directories"]),
+        "RT_DOCX_BYTES": f"{d['profiles']['docx']['bytes']:,}",
+        "RT_ODT_BYTES": f"{d['profiles']['odt']['bytes']:,}",
+        "RT_COMPARED": str(d["profiles"]["docx"]["comparison"]["files_compared"]),
     }
 
 
@@ -141,15 +201,15 @@ def _redteam_stats(root: Path) -> tuple[int, int]:
     return cycles, findings
 
 
-def dossier_table() -> tuple[str, int]:
-    """Build the showcase dossier in memory and render its module table + count.
+def dossier_table(reader: container.DocxPlusReader | None = None) -> tuple[str, int]:
+    """Render the shared serialized specimen's actual slot/channel/sealing table.
 
-    The table is *generated from a real document*, so the manuscript's evaluation
-    table can never disagree with what the code produces.
+    An export caller may supply its own reader to describe those exact bytes.
     """
     from .reference_docs import build_reference_dossier
 
-    reader = build_reference_dossier()
+    if reader is None:
+        reader = build_reference_dossier().reader()
     rows = ["| Slot | Channel | Sealing |", "| --- | --- | --- |"]
     for slot in sorted(reader.list_modules()):
         rec = reader.manifest.slot(slot)
@@ -233,15 +293,12 @@ def variables(include_dossier: bool = True) -> dict[str, str]:
         **_roundtrip_stats(root),
     }
     if include_dossier:
-        table, count = dossier_table()
-        v["DOSSIER_TABLE"] = table
-        v["DOSSIER_MODULE_COUNT"] = count
-        # Coverage is derived, so prose can never claim more than the table shows.
-        # "exercises every operational mode" was written when it exercised every
-        # sealing lineage but only two of the channels.
         from .reference_docs import build_reference_dossier
 
-        reader = build_reference_dossier()
+        reader = build_reference_dossier().reader()
+        table, count = dossier_table(reader)
+        v["DOSSIER_TABLE"] = table
+        v["DOSSIER_MODULE_COUNT"] = count
         recs = [reader.manifest.slot(s) for s in reader.list_modules()]
         chans = sorted({r.channel for r in recs})
         seals = sorted({r.sealing.get("mode", "plain") for r in recs})
@@ -254,7 +311,9 @@ def variables(include_dossier: bool = True) -> dict[str, str]:
 
 __all__ = [
     "dossier_table",
+    "load_roundtrip_report",
     "render_text",
+    "require_successful_roundtrip",
     "variables",
 ]
 

@@ -26,36 +26,37 @@ severed from its inputs, linked at best to a repository that may move or change.
 archives and data repositories address the storage problem while leaving the binding problem open — nothing
 cryptographically ties the figure on the page to the code that produced it.
 
-This paper asks what falls out of refusing the original choice. How much structured, authenticated,
-selectively sealed, and optionally concealed material can a document carry while remaining a strictly
-*conforming* Office document across mainstream word processors?
+This paper asks how structured, authenticated, selectively sealed material can travel through documented
+Office-package extension points while retaining the intended public document surface. The answer is a
+conditional construction, not a universal conformance or application-interoperability theorem.
 
 ## Two Contracts, One Archive {#sec:architecture}
 
 ::: {.definition #def:surface-contract title="Surface Contract"}
-A package $\mathcal{P}$ satisfies the **Surface Contract** if it strictly conforms to ISO/IEC 29500-2 (OPC)
-and Part 1 (WordprocessingML), comprising valid `[Content_Types].xml`, root relationship graphs `_rels/.rels`,
-a typed main story part `word/document.xml`, and deterministic ZIP serialization with zero colliding part names.
-Any conforming consumer $\mathcal{C}_{\text{std}}$ parses $\mathcal{P}$ without error.
+A package $\mathcal{P}$ satisfies the intended **Surface Contract** when its selected OOXML or ODF profile
+remains structurally well formed, its required indexes and references resolve, and its document markup meets
+that profile's rules. Deterministic serialization is a project policy, separate from standards conformance.
+The implementation's structural validator checks a subset of these obligations, not all schema/application behavior.
 :::
 
 ::: {.definition #def:intelligence-contract title="Intelligence Contract"}
 A package $\mathcal{P}$ satisfies the **Intelligence Contract** if it contains an authoritative manifest part
 $\mathcal{M} = \texttt{intelligence/manifest.json}$ that maps a finite set of module slots
 $\mathcal{S} = \{s_1, \dots, s_k\}$ to their transport channel, content type, Blake2b ciphertext digest,
-sealing parameters, and optional reproduction attestation, signed by an Ed25519 key [@rfc8032] over a canonical JSON serialization.
+sealing parameters, and optional reproduction claim, signed using Ed25519 [@rfc8032] or genuine dual
+Ed25519 + ML-DSA-65 [@nist_fips204]. Canonical JSON authenticates the primary scheme and declared co-signers.
 :::
 
-::: {.theorem #thm:dual-contract-independence title="Dual-Contract Independence"}
-Let $\mathcal{P}$ be a docxplus package satisfying [@def:surface-contract] and [@def:intelligence-contract].
-Then the addition, removal, encryption, or steganographic concealment of any module $s \in \mathcal{S}$
-leaves the surface validity of $\mathcal{P}$ invariant under $\mathcal{C}_{\text{std}}$.
+::: {.proposition #thm:dual-contract-independence title="Conditional Surface Preservation"}
+Suppose a package satisfies [@def:surface-contract], and a channel update preserves required indexes,
+relationship/manifest authority, profile markup order and the consumer's extension-handling assumptions.
+Then sealing a payload changes its stored bytes without requiring whole-package encryption. Preservation
+of surface structure still depends on those channel-specific obligations; arbitrary module changes need
+not preserve validity, layout, or signatures.
 :::
 
-The independence in [@thm:dual-contract-independence] is what makes the format usable rather than merely
-clever: an author can add, seal, or remove intelligence without ever risking the document's openability, and
-a reader who has never heard of docxplus is never inconvenienced. [@Fig:architecture] shows both contracts as
-parts of a single archive, and where each channel writes.
+[@thm:dual-contract-independence] is a construction argument under stated assumptions, not a proof about
+every consumer. [@Fig:architecture] locates the parts each channel changes so those obligations can be inspected.
 
 ![The package tree with every transport channel drawn on the row of the part it writes into. A blue marker is a part the surface contract requires, a green one a part only docxplus reads, and a split marker a required part reused as transport — which is how three of the 5 channels carry a payload without adding any part a conforming reader would find surprising. Rows with no badge carry nothing. Capacities are read from the live code constants.](../../output/figures/architecture.png){#fig:architecture width=95%}
 
@@ -88,8 +89,8 @@ obligation rather than a description. The supported channels comprise:
   is detectable.
 - **`mce`** — Markup Compatibility and Extensibility (ISO/IEC 29500-3) `<mc:AlternateContent>` blocks inside
   `word/document.xml`. Payloads sit in `<mc:Choice>` guarded by an ignorable namespace, above an *empty*
-  `<mc:Fallback/>`: a fallback carrying visible markup would add a paragraph per concealed module, which is
-  precisely the surface change [@thm:dual-contract-independence] forbids.
+  `<mc:Fallback/>`. Avoiding visible fallback content is one channel-specific obligation in
+  [@thm:dual-contract-independence], not a guarantee that all consumers preserve every extension.
 
 One rule governs discovery: the manifest is authoritative. Readers resolve modules through manifest
 declarations, never by walking ZIP entries and guessing, which is what keeps an attacker from introducing a
@@ -102,12 +103,12 @@ Nothing in the design depends on OOXML specifically, and the ODT profile (OASIS 
 consumers can identify the format positionally, registers its parts in `META-INF/manifest.xml`, and carries
 the same signed intelligence layer as the OOXML profile: the manifest of
 [@def:intelligence-contract], every sealing lineage, the Merkle root over the module set, a surface digest
-over the visible ODF content, and the same co-signature policy.
+over all non-intelligence-manifest entries and supported ODF authority, and the same co-signature policy.
 
 That parity is a property of the *code*, not a parallel implementation that resembles it. Sealing and
 unsealing are shared between the two profiles rather than written twice, because a second implementation is
-free to drift on exactly the details that carry the security: the chaff frame that makes a decoy
-indistinguishable, the slot bound as AAD, the verifiable-share requirement recorded in the signed manifest.
+free to drift on exactly the security-relevant details: common bounded KDF/power-of-two padding for two
+password frames (not universal deniability), slot AAD, and signed full-share digest commitments.
 Two profiles that agree only by inspection eventually disagree under attack.
 
 Untrusted intake is scanned on both sides too, though not by the same code: ODF's threat surface is Basic
@@ -115,9 +116,9 @@ and Scripts containers and off-package `xlink:href` targets, not VBA and `altChu
 against an ODF package would pass vacuously, which is worse than not scanning, because it would report clean.
 
 Two channels do not cross over, and saying which is part of the claim. ODF has no custom XML datastore part
-and no Markup Compatibility element, so `custom_xml` and `mce` are OOXML-only. ODT offers unbounded
-package-entry payloads and visible PNG `stego_media` carriers. Only the metadata-channel analogue remains
-unbuilt.
+and no Markup Compatibility element, so `custom_xml` and `mce` are OOXML-only. ODT offers
+package-entry payloads within archive budgets and visible PNG `stego_media` carriers. The metadata analogue
+is not implemented. The emitted ODF surface targets the version declared by the builder, not every ODF edition.
 
 The sibling profile is a second front door into the same container, which is why it enforces the same intake
 ceilings as the OPC reader — entry count, decompression ratio, and rejection of traversal or absolute entry

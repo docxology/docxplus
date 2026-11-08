@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""The Living Manuscript — a document that carries and reproduces its own source.
+"""The Living Manuscript — carry source and attest a dependency-free source hash.
 
-Builds a single signed .docx carrying the whole docxplus repository as a `project`
-module, together with a signed reproduction attestation over it. A reader can then:
+Writes paired signed .docx/.docxplus exports carrying the docxplus repository.
+The attested Python command hashes source files, not a PDF regeneration recipe.
 
   * verify_reproduction(slot) — cryptographic, executes nothing (the default path);
   * reproduce(allow_execution=True) — opt-in, re-runs the attested command in a
@@ -31,6 +31,7 @@ except ModuleNotFoundError:  # pragma: no cover
 
 from docxplus import crypto
 from docxplus.container import DocxPlusBuilder, DocxPlusReader
+from docxplus.fileext import write_document
 from docxplus.project_paths import ensure_output_dirs, project_root
 from docxplus.reproduce import ReproSpec
 from docxplus.validate import validate_bytes
@@ -62,12 +63,12 @@ def main() -> int:
         sys.stderr.write(f"repository root not found at {CARRIED_PROJECT}\n")
         return 1
     dirs = ensure_output_dirs()
-    priv, _ = crypto.generate_signing_key()
-    spec = ReproSpec(command=[sys.executable, "-c", _SNIPPET], outputs=["output/repro.txt"])
+    priv, pub = crypto.generate_signing_key()
+    spec = ReproSpec(command=["python3", "-c", _SNIPPET], outputs=["output/repro.txt"])
 
     data = (
         DocxPlusBuilder(
-            paragraphs=["The Living Manuscript", "This paper carries and reproduces its own source."],
+            paragraphs=["The Living Manuscript", "This document carries and hashes its own source."],
             title="The Living Manuscript",
         )
         .add_project(CARRIED_SLOT, CARRIED_PROJECT, password="reproduce", reproduce=spec)
@@ -75,10 +76,10 @@ def main() -> int:
         .build()
     )
     out = dirs["documents"] / "living_manuscript.docx"
-    out.write_bytes(data)
+    written = write_document(data, out)
 
     reader = DocxPlusReader.from_bytes(data)
-    verified = reader.verify_reproduction(CARRIED_SLOT)
+    verified = reader.verify_reproduction(CARRIED_SLOT, expected_public_key=pub)
     with tempfile.TemporaryDirectory() as td:
         run = reader.reproduce(
             CARRIED_SLOT, Path(td) / "src", allow_execution=True, password="reproduce"
@@ -86,20 +87,20 @@ def main() -> int:
 
     report = {
         "document": str(out),
+        "paths": [str(p) for p in written],
         "size_bytes": len(data),
         "opc_valid": validate_bytes(data).ok,
-        "verify_reproduction": {
-            "attested": verified["attested"],
-            "signed": verified["signed"],
-            "verified": verified["verified"],
-        },
+        "verify_reproduction": verified,
+        "authored_command": spec.command,
         "attested_output_digest": verified.get("attestation", {}).get("output_digest", "")[:16] + "…",
         "reproduced_match": run["match"],
+        "reproduction": run,
         "toolchain": run["toolchain_actual"],
     }
     report_path = dirs["reports"] / "living_manuscript.json"
     report_path.write_text(json.dumps(report, indent=2))
-    print(str(out))
+    for path in written:
+        print(str(path))
     print(str(report_path))
     ok = report["opc_valid"] and verified["attested"] and verified["verified"] and run["match"]
     return 0 if ok else 1

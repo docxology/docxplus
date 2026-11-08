@@ -49,11 +49,16 @@ def test_odt_roundtrip_with_payloads():
 
 
 def _odt_with(entries: dict[str, bytes]) -> bytes:
+    from docxplus.odt import build_manifest_xml
+
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
         zf.writestr("mimetype", MIMETYPE_ODT)
         for name, data in entries.items():
             zf.writestr(name, data)
+        zf.writestr("META-INF/manifest.xml", build_manifest_xml(
+            [(name, "application/octet-stream") for name in sorted(entries)]
+        ))
     return buf.getvalue()
 
 
@@ -81,7 +86,7 @@ def test_odt_rejects_path_traversal_entry_names():
     from docxplus.opc import OpcError
 
     for hostile in ("../../etc/evil.txt", "/etc/passwd", "..\\..\\evil", "a/../../b"):
-        with pytest.raises(OpcError, match="rejected"):
+        with pytest.raises(OpcError):
             OdtPackage.from_bytes(_odt_with({hostile: b"x"}))
 
 
@@ -131,3 +136,36 @@ def test_odt_custom_metadata_properties():
     assert '<meta:user-defined meta:name="dxplus_tag">research_alpha</meta:user-defined>' in meta_xml
     assert '<meta:user-defined meta:name="sensitivity">high</meta:user-defined>' in meta_xml
 
+
+
+def test_odf_manifest_version_roundtrips_including_absence():
+    for version in ("1.2", "1.3", None):
+        package = new_base_odt(["version"])
+        package.manifest_version = version
+        loaded = OdtPackage.from_bytes(package.to_bytes())
+        assert loaded.manifest_version == version
+        assert OdtPackage.from_bytes(loaded.to_bytes()).manifest_version == version
+
+
+def test_odf_writer_rejects_noncanonical_and_reserved_declarations():
+    import pytest
+
+    from docxplus.opc import OpcError
+
+    for path in ("../escape", "./alias", "mimetype", "META-INF/manifest.xml"):
+        package = new_base_odt(["declarations"])
+        package.media_types[path] = "application/octet-stream"
+        with pytest.raises(OpcError):
+            package.to_bytes()
+
+
+def test_odf_add_part_does_not_overwrite_existing_bytes():
+    import pytest
+
+    from docxplus.opc import OpcError
+
+    package = new_base_odt(["original"])
+    original = package.parts["content.xml"]
+    with pytest.raises(OpcError):
+        package.add_part("content.xml", b"replacement", "text/xml")
+    assert package.parts["content.xml"] == original

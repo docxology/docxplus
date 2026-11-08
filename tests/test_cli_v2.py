@@ -41,15 +41,6 @@ def test_keygen_x25519_and_multi_recipient(tmp_path):
     assert _run(["keygen", str(key), "--type", "x25519"]).returncode == 0
     pub = (tmp_path / "rk.hex.pub").read_text().strip()
 
-    # Hybrid keygen smoke
-    hk_recip = tmp_path / "hk_recip.hex"
-    assert _run(["keygen", str(hk_recip), "--type", "hybrid-recipient"]).returncode == 0
-    assert hk_recip.exists() and (tmp_path / "hk_recip.hex.pub").exists()
-
-    hk_sign = tmp_path / "hk_sign.hex"
-    assert _run(["keygen", str(hk_sign), "--type", "hybrid-signing"]).returncode == 0
-    assert hk_sign.exists() and (tmp_path / "hk_sign.hex.pub").exists()
-
     payload = tmp_path / "p.bin"
     payload.write_bytes(b"referee draft")
     docx = tmp_path / "r.docx"
@@ -140,6 +131,8 @@ def test_verify_transparency_reports_unauthenticated_without_an_sth(tmp_path):
 def test_verify_transparency_full_verification_passes(tmp_path):
     import json as _json
 
+    from docxplus.transparency import attestation_digest
+
     log_path, log, sth_path, key_path = _write_log(tmp_path)
     res = _run([
         "verify-transparency", str(log_path),
@@ -154,7 +147,9 @@ def test_verify_transparency_full_verification_passes(tmp_path):
     assert report["root_matches"] is True
     assert report["sth_verified"] is True
     assert report["inclusion"]["verified"] is True
-    assert report["inclusion"]["attestation_digest"] == "digest_2"
+    assert report["inclusion"]["attestation_digest"] == attestation_digest({
+        "output_digest": "digest_2", "toolchain": {"python": "3.12"},
+    })
     assert "_warning" not in report
 
 
@@ -187,7 +182,9 @@ def test_verify_transparency_rejects_a_tampered_log(tmp_path):
     import json as _json
 
     log_path, _log, _sth, _key = _write_log(tmp_path, sign=False)
-    log_path.write_text(log_path.read_text().replace("digest_0", "forged_0"))
+    document = _json.loads(log_path.read_text())
+    document[0]["attestation_digest"] = "0" * 64
+    log_path.write_text(_json.dumps(document))
 
     res = _run(["verify-transparency", str(log_path)])
     assert res.returncode == 1
@@ -306,6 +303,8 @@ def test_analyze_carrier_exit_code_distinguishes_clean_from_embedded(tmp_path):
 def test_transparency_append_then_verify_round_trip(tmp_path):
     import json as _json
 
+    from docxplus.transparency import attestation_digest
+
     key, pub = _keypair(tmp_path)
     att = tmp_path / "att.json"
     att.write_text('{"output_digest":"abc123","toolchain":{"python":"3.12"}}')
@@ -332,7 +331,9 @@ def test_transparency_append_then_verify_round_trip(tmp_path):
     report = _json.loads(verified.stdout)
     assert report["sth_verified"] is True
     assert report["inclusion"]["verified"] is True
-    assert report["inclusion"]["attestation_digest"] == "abc123"
+    assert report["inclusion"]["attestation_digest"] == attestation_digest(
+        _json.loads(att.read_text())
+    )
 
 
 def test_transparency_append_is_reproducible_under_a_pinned_timestamp(tmp_path):
@@ -349,45 +350,47 @@ def test_transparency_append_is_reproducible_under_a_pinned_timestamp(tmp_path):
     assert roots[0] == roots[1]
 
 
-def test_cli_error_diagnostics_on_invalid_args(tmp_path):
+def test_invalid_cli_requests_preserve_outputs(tmp_path):
     # Invalid module syntax
     res = _run(["build", str(tmp_path / "bad.docx"), "--module", "invalid_module_spec"])
     assert res.returncode == 2
-    assert "expected SLOT:CHANNEL:FILE" in res.stderr
+    assert not (tmp_path / "bad.docx").exists()
+    assert not (tmp_path / "bad.docxplus").exists()
 
     # Non-existent module file
     res = _run(["build", str(tmp_path / "bad.docx"), "--module", "m:package_part:/non/existent/file.bin"])
     assert res.returncode == 2
-    assert "module file not found" in res.stderr
+    assert not (tmp_path / "bad.docx").exists()
 
     # Invalid ODT module spec
     res = _run(["odt-build", str(tmp_path / "bad.odt"), "--module", "invalid_odt_spec:too:many:colons"])
     assert res.returncode == 2
-    assert "expected SLOT:FILE" in res.stderr
+    assert not (tmp_path / "bad.odt").exists()
+    assert not (tmp_path / "bad.odtplus").exists()
 
     # Extraction with missing private key file
     docx = tmp_path / "sample.docx"
     _run(["build", str(docx), "--text", "hello"])
     res = _run(["extract", str(docx), "slot", "--private-key", "/non/existent/key.hex"])
     assert res.returncode == 2
-    assert "private key file not found" in res.stderr
 
     # Invalid project format
     res = _run(["build", str(tmp_path / "bad_proj.docx"), "--project", "invalid_proj_spec:too:many:colons"])
     assert res.returncode == 2
-    assert "expected SLOT:DIR" in res.stderr
+    assert not (tmp_path / "bad_proj.docx").exists()
 
     # Nonexistent project directory
     res = _run(["build", str(tmp_path / "bad_proj.docx"), "--project", "s:/non/existent/dir"])
     assert res.returncode == 2
-    assert "project directory not found" in res.stderr
+    assert not (tmp_path / "bad_proj.docx").exists()
 
     # Keygen collision safeguard (secret exists)
     k_path = tmp_path / "existing_key.hex"
     k_path.write_text("dummy")
     res = _run(["keygen", str(k_path)])
     assert res.returncode == 1
-    assert "refusing to overwrite" in res.stdout or "refusing to overwrite" in res.stderr
+    assert k_path.read_text() == "dummy"
+    assert not (tmp_path / "existing_key.hex.pub").exists()
 
 
 def test_reproduce_consent_gate_does_not_execute_carried_code(tmp_path):

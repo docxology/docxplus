@@ -5,19 +5,20 @@ standards report (§2.1): an OPC package is a ZIP whose mandatory index parts ar
 ``[Content_Types].xml`` and ``_rels/.rels``; every part must be reachable by
 following relationships; duplicate ZIP entry names are a corruption class.
 
-This module is deliberately dependency-free (stdlib ``zipfile`` only) so a docxplus
-package can be produced and inspected without any Office toolchain. Output is
-*deterministic*: entries are written with a fixed timestamp and stable order, per
-the Reproducible Builds guidance the report cites (§2.3, §10).
+Packaging and shared XML primitives need no Office toolchain. Archive composition
+fixes timestamps and ordering for the same parts; cryptographic entropy and author
+attestations are separate inputs, not a whole-file bit-reproducibility promise.
 """
 
 from __future__ import annotations
 
+import hashlib
 import posixpath
 import re
 import zipfile
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from xml.parsers import expat
 from xml.sax.saxutils import quoteattr
 
 from defusedxml.ElementTree import fromstring as _safe_fromstring
@@ -35,6 +36,72 @@ NS_RELATIONSHIPS = "http://schemas.openxmlformats.org/package/2006/relationships
 
 class OpcError(ValueError):
     """Raised when a package violates a documented OPC invariant."""
+
+
+def _insert_xml_fragment(doc_xml: str, container_path: tuple[str, ...], fragment: str,
+                         *, terminal_tag: str | None = None) -> str:
+    """Insert into UTF-8 XML without rewriting existing namespaces or QName values.
+
+    Expat supplies byte offsets and expanded names. MCE-wrapped terminal section
+    properties count as terminal too; paragraph-level section breaks do not.
+    """
+    data = doc_xml.encode("utf-8")
+    path = [name[1:] for name in container_path]
+    terminal = terminal_tag[1:] if terminal_tag else None
+    wrappers = {"http://schemas.openxmlformats.org/markup-compatibility/2006}" + name
+                for name in ("AlternateContent", "Choice", "Fallback")}
+    stack = []
+    start = end = child = insertion = None
+    has_content = False
+    parser = expat.ParserCreate(namespace_separator="}")
+
+    def opened(name, _attributes):
+        nonlocal start, child, insertion, has_content
+        if stack == path[:-1] and name == path[-1]:
+            if start is not None:
+                raise ValueError("duplicate XML insertion container")
+            start = parser.CurrentByteIndex
+        elif stack == path:
+            child = parser.CurrentByteIndex
+            has_content = True
+        if (name == terminal and stack[:len(path)] == path
+                and all(parent in wrappers for parent in stack[len(path):])):
+            insertion = child if insertion is None else min(insertion, child)
+        stack.append(name)
+
+    def closed(_name):
+        nonlocal end
+        if stack == path:
+            end = parser.CurrentByteIndex
+        stack.pop()
+
+    def text(value):
+        nonlocal has_content
+        if stack == path and value:
+            has_content = True
+
+    def doctype(*_args):
+        raise ValueError("DTD-bearing XML cannot be modified")
+
+    parser.StartElementHandler = opened
+    parser.EndElementHandler = closed
+    parser.CharacterDataHandler = text
+    parser.StartDoctypeDeclHandler = doctype
+    try:
+        parser.Parse(data, True)
+    except expat.ExpatError as exc:
+        raise ValueError("invalid XML insertion source") from exc
+    if start is None or end is None:
+        raise ValueError("missing XML insertion container")
+    encoded = fragment.encode("utf-8")
+    if not has_content and data[end - 2:end] == b"/>":
+        # The parser has already validated this start tag; retain its original QName.
+        match = re.compile(rb"<([^\s/>]+)").match(data, start)
+        if match is None:
+            raise ValueError("invalid XML insertion container")
+        return b"".join((data[:end - 2], b">", encoded, b"</", match[1], b">", data[end:])).decode("utf-8")
+    position = insertion if insertion is not None else end
+    return b"".join((data[:position], encoded, data[position:])).decode("utf-8")
 
 
 @dataclass(frozen=True)
@@ -113,6 +180,7 @@ class OpcPackage:
                 continue
             rendered[_rels_part_for(source)] = _render_relationships(rels)
 
+        _guard_writer_entries(rendered, case_sensitive=False)
         buf = io.BytesIO()
         # Stable ordering: content types first (OPC readers expect it early), then
         # every other entry sorted by name in the C locale (report §2.3).
@@ -173,7 +241,7 @@ def _reject_noncanonical_entry_name(name: str) -> None:
     drive-letter and NUL forms below, and would admit whatever the next variant is.
     """
     if not name or name.endswith("/"):
-        return
+        raise OpcError(f"directory or empty ZIP entry rejected: {name!r}")
     if "\\" in name or any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in name):
         raise OpcError(f"illegal characters in entry name: {name!r}")
     if _DRIVE_LETTER.match(name):
@@ -219,10 +287,10 @@ def read_package(data: bytes) -> OpcPackage:
     import io
 
     pkg = OpcPackage()
+    expected_entries = _preflight_zip(data)
     with zipfile.ZipFile(io.BytesIO(data)) as zf:
+        _guard_zip_bomb(zf.infolist(), expected_entries)
         names = zf.namelist()
-        if len(names) > MAX_ENTRIES:
-            raise OpcError(f"package has too many entries ({len(names)} > {MAX_ENTRIES})")
         if len(names) != len(set(names)):
             raise OpcError("package contains duplicate ZIP entry names")
         # OPC part names are equivalent under path normalization and case folding;
@@ -230,21 +298,17 @@ def read_package(data: bytes) -> OpcPackage:
         # (a reader that takes the first entry sees different bytes than the scanner).
         seen: dict[str, str] = {}
         for name in names:
-            if name.endswith("/"):
-                continue
-            _reject_noncanonical_entry_name(name)
-            key = _normalize_part_name(name).casefold()
+            key = _normalize_part_name(name.removesuffix("/")).casefold()
             if key in seen and seen[key] != name:
                 raise OpcError(f"colliding part names: {seen[key]!r} and {name!r}")
             seen[key] = name
         if CONTENT_TYPES_PART not in names:
             raise OpcError("missing mandatory [Content_Types].xml")
-        _guard_zip_bomb(zf.infolist(), len(data))
-        raw = {name: zf.read(name) for name in names}
+        raw = {name: zf.read(name) for name in names if not name.endswith("/")}
 
     _parse_content_types(pkg, raw.pop(CONTENT_TYPES_PART))
     for name, blob in raw.items():
-        if name.endswith(".rels") and (name == ROOT_RELS_PART or "/_rels/" in name):
+        if name.endswith(".rels") and (name == ROOT_RELS_PART or name.startswith("_rels/") or "/_rels/" in name):
             _parse_relationships(pkg, name, blob)
         else:
             pkg.parts[_normalize_part_name(name)] = blob
@@ -257,6 +321,53 @@ MAX_TOTAL_BYTES = 1024 * 1024 * 1024       # whole-package inflated size
 MAX_INFLATE_RATIO = 200                     # inflated/compressed per entry
 MAX_ENTRIES = 4096                          # pathological part-graph cap (checked pre-read)
 
+
+def _surface_hasher(profile: bytes):
+    """Start a profile-separated format-3 surface transcript."""
+    h = hashlib.blake2b(digest_size=32)
+    h.update(b"docxplus:surface:3.0\x00" + profile + b"\x00")
+    return h
+
+
+def _surface_record(h, kind: bytes, *fields: bytes) -> None:
+    """Hash a typed record with counted, length-delimited fields."""
+    h.update(kind)
+    h.update(len(fields).to_bytes(4, "big"))
+    for value in fields:
+        h.update(len(value).to_bytes(8, "big"))
+        h.update(value)
+
+
+def _guard_writer_entries(entries: dict[str, bytes], *, case_sensitive: bool) -> None:
+    """Apply reader byte/name/metadata limits under the profile's name equivalence."""
+    from .archive_limits import MAX_ZIP_DIRECTORY_BYTES
+    if len(entries) > MAX_ENTRIES:
+        raise OpcError(f"package has too many entries ({len(entries)} > {MAX_ENTRIES})")
+    total = directory_bytes = 0
+    seen: set[str] = set()
+    for name, data in entries.items():
+        _reject_noncanonical_entry_name(name)
+        folded = name if case_sensitive else name.casefold()
+        if folded in seen:
+            raise OpcError(f"colliding part name: {name!r}")
+        seen.add(folded)
+        directory_bytes += 46 + len(name.encode("utf-8"))
+        if directory_bytes > MAX_ZIP_DIRECTORY_BYTES:
+            raise OpcError("ZIP central-directory metadata exceeds byte cap")
+        if len(data) > MAX_ENTRY_BYTES:
+            raise OpcError(f"zip entry too large ({name}): {len(data)} bytes")
+        total += len(data)
+        if total > MAX_TOTAL_BYTES:
+            raise OpcError("package inflates past the total-size cap (possible zip bomb)")
+
+
+def _preflight_zip(data: bytes) -> int:
+    from .archive_limits import ArchiveLimitError, guard_zip_directory
+
+    try:
+        return guard_zip_directory(data, max_data_bytes=MAX_TOTAL_BYTES, max_members=MAX_ENTRIES)
+    except ArchiveLimitError as exc:
+        raise OpcError(str(exc)) from exc
 
 def _compression_for(data: bytes) -> int:
     """Choose a compression method the *reader's* bomb guard will accept.
@@ -282,10 +393,20 @@ def _compression_for(data: bytes) -> int:
     return zipfile.ZIP_DEFLATED
 
 
-def _guard_zip_bomb(infos, compressed_len: int) -> None:
-    """Reject a package whose entries inflate past sane caps (zip-bomb defence)."""
+def _guard_zip_bomb(infos, expected_entries: int) -> None:
+    """Reject ambiguous directories and over-budget/unsupported compressed parts."""
+    if len(infos) > MAX_ENTRIES or len(infos) != expected_entries:
+        raise OpcError("ZIP directory entry count is inconsistent or exceeds cap")
     total = 0
     for info in infos:
+        if info.filename.endswith("/"):
+            _reject_noncanonical_entry_name(info.filename[:-1])
+            if info.file_size:
+                raise OpcError("ZIP directory entry has a payload")
+        else:
+            _reject_noncanonical_entry_name(info.filename)
+        if info.compress_type not in {zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED}:
+            raise OpcError(f"unsupported package compression method: {info.compress_type}")
         size = info.file_size
         if size > MAX_ENTRY_BYTES:
             raise OpcError(f"zip entry too large ({info.filename}): {size} bytes")
@@ -299,13 +420,29 @@ def _guard_zip_bomb(infos, compressed_len: int) -> None:
 
 def _parse_content_types(pkg: OpcPackage, blob: bytes) -> None:
     root = _safe_fromstring(blob)
+    if root.tag != f"{{{NS_CONTENT_TYPES}}}Types" or root.attrib:
+        raise OpcError("invalid content-types index namespace or attributes")
     for child in root:
-        tag = child.tag.split("}")[-1]
-        if tag == "Default":
-            pkg.default_types[child.attrib["Extension"].lower()] = child.attrib["ContentType"]
-        elif tag == "Override":
-            part = _normalize_part_name(child.attrib["PartName"])
+        if child.tag == f"{{{NS_CONTENT_TYPES}}}Default":
+            if set(child.attrib) != {"Extension", "ContentType"} or len(child):
+                raise OpcError("invalid Default content-type declaration")
+            ext = child.attrib["Extension"].lower()
+            if not ext or ext in pkg.default_types:
+                raise OpcError(f"duplicate or empty Default extension: {ext!r}")
+            pkg.default_types[ext] = child.attrib["ContentType"]
+        elif child.tag == f"{{{NS_CONTENT_TYPES}}}Override":
+            if set(child.attrib) != {"PartName", "ContentType"} or len(child):
+                raise OpcError("invalid Override content-type declaration")
+            name = child.attrib["PartName"]
+            if not name.startswith("/"):
+                raise OpcError("Override PartName must be package-absolute")
+            _reject_noncanonical_entry_name(name[1:])
+            part = name[1:]
+            if any(p.casefold() == part.casefold() for p in pkg.override_types):
+                raise OpcError(f"duplicate Override part: {part!r}")
             pkg.override_types[part] = child.attrib["ContentType"]
+        else:
+            raise OpcError("unknown content-types index element or namespace")
 
 
 def _parse_relationships(pkg: OpcPackage, rels_name: str, blob: bytes) -> None:
@@ -315,10 +452,25 @@ def _parse_relationships(pkg: OpcPackage, rels_name: str, blob: bytes) -> None:
         directory = posixpath.dirname(posixpath.dirname(rels_name))
         base = posixpath.basename(rels_name)[: -len(".rels")]
         source = _normalize_part_name(posixpath.join(directory, base) if directory else base)
+        if rels_name != _rels_part_for(source):
+            raise OpcError(f"noncanonical relationships index: {rels_name!r}")
     root = _safe_fromstring(blob)
+    if root.tag != f"{{{NS_RELATIONSHIPS}}}Relationships" or root.attrib:
+        raise OpcError("invalid relationships index namespace or attributes")
+    seen: set[str] = set()
     for child in root:
-        if child.tag.split("}")[-1] != "Relationship":
-            continue
+        if child.tag != f"{{{NS_RELATIONSHIPS}}}Relationship":
+            raise OpcError("unknown relationship element or namespace")
+        if not {"Id", "Type", "Target"} <= set(child.attrib) or set(child.attrib) - {
+            "Id", "Type", "Target", "TargetMode"
+        } or len(child):
+            raise OpcError("invalid relationship declaration")
+        rid = child.attrib["Id"]
+        if not rid or rid in seen:
+            raise OpcError(f"duplicate or empty relationship Id: {rid!r}")
+        seen.add(rid)
+        if child.attrib.get("TargetMode", "Internal") not in ("Internal", "External"):
+            raise OpcError("invalid relationship TargetMode")
         pkg.relationships.setdefault(source, []).append(
             Relationship(
                 id=child.attrib["Id"],

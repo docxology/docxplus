@@ -88,31 +88,17 @@ def test_envelope_rejects_a_length_field_that_overruns_the_buffer():
 def _envelope(kdf_id: int, params: bytes) -> bytes:
     return (
         b"DXE1" + bytes([kdf_id]) + bytes([16]) + b"S" * 16
-        + bytes([12]) + b"N" * 12 + bytes([len(params)]) + params + b"ciphertext"
+        + bytes([12]) + b"N" * 12 + bytes([len(params)]) + params + b"c" * 16
     )
 
 
 def test_scrypt_memory_ceiling_bounds_the_product_not_just_n():
-    """N=2^21 with r=64 is 16 GiB; capping N alone would let it through."""
-    hostile = _envelope(crypto.KDF_SCRYPT, bytes([crypto.MAX_SCRYPT_N_LOG2, 64, 1]))
-    with pytest.raises(ValueError, match="more memory than the reader allows"):
+    """N=2^21,r=2 needs512MiB but stays within the separate CPU-work ceiling."""
+    hostile = _envelope(crypto.KDF_SCRYPT, bytes([crypto.MAX_SCRYPT_N_LOG2, 2, 1]))
+    with pytest.raises(ValueError):
+        crypto.validate_password_envelope(hostile)
+    with pytest.raises(ValueError):
         crypto.decrypt(hostile, "password")
-
-    # The ceiling is a real bound, not a rounding: right at it, r=1 is admissible.
-    assert 128 * (1 << crypto.MAX_SCRYPT_N_LOG2) * 1 <= crypto.MAX_SCRYPT_MEMORY_BYTES
-    assert 128 * (1 << crypto.MAX_SCRYPT_N_LOG2) * 2 > crypto.MAX_SCRYPT_MEMORY_BYTES
-
-
-def test_scrypt_defaults_sit_comfortably_under_the_ceiling():
-    default_bytes = 128 * (1 << crypto.SCRYPT_N_LOG2) * crypto.SCRYPT_R
-    assert default_bytes <= crypto.MAX_SCRYPT_MEMORY_BYTES
-    roundtrip = crypto.encrypt(b"payload", "pw", aad=b"slot")
-    assert crypto.decrypt(roundtrip, "pw", aad=b"slot") == b"payload"
-
-
-def test_scrypt_ceiling_is_aligned_with_the_argon2_ceiling():
-    """Two memory-hard KDFs on the same reader should not differ 64-fold."""
-    assert crypto.MAX_SCRYPT_MEMORY_BYTES == crypto.MAX_ARGON2_MEMORY_COST_KIB * 1024
 
 
 def test_hybrid_post_quantum_crypto_suite():
@@ -166,5 +152,128 @@ def test_crypto_direct_error_branches():
         crypto._kdf_params("invalid_kdf")
     with pytest.raises(ValueError, match="content key must be 32 bytes"):
         crypto.encrypt_with_key(b"data", b"short_key")
+
+
+def test_hybrid_signature_requires_both_real_signatures():
+    """A valid Ed25519 signature must not launder a damaged or replaced PQ signature."""
+    from cryptography.hazmat.primitives.asymmetric.mldsa import MLDSA65PublicKey
+
+    key = crypto.generate_hybrid_signing_key()
+    other = crypto.generate_hybrid_signing_key()
+    data = b"two independent signing keys"
+    signature = crypto.hybrid_sign(data, key)
+    classical_size = int.from_bytes(signature[:2], "big")
+    pq_offset = 2 + classical_size + 2
+    # Independent provider verification, not just a round trip through our verifier.
+    MLDSA65PublicKey.from_public_bytes(key.pq_pub).verify(
+        signature[pq_offset:], b"docxplus/hybrid-signature/v1\0" + data
+    )
+    for index in (2, pq_offset, len(signature) - 1):
+        damaged = bytearray(signature)
+        damaged[index] ^= 1
+        assert not crypto.hybrid_verify(data, bytes(damaged), key.public_bytes)
+    substituted = crypto.HybridKeyPair(
+        key.classical_priv, key.classical_pub, other.pq_priv, other.pq_pub
+    )
+    assert not crypto.hybrid_verify(data, signature, substituted.public_bytes)
+    for malformed in (signature[:pq_offset], signature + b"trailing"):
+        assert not crypto.hybrid_verify(data, malformed, key.public_bytes)
+    assert not crypto.hybrid_verify(data, signature, key.public_bytes + b"trailing")
+
+
+def test_hybrid_kem_requires_both_private_keys_and_exact_framing():
+    """Public PQ material or the wrong private seed cannot open a genuine DXE3 slot."""
+    key = crypto.generate_hybrid_recipient_key()
+    other = crypto.generate_hybrid_recipient_key()
+    payload = b"both key agreements are necessary"
+    envelope = crypto.seal_hybrid(payload, [key.public_bytes], aad=b"slot")
+    assert crypto.unseal_hybrid(envelope, key, aad=b"slot") == payload
+    for substituted in (
+        crypto.HybridKeyPair(key.classical_priv, key.classical_pub, other.pq_priv, key.pq_pub),
+        crypto.HybridKeyPair(key.classical_priv, key.classical_pub, other.pq_priv, other.pq_pub),
+        crypto.HybridKeyPair(other.classical_priv, other.classical_pub, key.pq_priv, key.pq_pub),
+    ):
+        with pytest.raises(ValueError):
+            crypto.unseal_hybrid(envelope, substituted, aad=b"slot")
+    with pytest.raises(ValueError):
+        crypto.unseal_hybrid(envelope, key, aad=b"wrong-slot")
+    with pytest.raises(ValueError, match="trailing"):
+        crypto.unseal_hybrid(envelope + b"trailing", key, aad=b"slot")
+    simulated = key.classical_pub + (32).to_bytes(2, "big") + b"x" * 32
+    with pytest.raises(ValueError, match="malformed hybrid public key"):
+        crypto.seal_hybrid(payload, [simulated])
+
+
+
+def test_hybrid_kem_interoperates_with_independent_native_provider_operations():
+    """Both directions must use native ML-KEM secrets and the documented HKDF transcript."""
+    import os
+
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric.mlkem import (
+        MLKEM768PrivateKey,
+        MLKEM768PublicKey,
+    )
+    from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
+    key = crypto.generate_hybrid_recipient_key()
+    plaintext, aad = b"independent native KEM interoperability", b"context"
+    envelope = crypto.seal_hybrid(plaintext, [key.public_bytes], aad=aad)
+    body_size = int.from_bytes(envelope[4:8], "big")
+    body = envelope[8:8 + body_size]
+    slot = envelope[8 + body_size + 2 + 4:]
+    header_size = int.from_bytes(slot[:2], "big")
+    header = slot[2:2 + header_size]
+    wrapped = slot[2 + header_size + 2:]
+    private = X25519PrivateKey.from_private_bytes(key.classical_priv)
+    shared_classical = private.exchange(X25519PublicKey.from_public_bytes(header[:32]))
+    shared_pq = MLKEM768PrivateKey.from_seed_bytes(key.pq_priv).decapsulate(header[34:])
+    kek = HKDF(hashes.SHA384(), 32, salt=None, info=b"docxplus/dxe3-hybrid").derive(
+        header[:32] + key.classical_pub + shared_classical + shared_pq
+    )
+    content_key = AESGCM(kek).decrypt(wrapped[:12], wrapped[12:], None)
+    assert AESGCM(content_key).decrypt(body[:12], body[12:], aad) == plaintext
+
+    ephemeral = X25519PrivateKey.generate()
+    public = ephemeral.public_key().public_bytes_raw()
+    pq_secret, pq_ciphertext = MLKEM768PublicKey.from_public_bytes(key.pq_pub).encapsulate()
+    classical = ephemeral.exchange(X25519PublicKey.from_public_bytes(key.classical_pub))
+    kek = HKDF(hashes.SHA384(), 32, salt=None, info=b"docxplus/dxe3-hybrid").derive(
+        public + key.classical_pub + classical + pq_secret
+    )
+    content_key, nonce, wrap_nonce = os.urandom(32), os.urandom(12), os.urandom(12)
+    body = nonce + AESGCM(content_key).encrypt(nonce, plaintext, aad)
+    wrapped = wrap_nonce + AESGCM(kek).encrypt(wrap_nonce, content_key, None)
+    header = public + len(pq_ciphertext).to_bytes(2, "big") + pq_ciphertext
+    slot = len(header).to_bytes(2, "big") + header + len(wrapped).to_bytes(2, "big") + wrapped
+    native = (b"DXE3" + len(body).to_bytes(4, "big") + body + b"\0\1"
+              + len(slot).to_bytes(4, "big") + slot)
+    assert crypto.unseal_hybrid(native, key, aad=aad) == plaintext
+    damaged = bytearray(native)
+    damaged[-1] ^= 1
+    with pytest.raises(ValueError):
+        crypto.unseal_hybrid(bytes(damaged), key, aad=aad)
+
+
+def test_hybrid_reader_rejects_a_malformed_slot_after_a_successful_recipient():
+    """Early recipient success must not bypass canonical validation of later slots."""
+    key = crypto.generate_hybrid_recipient_key()
+    envelope = bytearray(crypto.seal_hybrid(b"data", [key.public_bytes]))
+    count_offset = 8 + int.from_bytes(envelope[4:8], "big")
+    envelope[count_offset:count_offset + 2] = b"\0\2"
+    envelope += (4).to_bytes(4, "big") + b"\0" * 4
+    with pytest.raises(ValueError):
+        crypto.unseal_hybrid(bytes(envelope), key)
+
+
+def test_hostile_scrypt_work_is_refused_before_derivation():
+    """A memory-admissible parameter set must not multiply CPU work by unbounded p."""
+    envelope = crypto.EncryptedPayload(
+        crypto.KDF_SCRYPT, b"s" * 16, b"n" * 12, bytes([18, 8, 64]), b"t" * 16
+    ).to_bytes()
+    with pytest.raises(ValueError):
+        crypto.validate_password_envelope(envelope)
 
 

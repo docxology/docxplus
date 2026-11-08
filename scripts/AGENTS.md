@@ -29,11 +29,10 @@ stdout. They contain **no business logic**. The inventory is in
 ## Adding a stage
 
 1. Number it by pipeline position, or prefix `z_` if it feeds the manuscript.
-2. Add a `run_*` function and a `case` arm in `run.sh`, **and** a line in that file's
-   usage text. `tests/test_docs.py` fails if the two disagree in either direction — a
-   stage missing from the usage, or a usage entry with no implementation.
+2. Add a `run_*` function, a `case` arm and matching usage in `run.sh`.
+   Exercise actual stage dispatch instead of asserting its source text.
 3. Decide deliberately whether it belongs in `all`. If it is a gate, it does.
-4. Add it to [`README.md`](README.md), which the suite checks for completeness.
+4. Update [`README.md`](README.md) with the stage's actual inputs and outputs.
 
 ## The reports are evidence, not logs
 

@@ -22,6 +22,7 @@ import json
 import os
 import stat
 import sys
+import tempfile
 from pathlib import Path
 
 # Installed, `docxplus` is a real package and this is a no-op. Run out of a checkout
@@ -89,13 +90,18 @@ def compare(before: dict, after: dict) -> dict:
     extra = sorted(set(got) - set(want))
     content = sorted(k for k in set(want) & set(got) if want[k]["digest"] != got[k]["digest"])
     mode = sorted(k for k in set(want) & set(got) if want[k]["executable"] != got[k]["executable"])
+    missing_dirs = sorted(before["dirs"] - after["dirs"])
+    unexpected_dirs = sorted(after["dirs"] - before["dirs"])
     return {
         "files_compared": len(want),
         "missing": missing,
         "unexpected": extra,
         "content_mismatches": content,
         "executable_bit_mismatches": mode,
-        "identical": not (missing or extra or content or mode),
+        "directories_compared": len(before["dirs"]),
+        "missing_directories": missing_dirs,
+        "unexpected_directories": unexpected_dirs,
+        "identical": not (missing or extra or content or mode or missing_dirs or unexpected_dirs),
     }
 
 
@@ -150,11 +156,11 @@ def main() -> int:
     # first-class input, not a decorative copy.
     docx_reader = DocxPlusReader.from_bytes(docx_written[1].read_bytes())
     check("docxplus.provenance_pinned", docx_reader.verify_provenance(expected_public_key=pub))
-    docx_out = docx_reader.extract_project(
-        "template_code_project", dirs["output"] / "roundtrip" / "from_docxplus",
-        password="round-trip",
-    )
-    docx_cmp = compare(before, snapshot(docx_out))
+    with tempfile.TemporaryDirectory(prefix="docxplus-template-docx-") as temporary:
+        docx_out = docx_reader.extract_project(
+            "template_code_project", Path(temporary) / "source", password="round-trip"
+        )
+        docx_cmp = compare(before, snapshot(docx_out))
     check("docxplus.roundtrip_identical", docx_cmp["identical"], json.dumps(docx_cmp)[:400])
     report["formats"]["docx"] = {
         "paths": [str(p) for p in docx_written],
@@ -184,11 +190,11 @@ def main() -> int:
 
     odt_reader = OdtPlusReader.from_bytes(odt_written[1].read_bytes())
     check("odtplus.provenance_pinned", odt_reader.verify_provenance(expected_public_key=pub))
-    odt_out = odt_reader.extract_project(
-        "template_code_project", dirs["output"] / "roundtrip" / "from_odtplus",
-        password="round-trip",
-    )
-    odt_cmp = compare(before, snapshot(odt_out))
+    with tempfile.TemporaryDirectory(prefix="docxplus-template-odt-") as temporary:
+        odt_out = odt_reader.extract_project(
+            "template_code_project", Path(temporary) / "source", password="round-trip"
+        )
+        odt_cmp = compare(before, snapshot(odt_out))
     check("odtplus.roundtrip_identical", odt_cmp["identical"], json.dumps(odt_cmp)[:400])
     report["formats"]["odt"] = {
         "paths": [str(p) for p in odt_written],

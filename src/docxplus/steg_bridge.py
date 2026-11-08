@@ -1,9 +1,9 @@
 """Bridge to the docxology/steganographer Rust CLI.
 
-The steganographer embeds a signed (BLAKE3 + Ed25519) payload into the
-least-significant bits of a PNG carrier via its opt-in *generic packet* channel
-(``encode --payload-file`` / ``decode``). docxplus uses it as the media-stego
-channel: the intelligence rides inside the LSBs of an image that is *itself* a
+The steganographer embeds a BLAKE3-checked payload into the least-significant bits
+of a PNG carrier via its opt-in *generic packet* channel. Packets are unsigned and
+non-ECC by default; a supplied signing key enables Ed25519 signing. The media
+channel's intelligence rides inside the LSBs of an image that is *itself* a
 visible part of the document (``word/media/``).
 
 Availability is optional and best-effort. Per the operational rule against
@@ -18,12 +18,8 @@ import os
 import shutil
 import subprocess
 from dataclasses import dataclass
+from itertools import islice
 from pathlib import Path
-
-from .project_paths import project_root
-
-# Optional sibling source checkout; explicit binaries and PATH retain precedence.
-_DEFAULT_REPO = project_root().parent / "steganographer"
 
 
 class StegError(RuntimeError):
@@ -36,36 +32,35 @@ class StegTool:
 
     argv_prefix: tuple[str, ...]
     cwd: Path | None
-    kind: str  # "binary" | "cargo"
+    kind: str  # "binary"
 
 
 def locate(repo: Path | None = None) -> StegTool | None:
-    """Find a runnable steganographer CLI, or ``None`` if unavailable.
+    """Resolve only an explicitly configured binary, PATH, or explicit repo.
 
-    Resolution order: an explicit ``STEGANOGRAPHER_BIN`` env var, a
-    ``steganographer`` binary on ``PATH``, a built ``target/release`` binary in
-    the sibling repo, then ``cargo run`` in the repo if Cargo is present.
+    A repository argument permits already-built release/debug binaries only;
+    dependency source is never compiled or executed through Cargo. Missing
+    default discovery returns ``None``; invalid explicit configuration raises.
     """
     env_bin = os.environ.get("STEGANOGRAPHER_BIN")
-    if env_bin and Path(env_bin).exists():
-        return StegTool((env_bin,), None, "binary")
+    if env_bin is not None:
+        candidate = Path(env_bin)
+        if not env_bin or not candidate.is_file() or not os.access(candidate, os.X_OK):
+            raise StegError(f"invalid STEGANOGRAPHER_BIN executable: {env_bin!r}")
+        return StegTool((str(candidate.resolve()),), None, "binary")
 
     on_path = shutil.which("steganographer")
     if on_path:
-        return StegTool((on_path,), None, "binary")
+        return StegTool((str(Path(on_path).resolve()),), None, "binary")
 
-    root = repo or _DEFAULT_REPO
-    for profile in ("release", "debug"):
-        candidate = root / "target" / profile / "steganographer"
-        if candidate.exists():
-            return StegTool((str(candidate),), None, "binary")
-
-    if root.exists() and shutil.which("cargo"):
-        return StegTool(
-            ("cargo", "run", "--quiet", "--release", "-p", "steganographer-cli", "--"),
-            root,
-            "cargo",
-        )
+    if repo is not None:
+        for profile in ("release", "debug"):
+            candidate = Path(repo) / "target" / profile / "steganographer"
+            if candidate.exists():
+                if not candidate.is_file() or not os.access(candidate, os.X_OK):
+                    raise StegError(f"invalid steganographer executable: {candidate}")
+                return StegTool((str(candidate.resolve()),), None, "binary")
+        raise StegError(f"no built steganographer executable in explicit repo: {repo}")
     return None
 
 
@@ -74,16 +69,21 @@ def available(repo: Path | None = None) -> bool:
     return locate(repo) is not None
 
 
-def _run(tool: StegTool, args: list[str], timeout: int = 600) -> subprocess.CompletedProcess:
+def _run(tool: StegTool, args: list[str], timeout: float = 600) -> subprocess.CompletedProcess:
     try:
         proc = subprocess.run(
             [*tool.argv_prefix, *args],
             cwd=str(tool.cwd) if tool.cwd else None,
+            stdin=subprocess.DEVNULL,
             capture_output=True,
             timeout=timeout,
             check=False,
         )
-    except (FileNotFoundError, PermissionError, OSError) as exc:
+    except subprocess.TimeoutExpired as exc:
+        raise StegError(
+            f"steganographer {args[0]} timed out after {timeout} seconds"
+        ) from exc
+    except OSError as exc:
         raise StegError(f"cannot execute steganographer tool {tool.argv_prefix!r}: {exc}") from exc
     if proc.returncode != 0:
         raise StegError(
@@ -91,6 +91,64 @@ def _run(tool: StegTool, args: list[str], timeout: int = 600) -> subprocess.Comp
             f"{proc.stderr.decode('utf-8', 'replace')[:2000]}"
         )
     return proc
+
+
+def capacity(
+    carrier_units: int,
+    *,
+    signing_key: Path | None = None,
+    tool: StegTool | None = None,
+) -> dict:
+    """Ask Rust for exact sequential RGB capacity, including packet overhead.
+
+    Metadata and signing policy match :func:`embed_payload`. A carrier too small
+    for framing, an absent backend, or an invalid response raises ``StegError``.
+    """
+    import json
+
+    resolved = tool or locate()
+    if resolved is None:
+        raise StegError("steganographer CLI not available")
+    args = [
+        "capacity", "--carrier-units", str(carrier_units),
+        "--stego-type", "lsb_video", "--bits", "1",
+        "--filename", "payload.bin", "--mime-type", "application/octet-stream",
+        "--format", "json",
+    ]
+    if signing_key is not None:
+        args += ["--signing-key", str(signing_key)]
+    proc = _run(resolved, args)
+    try:
+        envelope = json.loads(proc.stdout.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise StegError(f"failed to parse capacity output: {exc}") from exc
+    if (
+        not isinstance(envelope, dict)
+        or envelope.get("schema") != "steganographer.cli/v1"
+        or envelope.get("command") != "capacity"
+        or envelope.get("status") != "success"
+    ):
+        raise StegError("invalid steganographer capacity success envelope")
+    result = envelope.get("result")
+    if not isinstance(result, dict):
+        raise StegError("invalid steganographer capacity result")
+    for name in ("max_payload_bytes", "max_packet_bytes", "packet_overhead_bytes",
+                 "carrier_units", "bits"):
+        if type(result.get(name)) is not int or result[name] < 0:
+            raise StegError(f"invalid steganographer capacity field: {name}")
+    if (
+        result["carrier_units"] != carrier_units
+        or result["bits"] != 1
+        or result.get("signed") is not (signing_key is not None)
+        or result.get("filename") != "payload.bin"
+        or result.get("mime_type") != "application/octet-stream"
+        or result["max_packet_bytes"] > carrier_units // 8
+        or result["max_payload_bytes"] + result["packet_overhead_bytes"]
+        != result["max_packet_bytes"]
+    ):
+        raise StegError("inconsistent steganographer capacity result")
+    return result
+
 
 
 def embed_payload(
@@ -123,6 +181,12 @@ def embed_payload(
             "png",
             "--payload-file",
             str(payload_path),
+            "--filename",
+            "payload.bin",
+            "--mime-type",
+            "application/octet-stream",
+            "--bits",
+            "1",
         ]
         if signing_key is not None:
             args += ["--signing-key", str(signing_key)]
@@ -164,11 +228,10 @@ def extract_payload(
 # close that gap with the classic chi-squared attack on LSB replacement, which
 # needs nothing beyond Pillow and therefore always runs.
 
-# Below this expected-count the chi-squared approximation stops being valid, so
-# the pair is dropped from the statistic rather than inflating it.
+# Populated pairs below this expected count cannot support the approximation.
 MIN_EXPECTED_COUNT = 5
-# p(embedding) at or above which a carrier is reported suspicious.
-SUSPICION_THRESHOLD = 0.95
+# Upper-tail compatibility cutoff for equal-frequency adjacent value pairs.
+SUSPICION_THRESHOLD = 0.05
 
 
 def _lower_gamma_series(a: float, x: float) -> float:
@@ -227,71 +290,72 @@ def chi_square_sf(chi2: float, dof: int) -> float:
     return 1.0 - _lower_gamma_series(a, x) if x < a + 1.0 else _upper_gamma_cf(a, x)
 
 
-def _samples(carrier_png: Path) -> list[int]:
-    """Flatten an RGB image into the sample order :mod:`lsb` writes bits in."""
-    from PIL import Image
+def _samples(carrier_png: Path) -> bytes:
+    """Return bounded RGB samples in the exact order :mod:`lsb` writes bits."""
+    from .lsb import _open_rgb
 
-    img = Image.open(carrier_png).convert("RGB")
-    width, height = img.size
-    px = img.load()
-    return [c for y in range(height) for x in range(width) for c in px[x, y]]
+    with _open_rgb(carrier_png) as img:
+        return img.tobytes()
 
 
-def _chi_square_from_histogram(hist: list[int]) -> tuple[float, int, float]:
-    """Westfeld-Pfitzmann statistic over pairs-of-values (2i, 2i+1).
+def _chi_square_from_histogram(hist: list[int]) -> tuple[float, int, float | None]:
+    """Pearson equal-frequency statistic over adjacent pairs (2i, 2i+1).
 
-    LSB replacement drives the counts of each PoV pair together, so a *low* chi²
-    (counts nearly equal) is the evidence of embedding — the returned p is the
-    probability of embedding, not a conventional significance level.
+    Each populated pair contributes one degree of freedom. An expected count
+    below five makes the approximation unavailable, not a negative observation.
+    High p-values mean compatibility with pair equalization, not embedding.
     """
+    if sum(hist) < 64:
+        return 0.0, 0, None
     chi2 = 0.0
     pairs = 0
     for i in range(128):
         observed, partner = hist[2 * i], hist[2 * i + 1]
-        expected = (observed + partner) / 2.0
-        if expected < MIN_EXPECTED_COUNT:
+        total = observed + partner
+        if total == 0:
             continue
-        chi2 += (observed - expected) ** 2 / expected
+        if total / 2.0 < MIN_EXPECTED_COUNT:
+            return 0.0, 0, None
+        chi2 += (observed - partner) ** 2 / total
         pairs += 1
-    if pairs < 2:
-        # Too few populated pairs to say anything; report "no evidence".
-        return chi2, 0, 0.0
-    dof = pairs - 1
-    return chi2, dof, chi_square_sf(chi2, dof)
+    if pairs == 0:
+        return 0.0, 0, None
+    return chi2, pairs, chi_square_sf(chi2, pairs)
 
 
 def chi_square_lsb(carrier_png: Path, *, prefix: float = 1.0) -> dict:
-    """Chi-squared LSB-replacement test over the first ``prefix`` of the carrier.
+    """Report pair-equality compatibility over the first carrier ``prefix``.
 
-    Returns ``{chi2, dof, p_embedding, suspicious, samples}``. ``p_embedding``
-    near 1.0 means the sample histogram has been flattened the way LSB embedding
-    flattens it; near 0.0 means the carrier's natural PoV asymmetry is intact.
+    ``p_value`` is an upper-tail reference probability, not an embedding
+    probability. ``available=False`` and ``p_value=None`` mean the histogram
+    cannot support the chi-square approximation. Balanced untouched covers can
+    be flagged; neither a flag nor its absence proves payload presence/absence.
     """
     if not 0.0 < prefix <= 1.0:
         raise ValueError("prefix must be in (0, 1]")
     values = _samples(carrier_png)
     count = max(1, int(len(values) * prefix))
     hist = [0] * 256
-    for v in values[:count]:
+    for v in islice(values, count):
         hist[v] += 1
     chi2, dof, p = _chi_square_from_histogram(hist)
     return {
         "chi2": chi2,
         "dof": dof,
-        "p_embedding": p,
-        "suspicious": p >= SUSPICION_THRESHOLD,
+        "p_value": p,
+        "available": p is not None,
+        "suspicious": p is not None and p >= SUSPICION_THRESHOLD,
         "samples": count,
     }
 
 
 def chi_square_sweep(carrier_png: Path, *, steps: int = 10) -> dict:
-    """Sweep increasing prefixes to detect *and localize* sequential embedding.
+    """Report compatibility over increasing sequential prefixes.
 
-    :func:`lsb.embed` fills the carrier from the first pixel and stops when the
-    payload runs out, so a partially-filled carrier looks clean in aggregate: the
-    untouched tail dominates the histogram and hides the payload. Testing growing
-    initial fractions is the standard answer — the point where p collapses marks
-    the end of the embedded region, which also estimates the payload extent.
+    ``largest_flagged_prefix`` is the largest tested fraction compatible with
+    pair equalization. It is heuristic evidence, not a payload-extent estimate:
+    untouched covers can have the same histogram, and repeated prefix tests are
+    not calibrated as an independent detection procedure.
     """
     if steps < 2:
         raise ValueError("steps must be >= 2")
@@ -304,37 +368,40 @@ def chi_square_sweep(carrier_png: Path, *, steps: int = 10) -> dict:
     hist = [0] * 256
     results: list[dict] = []
     cursor = 0
+    samples = iter(values)
     for frac in fractions:
         boundary = max(1, int(total * frac))
-        for v in values[cursor:boundary]:
+        for v in islice(samples, boundary - cursor):
             hist[v] += 1
         cursor = boundary
         chi2, dof, p = _chi_square_from_histogram(hist)
         results.append(
-            {"fraction": frac, "chi2": chi2, "dof": dof, "p_embedding": p,
-             "suspicious": p >= SUSPICION_THRESHOLD}
+            {"fraction": frac, "chi2": chi2, "dof": dof, "p_value": p,
+             "available": p is not None,
+             "suspicious": p is not None and p >= SUSPICION_THRESHOLD}
         )
 
     flagged = [r["fraction"] for r in results if r["suspicious"]]
     return {
         "steps": results,
         "suspicious": bool(flagged),
-        "max_p_embedding": max((r["p_embedding"] for r in results), default=0.0),
-        # The largest still-suspicious prefix approximates how much of the
-        # carrier the payload occupies; 0.0 when nothing looks embedded.
-        "embedded_fraction_estimate": max(flagged) if flagged else 0.0,
+        "available": any(r["available"] for r in results),
+        "max_p_value": max(
+            (r["p_value"] for r in results if r["available"]), default=None
+        ),
+        "largest_flagged_prefix": max(flagged) if flagged else 0.0,
     }
 
 
 def steganalysis_report(
     carrier_png: Path, *, tool: StegTool | None = None, steps: int = 10
 ) -> dict:
-    """Combined carrier verdict: always-available statistics, plus tool telemetry.
+    """Report Python pair-equality compatibility and optional Rust telemetry.
 
-    The pure-Python chi-squared results are authoritative for the verdict; the
-    external steganographer's ``analyze`` output is attached when the binary is
-    present and reported as unavailable when it is not. Absence is a graceful
-    skip, but a genuine failure of a *present* tool still raises.
+    ``suspicious`` is a statistical flag, never proof of an embedded payload.
+    Availability is explicit; missing tools are unavailable, while a real
+    failure of a present tool raises. Rust analyzes encoded PNG file bytes,
+    unlike Python's decoded RGB samples, so the observations are not equivalent.
     """
     whole = chi_square_lsb(carrier_png)
     sweep = chi_square_sweep(carrier_png, steps=steps)
@@ -343,6 +410,7 @@ def steganalysis_report(
         "chi_square": whole,
         "chi_square_sweep": sweep,
         "suspicious": whole["suspicious"] or sweep["suspicious"],
+        "available": whole["available"] or sweep["available"],
         "external_analysis": None,
         "external_available": False,
     }
@@ -359,7 +427,7 @@ def analyze_carrier(
     analysis_type: str = "combined",
     tool: StegTool | None = None,
 ) -> dict:
-    """Return the analysis result from the steganographer 0.8 CLI envelope.
+    """Return the analysis result from the versioned steganographer CLI envelope.
 
     The public dictionary contains ``detected`` and ``analysis_type``, not CLI
     envelope metadata. Invalid contracts and nonzero tool exits raise ``StegError``.
@@ -407,6 +475,7 @@ __all__ = [
     "StegTool",
     "analyze_carrier",
     "available",
+    "capacity",
     "chi_square_lsb",
     "chi_square_sf",
     "chi_square_sweep",

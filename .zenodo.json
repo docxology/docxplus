@@ -1,11 +1,13 @@
 {
   "title": "docxplus \u2014 the Intelligent Document Container",
-  "description": "A standards-first reference implementation of a byte-valid OOXML .docx that also carries a modular, Ed25519-signed, AES-256-GCM-encrypted intelligence layer through spec-sanctioned side-channels, with an optional bridge to the docxology/steganographer signed-packet backend.",
+  "description": "A standards-first reference implementation of DOCX and ODT containers with modular, signed and payload-encrypted intelligence layers through package extension points, with an optional steganographer media backend. Structural validation is not full standards certification; authenticity requires a pinned key.",
   "upload_type": "software",
   "license": "MIT",
   "keywords": [
     "OOXML",
     "DOCX",
+    "ODF",
+    "ODT",
     "Open Packaging Conventions",
     "steganography",
     "document security",
@@ -18,5 +20,5 @@
       "affiliation": "Active Inference Institute"
     }
   ],
-  "version": "1.1.0"
+  "version": "2.0.0"
 }

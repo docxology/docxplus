@@ -70,3 +70,82 @@ def test_a_built_document_validates_under_either_name(tmp_path):
 
     assert validate_bytes(surface.read_bytes()).ok
     assert validate_bytes(plus.read_bytes()).ok
+
+
+@pytest.mark.parametrize("suffix", [".docx", ".docxplus", ".odt", ".odtplus", ".bin"])
+def test_document_preflight_selects_the_writer_targets_without_writing(tmp_path, suffix):
+    """CLI preflight and actual publication must agree on all output names."""
+    requested = tmp_path / f"report{suffix}"
+    selected = fileext.document_paths(requested)
+    assert fileext.preflight_document(requested) == selected
+    assert list(tmp_path.iterdir()) == []
+    assert fileext.write_document(b"document bytes", requested) == selected
+    assert all(path.read_bytes() == b"document bytes" for path in selected)
+
+
+def test_paired_preflight_preserves_first_output_when_second_is_a_directory(tmp_path):
+    """A known second-sibling failure must precede every replacement."""
+    surface = tmp_path / "report.docx"
+    surface.write_bytes(b"previous surface")
+    plus = tmp_path / "report.docxplus"
+    plus.mkdir()
+    with pytest.raises(FileExistsError):
+        fileext.write_document(b"new contents", surface)
+    assert surface.read_bytes() == b"previous surface"
+    assert plus.is_dir()
+    assert set(tmp_path.iterdir()) == {surface, plus}
+
+
+def test_paired_publication_refuses_a_symlink_without_following_it(tmp_path):
+    """A hostile sibling must not redirect writes or partially update the pair."""
+    target = tmp_path / "unrelated"
+    target.write_bytes(b"outside sentinel")
+    surface = tmp_path / "report.odt"
+    surface.write_bytes(b"old document")
+    plus = tmp_path / "report.odtplus"
+    plus.symlink_to(target)
+    with pytest.raises(FileExistsError):
+        fileext.write_document(b"new document", surface)
+    assert surface.read_bytes() == b"old document"
+    assert target.read_bytes() == b"outside sentinel"
+    assert plus.is_symlink()
+
+
+def test_paired_replacement_detaches_hardlinks_and_open_inodes(tmp_path):
+    """Complete private siblings replace names rather than truncating shared files."""
+    import os
+
+    original = tmp_path / "unrelated"
+    original.write_bytes(b"old shared bytes")
+    original.chmod(0o644)
+    surface = tmp_path / "report.docx"
+    plus = tmp_path / "report.docxplus"
+    os.link(original, surface)
+    os.link(original, plus)
+    with surface.open("rb") as previous:
+        assert fileext.write_document(b"new bytes", surface) == [surface, plus]
+        assert previous.read() == b"old shared bytes"
+    assert original.read_bytes() == b"old shared bytes"
+    assert surface.read_bytes() == plus.read_bytes() == b"new bytes"
+    assert surface.stat().st_ino != plus.stat().st_ino
+    assert all(path.stat().st_mode & 0o777 == 0o600 for path in (surface, plus))
+
+
+def test_invalid_document_data_preserves_both_outputs(tmp_path):
+    """Serialization/type failure must happen before either document replacement."""
+    surface, plus = fileext.write_document(b"old", tmp_path / "report.docx")
+    with pytest.raises(TypeError):
+        fileext.write_document(object(), surface)
+    assert surface.read_bytes() == plus.read_bytes() == b"old"
+    assert set(tmp_path.iterdir()) == {surface, plus}
+
+
+def test_document_parent_symlink_is_not_a_publication_route(tmp_path):
+    """Directory aliases refuse instead of letting a path swap redirect publication."""
+    real = tmp_path / "real"
+    real.mkdir()
+    alias = tmp_path / "alias"
+    alias.symlink_to(real, target_is_directory=True)
+    with pytest.raises(NotADirectoryError):
+        fileext.write_document(b"new", alias / "report.docx")
+    assert list(real.iterdir()) == []

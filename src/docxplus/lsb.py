@@ -5,17 +5,37 @@ length-prefixed payload in the least-significant bit of each RGB colour channel,
 exactly the LSB technique the standards report and the docxology/steganographer
 project describe. Deterministic and reversible; no external toolchain.
 
-The steganographer Rust CLI remains the *premium* backend (adds BLAKE3 + Ed25519
-signing and Reed-Solomon ECC); this module is the zero-setup default so a docxplus
-with a media-carried payload can be produced and read with Pillow alone.
+The optional steganographer Rust CLI uses a different BLAKE3-checked packet
+format, with signing only when a key is supplied. This backend needs only Pillow
+and does not authenticate payloads or provide error correction.
 """
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from itertools import islice
 from pathlib import Path
 
 _MAGIC = b"DXL1"
 _HEADER = len(_MAGIC) + 4  # magic + uint32 length
+# Bound decompressed RGB/sample storage before Pillow converts or loads pixels.
+MAX_CARRIER_PIXELS = 16_000_000
+
+
+def _check_dimensions(width: int, height: int) -> None:
+    if width <= 0 or height <= 0 or width * height > MAX_CARRIER_PIXELS:
+        raise ValueError(f"carrier pixel count exceeds limit {MAX_CARRIER_PIXELS}")
+
+
+@contextmanager
+def _open_rgb(path: Path):
+    """Load RGB pixels only after enforcing the carrier's decoded-size budget."""
+    from PIL import Image
+
+    with Image.open(path) as source:
+        _check_dimensions(*source.size)
+        with source.convert("RGB") as image:
+            yield image
 
 
 def capacity_bytes(width: int, height: int) -> int:
@@ -28,6 +48,7 @@ def make_carrier(path: Path, size: tuple[int, int]) -> Path:
     from PIL import Image
 
     w, h = size
+    _check_dimensions(w, h)
     img = Image.new("RGB", (w, h))
     px = img.load()
     for y in range(h):
@@ -39,83 +60,65 @@ def make_carrier(path: Path, size: tuple[int, int]) -> Path:
 
 def embed(carrier_png: Path, payload: bytes, out_png: Path) -> Path:
     """Embed ``payload`` into ``carrier_png`` LSBs → ``out_png`` (lossless PNG)."""
-    from PIL import Image
-
-    img = Image.open(carrier_png).convert("RGB")
-    width, height = img.size
-    framed = _MAGIC + len(payload).to_bytes(4, "big") + payload
-    if len(framed) > capacity_bytes(width, height) + _HEADER:
-        raise ValueError(
-            f"payload too large: {len(payload)} bytes exceeds carrier capacity "
-            f"{capacity_bytes(width, height)}"
-        )
-    bits = _to_bits(framed)
-    px = img.load()
-    i = 0
-    for y in range(height):
-        for x in range(width):
-            r, g, b = px[x, y]
-            channels = [r, g, b]
-            for c in range(3):
-                if i < len(bits):
-                    channels[c] = (channels[c] & ~1) | bits[i]
-                    i += 1
+    with _open_rgb(carrier_png) as img:
+        width, height = img.size
+        if (_HEADER + len(payload)) * 8 > width * height * 3:
+            raise ValueError(
+                f"payload too large: {len(payload)} bytes exceeds carrier capacity "
+                f"{capacity_bytes(width, height)}"
+            )
+        framed = _MAGIC + len(payload).to_bytes(4, "big") + payload
+        px = img.load()
+        bit_count = len(framed) * 8
+        i = 0
+        for pixel in range((bit_count + 2) // 3):
+            x, y = pixel % width, pixel // width
+            channels = list(px[x, y])
+            for channel in range(min(3, bit_count - i)):
+                bit = (framed[i // 8] >> (7 - i % 8)) & 1
+                channels[channel] = (channels[channel] & ~1) | bit
+                i += 1
             px[x, y] = tuple(channels)
-        if i >= len(bits):
-            break
-    img.save(out_png, format="PNG")
+        img.save(out_png, format="PNG")
     return out_png
 
 
 def extract(stego_png: Path) -> bytes:
     """Reverse :func:`embed`; return the original payload bytes."""
-    from PIL import Image
-
-    img = Image.open(stego_png).convert("RGB")
-    width, height = img.size
-    px = img.load()
-
-    header_bits = _read_bits(px, width, height, _HEADER * 8)
-    framed_header = _from_bits(header_bits)
-    if framed_header[: len(_MAGIC)] != _MAGIC:
-        raise ValueError("no DXL1 payload found in carrier")
-    length = int.from_bytes(framed_header[len(_MAGIC) : _HEADER], "big")
-
-    total_bits = (_HEADER + length) * 8
-    all_bits = _read_bits(px, width, height, total_bits)
-    return _from_bits(all_bits)[_HEADER : _HEADER + length]
-
-
-def _to_bits(data: bytes) -> list[int]:
-    bits: list[int] = []
-    for byte in data:
-        for shift in range(7, -1, -1):
-            bits.append((byte >> shift) & 1)
-    return bits
+    with _open_rgb(stego_png) as img:
+        width, height = img.size
+        if width * height * 3 < _HEADER * 8:
+            raise ValueError("carrier too small for full DXL1 header")
+        px = img.load()
+        samples = (
+            channel for y in range(height) for x in range(width) for channel in px[x, y]
+        )
+        header = _read_bytes(samples, _HEADER)
+        if header[:len(_MAGIC)] != _MAGIC:
+            raise ValueError("no DXL1 payload found in carrier")
+        length = int.from_bytes(header[len(_MAGIC):], "big")
+        if length > capacity_bytes(width, height):
+            raise ValueError("declared DXL1 payload exceeds carrier capacity")
+        return _read_bytes(samples, length)
 
 
-def _from_bits(bits: list[int]) -> bytes:
-    out = bytearray()
-    for i in range(0, len(bits) - 7, 8):
+def _read_bytes(samples, count: int) -> bytes:
+    """Consume an exact byte count without a per-bit list or a carrier copy."""
+    out = bytearray(count)
+    for i in range(count):
         byte = 0
-        for b in bits[i : i + 8]:
-            byte = (byte << 1) | b
-        out.append(byte)
+        bits = 0
+        for sample in islice(samples, 8):
+            byte = (byte << 1) | (sample & 1)
+            bits += 1
+        if bits != 8:
+            raise ValueError("truncated DXL1 payload in carrier")
+        out[i] = byte
     return bytes(out)
 
 
-def _read_bits(px, width: int, height: int, count: int) -> list[int]:
-    bits: list[int] = []
-    for y in range(height):
-        for x in range(width):
-            for c in px[x, y]:
-                bits.append(c & 1)
-                if len(bits) >= count:
-                    return bits
-    return bits
-
-
 __all__ = [
+    "MAX_CARRIER_PIXELS",
     "capacity_bytes",
     "embed",
     "extract",

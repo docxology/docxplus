@@ -19,8 +19,13 @@ under a strict policy when threats are present. Nothing here runs carried code.
 
 from __future__ import annotations
 
+import posixpath
+import re
 from dataclasses import dataclass, field
+from urllib.parse import unquote, urlsplit
+from xml.etree.ElementTree import ParseError
 
+from defusedxml.common import DefusedXmlException
 from defusedxml.ElementTree import fromstring as _safe_fromstring
 
 from .manifest import read_manifest
@@ -55,6 +60,7 @@ class ThreatReport:
     external_relationships: list[str] = field(default_factory=list)
     macro_parts: list[str] = field(default_factory=list)
     altchunk_imports: list[str] = field(default_factory=list)
+    parse_errors: list[str] = field(default_factory=list)
     part_count: int = 0
     oversized: bool = False
     notes: list[str] = field(default_factory=list)
@@ -65,6 +71,7 @@ class ThreatReport:
             self.external_relationships
             or self.macro_parts
             or self.altchunk_imports
+            or self.parse_errors
             or self.oversized
         )
 
@@ -74,10 +81,21 @@ class ThreatReport:
             "external_relationships": list(self.external_relationships),
             "macro_parts": list(self.macro_parts),
             "altchunk_imports": list(self.altchunk_imports),
+            "parse_errors": list(self.parse_errors),
             "part_count": self.part_count,
             "oversized": self.oversized,
             "notes": list(self.notes),
         }
+
+
+def _scan_xml(report: ThreatReport, part: str, blob: bytes):
+    """An incomplete scan is indeterminate, never a clean threat observation."""
+    try:
+        return _parse_xml(blob)
+    except (ParseError, DefusedXmlException, ValueError, LookupError) as exc:
+        report.parse_errors.append(part)
+        report.notes.append(f"unscannable XML: {part} ({type(exc).__name__})")
+        return None
 
 
 def scan(pkg: OpcPackage, policy: IntakePolicy = DEFAULT_POLICY) -> ThreatReport:
@@ -107,27 +125,19 @@ def scan(pkg: OpcPackage, policy: IntakePolicy = DEFAULT_POLICY) -> ThreatReport
             ):
                 report.macro_parts.append(part)
 
-    if not policy.allow_altchunk:
-        # Detect the altChunk *element* in any XML part (by resolved content type,
-        # not filename extension), parsing rather than substring-matching so a
-        # non-.xml part name cannot evade and benign prose cannot false-positive.
-        for part in pkg.parts:
-            ct = (pkg.content_type_for(part) or "").lower()
-            if "xml" not in ct and not part.lower().endswith(".xml"):
-                continue
-            if _has_altchunk(pkg.parts[part]):
-                report.altchunk_imports.append(part)
+    # Policy exceptions do not authorize calling an incomplete XML scan clean.
+    for part, blob in pkg.parts.items():
+        ct = (pkg.content_type_for(part) or "").lower()
+        if "xml" not in ct and not part.lower().endswith(".xml"):
+            continue
+        root = _scan_xml(report, part, blob)
+        if root is not None and not policy.allow_altchunk and _has_altchunk(root):
+            report.altchunk_imports.append(part)
 
     return report
 
 
-def _has_altchunk(data: bytes) -> bool:
-    if b"altChunk" not in data:  # cheap pre-filter; then confirm by parsing
-        return False
-    try:
-        root = _safe_fromstring(data)
-    except Exception:  # noqa: BLE001 - unparseable part is not an altChunk import
-        return False
+def _has_altchunk(root) -> bool:
     return root.tag == _ALTCHUNK_TAG or any(el.tag == _ALTCHUNK_TAG for el in root.iter())
 
 
@@ -159,10 +169,9 @@ def safe_open(data: bytes, *, policy: IntakePolicy = DEFAULT_POLICY):
 
 #: ODF stores Basic macros under this directory, and scripts are declared here.
 _ODF_SCRIPT_MARKERS = ("basic/", "scripts/")
-_ODF_SCRIPT_PARTS = ("content.xml", "styles.xml", "meta.xml", "settings.xml")
 #: `xlink:href` values that leave the package. Same-document (`#…`) and relative
 #: in-package targets are ordinary; a scheme means it dials out.
-_ODF_EXTERNAL_SCHEMES = ("http://", "https://", "ftp://", "file://", "smb://", "\\\\")
+_URI_SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
 _XLINK_HREF = "{http://www.w3.org/1999/xlink}href"
 _ODF_OBJECT_HINTS = ("object", "ole")
 
@@ -182,19 +191,25 @@ def scan_odt(pkg, policy: IntakePolicy = DEFAULT_POLICY) -> ThreatReport:
 
     for name in sorted(pkg.parts):
         folded = name.casefold()
-        if any(folded.startswith(marker) for marker in _ODF_SCRIPT_MARKERS):
+        if not policy.allow_macros and any(
+            folded.startswith(marker) for marker in _ODF_SCRIPT_MARKERS
+        ):
             report.macro_parts.append(name)
         elif "objectreplacements" in folded or folded.startswith("object "):
             report.notes.append(f"embedded object: {name}")
 
-    for part in _ODF_SCRIPT_PARTS:
-        blob = pkg.parts.get(part)
-        if not blob:
+    for part, blob in sorted(pkg.parts.items()):
+        media_type = pkg.media_types.get(part, "").lower()
+        if not part.lower().endswith(".xml") and "xml" not in media_type:
             continue
-        report.external_relationships.extend(
-            f"{part} -> {href}" for href in _odf_external_hrefs(blob)
-        )
-        if _odf_declares_scripts(blob):
+        root = _scan_xml(report, part, blob)
+        if root is None:
+            continue
+        if not policy.allow_external_relationships:
+            report.external_relationships.extend(
+                f"{part} -> {href}" for href in _odf_external_hrefs(root, part)
+            )
+        if not policy.allow_macros and _odf_declares_scripts(root):
             report.macro_parts.append(f"{part} (script declarations)")
 
     manifest = pkg.parts.get("META-INF/manifest.xml")
@@ -203,24 +218,46 @@ def scan_odt(pkg, policy: IntakePolicy = DEFAULT_POLICY) -> ThreatReport:
     return report
 
 
-def _odf_external_hrefs(blob: bytes) -> list[str]:
-    try:
-        root = _safe_fromstring(blob)
-    except Exception:  # noqa: BLE001 - unparseable content is the caller's problem
-        return []
+def _parse_xml(blob: bytes):
+    """Safely parse XML, including UTF-32 encodings Expat cannot read directly."""
+    if blob.startswith((b"\xff\xfe\x00\x00", b"\x00\x00\xfe\xff")):
+        return _safe_fromstring(blob.decode("utf-32"))
+    if blob.startswith(b"\x00\x00\x00<"):
+        return _safe_fromstring(blob.decode("utf-32-be"))
+    if blob.startswith(b"<\x00\x00\x00"):
+        return _safe_fromstring(blob.decode("utf-32-le"))
+    if blob.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return _safe_fromstring(blob.decode("utf-16"))
+    if blob.startswith(b"\x00<"):
+        return _safe_fromstring(blob.decode("utf-16-be"))
+    if blob.startswith(b"<\x00"):
+        return _safe_fromstring(blob.decode("utf-16-le"))
+    return _safe_fromstring(blob)
+
+
+def _odf_external_hrefs(root, source_part: str) -> list[str]:
     out = []
     for elem in root.iter():
-        href = elem.get(_XLINK_HREF) or elem.get("xlink:href")
-        if href and any(href.lower().startswith(s) for s in _ODF_EXTERNAL_SCHEMES):
+        href = elem.get(_XLINK_HREF)
+        if not href:
+            continue
+        try:
+            target = unquote(href.strip(), errors="strict").replace("\\", "/")
+        except UnicodeError:
+            out.append(href)
+            continue
+        if (target.startswith("/") or _URI_SCHEME.match(target)
+                or any(ord(char) < 0x20 or ord(char) == 0x7f for char in target)):
+            out.append(href)
+            continue
+        path = urlsplit(target).path
+        resolved = posixpath.normpath(posixpath.join(posixpath.dirname(source_part), path))
+        if path and (resolved == ".." or resolved.startswith("../")):
             out.append(href)
     return out
 
 
-def _odf_declares_scripts(blob: bytes) -> bool:
-    try:
-        root = _safe_fromstring(blob)
-    except Exception:  # noqa: BLE001
-        return False
+def _odf_declares_scripts(root) -> bool:
     return any(
         elem.tag.rsplit("}", 1)[-1] in {"scripts", "script", "event-listeners"}
         for elem in root.iter()

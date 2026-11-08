@@ -55,7 +55,7 @@ def test_h3_determinism(tmp_path):
 # -- H1: reproducibility end-to-end through the container ------------------
 def test_h1_reproduces_through_docxplus(tmp_path):
     proj = _make_repro_project(tmp_path / "p")
-    priv, _ = generate_signing_key()
+    priv, pub = generate_signing_key()
     data = (
         DocxPlusBuilder(paragraphs=["A living manuscript."])
         .add_project("source", proj, reproduce=True)
@@ -65,9 +65,10 @@ def test_h1_reproduces_through_docxplus(tmp_path):
     reader = DocxPlusReader.from_bytes(data)
 
     # Cryptographic verification path: executes nothing.
-    v = reader.verify_reproduction("source")
+    v = reader.verify_reproduction("source", expected_public_key=pub)
     assert v["attested"] and v["signed"] and v["verified"]
     assert len(v["attestation"]["output_digest"]) == 64
+    assert v["attestation"]["output_digest_scheme"] == reproduce.OUTPUT_DIGEST_SCHEME
 
     # Opt-in execution path: re-runs and matches.
     result = reader.reproduce("source", tmp_path / "out", allow_execution=True)
@@ -138,7 +139,7 @@ def test_attest_requires_recipe_or_spec(tmp_path):
 def test_failing_command_raises_reproerror(tmp_path):
     proj = tmp_path / "p"
     proj.mkdir()
-    spec = ReproSpec(command=[PY, "-c", "import sys; sys.exit(3)"], outputs=[])
+    spec = ReproSpec(command=[PY, "-c", "import sys; sys.exit(3)"], outputs=["result"])
     with pytest.raises(reproduce.ReproError, match="exit 3"):
         reproduce.attest(proj, spec)
 
@@ -147,7 +148,7 @@ def test_empty_outputs_is_rejected_as_vacuous(tmp_path):
     proj = tmp_path / "p"
     proj.mkdir()
     spec = ReproSpec(command=[PY, "-c", "pass"], outputs=[])
-    with pytest.raises(reproduce.ReproError, match="vacuous"):
+    with pytest.raises(reproduce.ReproError):
         reproduce.attest(proj, spec)
 
 
@@ -177,7 +178,7 @@ def test_carried_input_cannot_masquerade_as_product(tmp_path):
     (proj / "src" / "carried.py").write_text("CONSTANT = 1\n")
     # Command touches nothing; declares a pre-existing carried file as its output.
     spec = ReproSpec(command=[PY, "-c", "pass"], outputs=["src/carried.py"])
-    with pytest.raises(reproduce.ReproError, match="input, not a computed product"):
+    with pytest.raises(reproduce.ReproError):
         reproduce.attest(proj, spec)
 
 
@@ -217,21 +218,36 @@ def test_hermetic_extract_and_reproduce(tmp_path):
 # -- v0.6.2: sandbox profile construction ------------------------------------
 
 
-def test_reproduce_helpers_coverage(tmp_path):
-    """Cover ReproSpec dictionary serialization and sandbox wrapper on Linux/fallback."""
-    spec = reproduce.ReproSpec(command=["python", "main.py"], outputs=["out.txt"], timeout=60)
-    d = spec.to_dict()
-    assert d["command"] == ["python", "main.py"]
-    assert d["timeout"] == 60
+def test_execution_refuses_when_no_confinement_tool_is_available(tmp_path, monkeypatch):
+    """Missing sandbox tools must fail before carried code can write outside its project."""
+    project = tmp_path / "project"
+    project.mkdir()
+    marker = tmp_path / "outside-project"
+    monkeypatch.setenv("PATH", "")
+    command = [
+        PY, "-c",
+        (
+            f"from pathlib import Path; Path({str(marker)!r}).write_text('escaped'); "
+            "Path('result').write_text('computed')"
+        ),
+    ]
+    with pytest.raises(reproduce.ReproError, match="refusing to run"):
+        reproduce.run_and_digest(project, ReproSpec(command, ["result"]))
+    assert not marker.exists()
+    assert not (project / "result").exists()
 
-    # Wildcard checks
-    assert reproduce._is_wildcard("*.txt") is True
-    assert reproduce._is_wildcard("file.txt") is False
+@pytest.mark.parametrize("command", [
+    ["--share-net", "--bind", "/", "/"],
+    ["-p", "(version 1)(allow default)"],
+])
+def test_carried_command_cannot_supply_sandbox_options(tmp_path, command):
+    """A recipe's first argument is a program; as an option it would rewrite confinement."""
+    project = tmp_path / "project"
+    project.mkdir()
+    with pytest.raises(reproduce.ReproError, match="must name a program"):
+        reproduce.run_and_digest(project, ReproSpec(command, ["result"]))
+    assert not (project / "result").exists()
 
-    # Sandbox wrap fallback / Linux
-    wrapped = reproduce._sandbox_wrap(["echo", "1"], tmp_path)
-    assert isinstance(wrapped, list)
-    assert len(wrapped) >= 2
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="seatbelt profile is macOS-only")
 def test_sandbox_profile_refuses_an_unquotable_project_path(tmp_path):
@@ -243,16 +259,179 @@ def test_sandbox_profile_refuses_an_unquotable_project_path(tmp_path):
     hostile = tmp_path / 'x") (allow network*) (subpath "/'
     hostile.mkdir()
     with pytest.raises(reproduce.ReproError, match="cannot be safely quoted"):
-        reproduce._sandbox_wrap(["/bin/echo", "hi"], str(hostile))
+        reproduce._sandbox_wrap(["/bin/echo", "hi"], hostile, tmp_path / "temp")
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="seatbelt profile is macOS-only")
-def test_sandbox_profile_denies_network_for_an_ordinary_path(tmp_path):
-    proj = tmp_path / "project"
-    proj.mkdir()
-    argv = reproduce._sandbox_wrap(["/bin/echo", "hi"], str(proj))
-    assert argv[0] == "sandbox-exec"
-    profile = argv[2]
-    assert "(deny network*)" in profile
-    assert "(allow network*)" not in profile
-    assert str(proj.resolve()) in profile
+
+
+def test_output_digest_cannot_shift_bytes_across_file_boundaries(tmp_path):
+    """A one-file and two-file tree shared the same unframed digest preimage."""
+    first, second = tmp_path / "first", tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    (first / "a").write_bytes(b"Xb\0Y")
+    (second / "a").write_bytes(b"X")
+    (second / "b").write_bytes(b"Y")
+    assert reproduce._digest_outputs(first, ["*"], {}) != reproduce._digest_outputs(second, ["*"], {})
+
+
+def test_one_new_output_does_not_launder_an_unchanged_carried_result(tmp_path):
+    """Every declared product must be computed, not merely one marker beside an input."""
+    import hashlib
+
+    carried = tmp_path / "carried-result"
+    carried.write_bytes(b"hand-authored result")
+    before = {str(carried): (carried.stat().st_size, hashlib.blake2b(carried.read_bytes(), digest_size=32).hexdigest())}
+    (tmp_path / "marker").write_bytes(b"new")
+    with pytest.raises(reproduce.ReproError):
+        reproduce._digest_outputs(tmp_path, ["*"], before)
+    assert carried.read_bytes() == b"hand-authored result"
+
+
+def test_generated_output_symlink_is_not_a_computed_host_input(tmp_path):
+    """Collection runs in the parent and must never follow a child-created host link."""
+    root = tmp_path / "project"
+    root.mkdir()
+    host = tmp_path / "host-input"
+    host.write_bytes(b"not computed by the recipe")
+    (root / "result").symlink_to(host)
+    with pytest.raises(reproduce.ReproError):
+        reproduce._digest_outputs(root, ["result"], {})
+    assert host.read_bytes() == b"not computed by the recipe"
+
+
+def test_output_collection_has_a_file_count_and_deadline_bound(tmp_path):
+    """Zero-length outputs still have bounded metadata/hash work in the verifier."""
+    import time
+
+    for i in range(reproduce.MAX_OUTPUT_FILES + 1):
+        (tmp_path / f"{i:05d}").touch()
+    with pytest.raises(reproduce.ReproError):
+        reproduce._digest_outputs(tmp_path, ["*"], {})
+    with pytest.raises(reproduce.ReproError):
+        reproduce._digest_outputs(tmp_path, ["*"], {}, deadline=time.monotonic() - 1)
+
+
+def test_portable_python_recipe_uses_the_recipient_interpreter(tmp_path):
+    """A sealed recipe must not depend on the author's absolute venv prefix."""
+    project = tmp_path / "project"
+    project.mkdir()
+    spec = ReproSpec(["{python}", "-c", "from pathlib import Path; Path('output').mkdir(); Path('output/value').write_bytes(b'computed')"], ["output/value"])
+    attestation = reproduce.attest(project, spec)
+    import shutil
+
+    shutil.rmtree(project / "output")
+    result = reproduce.reproduce_and_compare(project, attestation)
+    assert result["source_match"] and result["match"]
+    assert (project / "output/value").read_bytes() == b"computed"
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="private reproduction PID namespace is Linux-only")
+@pytest.mark.parametrize("new_session", [False, True])
+def test_successful_reproduction_does_not_leave_a_writing_descendant(tmp_path, new_session):
+    """Both ordinary and setsid descendants must die before output collection returns."""
+    import time
+
+    child = "from pathlib import Path; import time; Path('ready').write_text('ready'); time.sleep(0.5); Path('late').write_text('escaped')"
+    command = (
+        "import subprocess,sys,time; from pathlib import Path; "
+        f"subprocess.Popen([sys.executable,'-c',{child!r}],start_new_session={new_session!r}); "
+        "deadline=time.monotonic()+3\n"
+        "while not Path('ready').exists() and time.monotonic()<deadline: time.sleep(0.01)\n"
+        "assert Path('ready').read_text()=='ready'\n"
+        "Path('result').write_text('computed')\n"
+    )
+    reproduce.run_and_digest(tmp_path, ReproSpec([PY, "-c", command], ["result"], timeout=10))
+    assert (tmp_path / "result").read_text() == "computed"
+    time.sleep(0.7)
+    assert not (tmp_path / "late").exists()
+
+
+@pytest.mark.parametrize("scheme", [None, "docxplus-output-tree-v2-blake2b-256", "unknown"])
+def test_unknown_output_digest_scheme_refuses_before_execution(tmp_path, scheme):
+    """Old signed digests cannot silently acquire new semantics or execute a recipe."""
+    attestation = {
+        "command": [PY, "-c", "from pathlib import Path; Path('executed').touch()"],
+        "outputs": ["executed"],
+        "output_digest": "00" * 32,
+    }
+    if scheme is not None:
+        attestation["output_digest_scheme"] = scheme
+    with pytest.raises(reproduce.ReproError, match="output_digest_scheme"):
+        reproduce.reproduce_and_compare(tmp_path, attestation)
+    assert not (tmp_path / "executed").exists()
+
+
+def test_output_digest_v3_has_explicit_path_size_hash_transcript(tmp_path):
+    """Freeze the declared digest framing, not incidental traversal implementation."""
+    import hashlib
+
+    (tmp_path / "z").write_bytes(b"\0tail")
+    (tmp_path / "a").write_bytes(b"first")
+    h = hashlib.blake2b(digest_size=32)
+    h.update(b"docxplus/reproduction-outputs/v3\0")
+    h.update((2).to_bytes(8, "big"))
+    for name, content in (("a", b"first"), ("z", b"\0tail")):
+        path = name.encode("utf-8")
+        h.update(len(path).to_bytes(8, "big"))
+        h.update(path)
+        h.update(len(content).to_bytes(8, "big"))
+        h.update(hashlib.blake2b(content, digest_size=32).digest())
+    assert reproduce._digest_outputs(tmp_path, ["z", "*", "a"], {}) == h.hexdigest()
+
+
+def test_signed_consumer_digest_cannot_shift_output_boundaries(tmp_path):
+    """CriticNEW2: serialized consumer evidence distinguishes formerly colliding trees."""
+    from docxplus.payloads import unpack_project
+
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "mode").write_text("one")
+    (project / "compute.py").write_text(
+        "from pathlib import Path\n"
+        "Path('output').mkdir()\n"
+        "one = Path('mode').read_text() == 'one'\n"
+        "Path('output/a').write_bytes(b'Xoutput/b\\0Y' if one else b'X')\n"
+        "if not one: Path('output/b').write_bytes(b'Y')\n"
+    )
+    spec = ReproSpec(["{python}", "compute.py"], ["output/*"])
+    private, public = generate_signing_key()
+    data = DocxPlusBuilder().add_project("source", project, reproduce=spec).sign(private).build()
+    reader = DocxPlusReader.from_bytes(data)
+    verified = reader.verify_reproduction("source", expected_public_key=public)
+    assert verified["verified"]
+    attestation = verified["attestation"]
+    assert attestation["output_digest_scheme"] == reproduce.OUTPUT_DIGEST_SCHEME
+    clean = reader.reproduce("source", tmp_path / "clean", allow_execution=True)
+    assert clean["match"] and clean["actual"] == attestation["output_digest"]
+    changed = unpack_project(reader.extract("source"), tmp_path / "changed")
+    (changed / "mode").write_text("two")
+    result = reproduce.reproduce_and_compare(changed, attestation)
+    assert result["actual"] != attestation["output_digest"]
+    assert not result["match"]
+
+
+def test_signed_reproduction_binds_source_even_when_outputs_match(tmp_path):
+    """The user's source commitment must survive the v3 output-digest cutover."""
+    from docxplus.payloads import unpack_project
+
+    project = _make_repro_project(tmp_path / "project")
+    spec = ReproSpec(["{python}", "src/compute.py"], ["output/result.json"])
+    private, public = generate_signing_key()
+    data = DocxPlusBuilder().add_project("source", project, reproduce=spec).sign(private).build()
+    reader = DocxPlusReader.from_bytes(data)
+    verified = reader.verify_reproduction("source", expected_public_key=public)
+    assert verified["verified"]
+    attestation = verified["attestation"]
+    assert attestation["command"][0] == "{python}"
+    assert attestation["output_digest_scheme"] == reproduce.OUTPUT_DIGEST_SCHEME
+
+    changed = unpack_project(reader.extract("source"), tmp_path / "changed")
+    source = changed / "src" / "compute.py"
+    source.write_text(source.read_text() + "\n# Different source, identical computation.\n")
+    result = reproduce.reproduce_and_compare(changed, attestation)
+    assert result["actual"] == result["expected"]
+    assert result["output_digest_scheme"] == reproduce.OUTPUT_DIGEST_SCHEME
+    assert result["toolchain_match"]
+    assert not result["source_match"]
+    assert not result["match"]

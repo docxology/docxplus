@@ -11,7 +11,7 @@ from docxplus.wordml import new_base_document
 
 
 def _record(slot: str) -> ChannelRecord:
-    return ChannelRecord(channel="custom_xml", slot=slot, size=3, digest="abc")
+    return ChannelRecord(channel="custom_xml", slot=slot, size=3, digest="ab" * 32)
 
 
 def test_add_and_lookup_slot():
@@ -94,3 +94,110 @@ def test_read_manifest_absent_returns_none():
     from docxplus.opc import read_package
 
     assert read_manifest(read_package(pkg.to_bytes())) is None
+
+
+def test_duplicate_json_keys_are_rejected_at_every_object_depth():
+    m = Manifest(records=[_record("a")])
+    blob = m.to_bytes()
+    for original, repeated in (
+        (b'"version": "3.0"', b'"version": "3.0", "version": "3.0"'),
+        (b'"slot": "a"', b'"slot": "a", "slot": "a"'),
+        (b'"mode": "plain"', b'"mode": "plain", "mode": "plain"'),
+    ):
+        with pytest.raises(ValueError, match="duplicate manifest JSON key"):
+            Manifest.from_bytes(blob.replace(original, repeated))
+
+
+@pytest.mark.parametrize("mutation", [
+    "extra_top", "missing_top", "extra_module", "missing_module",
+    "wrong_encrypted", "unknown_mode", "extra_plain_metadata", "boolean_size",
+    "bad_location", "extra_signature", "missing_algorithm", "duplicate_cosigner",
+])
+def test_exact_format3_schema_refuses_ambiguous_documents(mutation):
+    import json
+
+    doc = json.loads(Manifest(records=[_record("a")]).to_bytes())
+    module = doc["modules"][0]
+    if mutation == "extra_top":
+        doc["unknown"] = 1
+    elif mutation == "missing_top":
+        del doc["surface_digest"]
+    elif mutation == "extra_module":
+        module["unknown"] = 1
+    elif mutation == "missing_module":
+        del module["payload_type"]
+    elif mutation == "wrong_encrypted":
+        module["encrypted"] = True
+    elif mutation == "unknown_mode":
+        module["sealing"] = {"mode": "decoy"}
+    elif mutation == "extra_plain_metadata":
+        module["sealing"]["k"] = 1
+    elif mutation == "boolean_size":
+        module["size"] = True
+    elif mutation == "bad_location":
+        module["location"] = {"parts": "part.xml"}
+    elif mutation == "extra_signature":
+        doc["signature"]["unknown"] = ""
+    elif mutation == "missing_algorithm":
+        del doc["signature"]["algorithm"]
+    else:
+        _, public = generate_signing_key()
+        entry = {"public_key": public.hex(), "algorithm": "ed25519", "value": "00"}
+        doc["cosignatures"] = [entry, dict(entry)]
+    with pytest.raises(ValueError):
+        Manifest.from_bytes(json.dumps(doc).encode())
+
+
+@pytest.mark.parametrize("mutation", [
+    "missing_commitments", "missing_checksum", "false_checksum", "boolean_k",
+    "zero_k", "excess_n", "wrong_count", "duplicate_digest", "bad_digest", "old_vss",
+])
+def test_threshold_schema_requires_exact_signed_commitments(mutation):
+    import json
+
+    record = _record("a")
+    record.encrypted = True
+    record.sealing = {
+        "mode": "threshold", "k": 2, "n": 3, "checksummed_shares": True,
+        "share_digests": ["01" * 32, "02" * 32, "03" * 32],
+    }
+    doc = json.loads(Manifest(records=[record]).to_bytes())
+    sealing = doc["modules"][0]["sealing"]
+    if mutation == "missing_commitments":
+        del sealing["share_digests"]
+    elif mutation == "missing_checksum":
+        del sealing["checksummed_shares"]
+    elif mutation == "false_checksum":
+        sealing["checksummed_shares"] = False
+    elif mutation == "boolean_k":
+        sealing["k"] = True
+    elif mutation == "zero_k":
+        sealing["k"] = 0
+    elif mutation == "excess_n":
+        sealing["n"] = 255
+    elif mutation == "wrong_count":
+        sealing["share_digests"].pop()
+    elif mutation == "duplicate_digest":
+        sealing["share_digests"][1] = sealing["share_digests"][0]
+    elif mutation == "bad_digest":
+        sealing["share_digests"][0] = "zz" * 32
+    else:
+        sealing["vss"] = True
+    with pytest.raises(ValueError):
+        Manifest.from_bytes(json.dumps(doc).encode())
+
+
+def test_threshold_commitments_roundtrip_and_bind_signature():
+    record = _record("a")
+    record.encrypted = True
+    record.sealing = {
+        "mode": "threshold", "k": 2, "n": 3, "checksummed_shares": True,
+        "share_digests": ["01" * 32, "02" * 32, "03" * 32],
+    }
+    private, public = generate_signing_key()
+    manifest = Manifest(records=[record], public_key=public.hex())
+    manifest.signature = sign(manifest.canonical_body(), private).hex()
+    loaded = Manifest.from_bytes(manifest.to_bytes())
+    assert loaded.verify_signature()
+    loaded.records[0].sealing["share_digests"][0] = "04" * 32
+    assert not loaded.verify_signature()

@@ -7,15 +7,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "docxplus"
-version = "1.1.0"
+version = "2.0.0"
 license = { text = "MIT" }
-description = "docxplus — a byte-valid OOXML .docx that also carries a modular, signed, encrypted intelligence layer through spec-sanctioned side-channels."
+description = "docxplus — DOCX and ODT containers with modular, signed and payload-encrypted intelligence layers through standards-defined package extension points."
 authors = [
     { name = "Daniel Ari Friedman", email = "daniel@activeinference.institute" },
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "cryptography>=43.0.0",
+    "cryptography>=50.0.0",
     "defusedxml>=0.7.1",
     "pyyaml>=6.0",
 ]

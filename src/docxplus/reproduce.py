@@ -9,10 +9,11 @@ synthesis (``docs/reproduction-design.md``):
   once and seals a signed **attestation** binding ``source_digest → output_digest``
   plus a toolchain fingerprint.
 * A downstream reader **verifies cryptographically, executing nothing**.
-* A zero-trust reader may **opt in** to re-run here, in a best-effort hermetic
-  sandbox: scrubbed environment, resource + file-size limits, a clamped wall-clock
+* A zero-trust reader may **opt in** to re-run here, in a best-effort sandbox:
+  scrubbed environment, resource + file-size limits, a clamped wall-clock
   timeout, own process group, network denied and writes confined to the project +
-  temp dirs where the platform supports it (macOS seatbelt / Linux bwrap).
+  private temp dir. Linux bubblewrap runs the command as private PID 1 and owns
+  the namespace, including detached descendants.
 
 The sandbox is best-effort, not a microVM; its exact guarantees per platform (and
 where confinement does NOT hold) are documented in ``docs/security-model.md``. The
@@ -21,13 +22,19 @@ load-bearing guarantee is the opt-in: a document never runs itself.
 
 from __future__ import annotations
 
+import fnmatch
+import functools
 import hashlib
+import json
 import os
 import platform
 import shutil
+import signal
+import stat
 import subprocess
 import sys
 import tempfile
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -42,7 +49,14 @@ MAX_REPRO_SECONDS = 900
 MAX_CAPTURED_STDERR = 8192
 
 MAX_OUTPUT_BYTES = 256 * 1024 * 1024
+MAX_TOTAL_OUTPUT_BYTES = 512 * 1024 * 1024
+MAX_OUTPUT_FILES = 4096
+MAX_OUTPUT_PATTERNS = 128
+OUTPUT_DIGEST_SCHEME = "docxplus-output-tree-v3-blake2b-256"
+OUTPUT_DIGEST_DOMAIN = b"docxplus/reproduction-outputs/v3\0"
 _CHUNK = 1 << 16
+#: bubblewrap's status object is one short JSON line; never read an unbounded file.
+_STATUS_LIMIT = 4096
 
 
 @dataclass
@@ -97,19 +111,27 @@ def _scrubbed_env() -> dict:
     }
 
 
-def _sandbox_wrap(argv: list[str], project_dir: Path) -> list[str]:
+def _sandbox_wrap(argv: list[str], project_dir: Path, temp_dir: Path,
+                  *, status_fd: int | None = None) -> list[str]:
     """Confine ``argv``: deny network AND writes outside the project + temp dirs.
 
-    macOS: a seatbelt profile that allows reads but denies all writes except under
-    the project directory and the system temp root. Linux: bubblewrap with a
-    read-only root and a writable bind of the project dir when available, else a
-    bare network namespace (writes NOT confined — documented). Elsewhere: best-effort
-    passthrough (the caller must supply their own jail; see docs/security-model.md).
-    """
-    import tempfile
+    macOS: Seatbelt denies fork, writes outside admitted paths, and network use,
+    but does not provide Linux's private PID/proc view. Linux: bubblewrap with
+    private user, PID and network namespaces, isolated procfs, and read-only root.
+    Readable host files are not secret-isolated. Missing confinement refuses
+    execution; no network-only/passthrough fallback.
 
+    On Linux, ``status_fd`` receives bubblewrap's JSON status so the caller can
+    pin and later kill the sandbox init; ``--`` ends bubblewrap's own options.
+    """
+
+    if not argv or argv[0].startswith("-"):
+        # argv[0] is a program, never an option. Without this, a carried recipe
+        # starting with `--share-net` or `--bind /work /work` would be parsed by
+        # bubblewrap itself and replace the caller's confinement.
+        raise ReproError("reproduction command must name a program, not an option")
     proj = str(Path(project_dir).resolve())
-    tmp = os.path.realpath(tempfile.gettempdir())
+    tmp = str(Path(temp_dir).resolve())
     if sys.platform == "darwin" and shutil.which("sandbox-exec"):
         # The profile is a quoted SBPL string, so a path containing a quote or
         # backslash would close the literal and append attacker-chosen rules — a
@@ -124,25 +146,30 @@ def _sandbox_wrap(argv: list[str], project_dir: Path) -> list[str]:
                     f"character that cannot be safely quoted in SBPL: {path!r}"
                 )
         profile = (
-            "(version 1)(allow default)(deny network*)(deny file-write*)"
-            f'(allow file-write* (subpath "{proj}") (subpath "{tmp}") (subpath "/private/tmp")'
+            "(version 1)(allow default)(deny network*)(deny file-write*)(deny process-fork)"
+            f'(allow file-write* (subpath "{proj}") (subpath "{tmp}")'
             ' (literal "/dev/null") (literal "/dev/stdout") (literal "/dev/stderr")'
             ' (literal "/dev/dtracehelper") (literal "/dev/tty"))'
         )
         return ["sandbox-exec", "-p", profile, *argv]
     if sys.platform.startswith("linux") and shutil.which("bwrap"):
-        return [
-            "bwrap", "--unshare-net", "--die-with-parent", "--ro-bind", "/", "/",
+        wrapped = [
+            "bwrap", "--unshare-user", "--unshare-pid", "--as-pid-1", "--unshare-net", "--new-session",
+            "--die-with-parent", "--ro-bind", "/", "/",
             "--dev", "/dev", "--proc", "/proc", "--bind", proj, proj, "--bind", tmp, tmp,
-            "--chdir", proj, *argv,
+            "--chdir", proj,
         ]
-    if sys.platform.startswith("linux") and shutil.which("unshare"):
-        return ["unshare", "-n", *argv]  # network-only; writes not confined (documented)
-    return argv
+        if status_fd is not None:
+            wrapped += ["--json-status-fd", str(status_fd)]
+        return [*wrapped, "--", *argv]
+    raise ReproError(
+        "execution requires macOS sandbox-exec or Linux bubblewrap; "
+        "refusing to run without network and write confinement"
+    )
 
 
 def _apply_limits() -> None:  # pragma: no cover - runs in the child process
-    """preexec_fn: cap CPU, address space, and process count against runaway code."""
+    """Apply per-process CPU, address-space and file-size limits."""
     try:
         import resource
 
@@ -151,10 +178,6 @@ def _apply_limits() -> None:  # pragma: no cover - runs in the child process
             resource.setrlimit(resource.RLIMIT_AS, (2 * 1024**3, 2 * 1024**3))
         except (ValueError, OSError):
             pass  # RLIMIT_AS is not reliably honoured on macOS
-        # Note: Do not set RLIMIT_NPROC when launching unshare / bwrap on Linux;
-        # setting RLIMIT_NPROC prevents unshare() / clone(CLONE_NEWUSER/CLONE_NEWPID)
-        # from creating namespaces, causing bwrap to fail with EAGAIN (Resource temporarily unavailable).
-        # We enforce RLIMIT_CPU, RLIMIT_AS, and RLIMIT_FSIZE.
         try:
             # Cap any single output file the child can write (parent then digests it).
             resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
@@ -162,65 +185,141 @@ def _apply_limits() -> None:  # pragma: no cover - runs in the child process
             pass
     except Exception:  # noqa: BLE001, S110 - limits are best-effort hardening
         pass
+    # Never lower RLIMIT_NPROC for the launcher: the kernel counts every process
+    # of the *real UID* on the host, so a busy desktop makes bubblewrap's
+    # clone(CLONE_NEWUSER/CLONE_NEWPID) fail with EAGAIN before any sandbox
+    # exists. It was never a private sandbox quota; measured at 222 UID tasks,
+    # --nproc=128 refused the namespace outright.
 
 
 def _is_wildcard(pattern: str) -> bool:
     return any(c in pattern for c in "*?[")
 
 
-def _hash_file(path: Path) -> str:
-    h = hashlib.blake2b(digest_size=32)
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(_CHUNK), b""):
-            h.update(chunk)
-    return h.hexdigest()
+def _remaining(deadline: float) -> float:
+    left = deadline - time.monotonic()
+    if left <= 0:
+        raise ReproError("reproduction collection exceeded its wall-clock budget")
+    return left
 
 
-def _snapshot(project_dir: Path, outputs: list[str]) -> dict[str, str]:
-    """Content-hash every existing file matching the output patterns (pre-run)."""
-    snap: dict[str, str] = {}
+def _matches_output(name: str, pattern: str) -> bool:
+    """Match POSIX path segments, with ** recursive but * confined to one segment."""
+    names, patterns = name.split("/"), pattern.split("/")
+
+    @functools.cache
+    def match(i: int, j: int) -> bool:
+        if j == len(patterns):
+            return i == len(names)
+        if patterns[j] == "**":
+            return match(i, j + 1) or (i < len(names) and match(i + 1, j))
+        return (i < len(names) and fnmatch.fnmatchcase(names[i], patterns[j])
+                and match(i + 1, j + 1))
+
+    return match(0, 0)
+
+
+def _output_hashes(project_dir: Path, outputs: list[str], deadline: float,
+                   *, require_matches: bool) -> dict[str, tuple[int, str]]:
+    """Return bounded regular outputs as absolute path -> (byte size, BLAKE2b-256)."""
+    from .payloads import MAX_PROJECT_MEMBERS
+
+    if not outputs or len(outputs) > MAX_OUTPUT_PATTERNS:
+        raise ReproError("reproduction declares no outputs or too many output patterns")
     for pattern in outputs:
-        for p in project_dir.glob(pattern):
-            if p.is_file():
-                snap[str(p)] = _hash_file(p)
-    return snap
+        if (not isinstance(pattern, str) or not pattern or len(pattern) > 4096
+                or len(pattern.split("/")) > 64 or "\\" in pattern
+                or Path(pattern).is_absolute()
+                or any(part in {"", ".", ".."} for part in pattern.split("/"))):
+            raise ReproError(f"unsafe reproduction output pattern: {pattern!r}")
+    root = Path(project_dir).resolve()
+    stack, files, matched = [root], {}, set()
+    entries = total = 0
+    while stack:
+        directory = stack.pop()
+        _remaining(deadline)
+        with os.scandir(directory) as children:
+            for entry in children:
+                _remaining(deadline)
+                entries += 1
+                if entries > MAX_PROJECT_MEMBERS:
+                    raise ReproError("reproduction tree exceeds the collection entry cap")
+                path = Path(entry.path)
+                rel = path.relative_to(root).as_posix()
+                if entry.is_dir(follow_symlinks=False):
+                    stack.append(path)
+                    continue
+                hits = [p for p in outputs if _matches_output(rel, p)]
+                if not hits:
+                    continue
+                if not entry.is_file(follow_symlinks=False):
+                    raise ReproError(f"output is not a regular file: {rel}")
+                if len(files) >= MAX_OUTPUT_FILES:
+                    raise ReproError("reproduction exceeds the output file-count cap")
+                # Open every component relative to an anchored directory descriptor.
+                # Neither a generated final symlink nor a swapped ancestor is followed.
+                descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                try:
+                    for part in path.relative_to(root).parts[:-1]:
+                        child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                        dir_fd=descriptor)
+                        os.close(descriptor)
+                        descriptor = child
+                    handle = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                                     dir_fd=descriptor)
+                except OSError as exc:
+                    raise ReproError(f"unsafe output path: {rel}") from exc
+                finally:
+                    os.close(descriptor)
+                with os.fdopen(handle, "rb") as stream:
+                    before = os.fstat(stream.fileno())
+                    if not stat.S_ISREG(before.st_mode) or before.st_size > MAX_OUTPUT_BYTES:
+                        raise ReproError(f"output {rel} exceeds the regular-file byte cap")
+                    h, count = hashlib.blake2b(digest_size=32), 0
+                    while block := stream.read(_CHUNK):
+                        _remaining(deadline)
+                        count += len(block)
+                        total += len(block)
+                        if count > MAX_OUTPUT_BYTES or total > MAX_TOTAL_OUTPUT_BYTES:
+                            raise ReproError("reproduction exceeds the output byte budget")
+                        h.update(block)
+                    after = os.fstat(stream.fileno())
+                    if ((before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns)
+                            != (after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)
+                            or count != after.st_size):
+                        raise ReproError(f"output changed while being collected: {rel}")
+                files[str(path)] = (count, h.hexdigest())
+                matched.update(hits)
+    if require_matches:
+        for pattern in outputs:
+            if pattern not in matched and not _is_wildcard(pattern):
+                raise ReproError(f"declared output {pattern!r} produced no file")
+        if not files:
+            raise ReproError("reproduction produced none of its declared output files")
+    return files
 
 
-def _digest_outputs(project_dir: Path, outputs: list[str], before: dict[str, str]) -> str:
-    """Digest the declared outputs, rejecting vacuous/carried-input attestations.
+def _snapshot(project_dir: Path, outputs: list[str], deadline: float) -> dict[str, tuple[int, str]]:
+    """Snapshot bounded regular outputs before executing, never following links."""
+    return _output_hashes(project_dir, outputs, deadline, require_matches=False)
 
-    Guards (RedTeam v0.4): an empty output set is vacuous; a *literal* declared path
-    matching nothing is a silent-subset error; a digested file that is a pre-existing
-    carried input **unchanged** by the run is not a computed product; and each file
-    is streamed with a per-file size ceiling so a giant output cannot exhaust memory.
-    """
-    if not outputs:
-        raise ReproError("reproduction declares no outputs; the digest would be vacuous")
-    files: list[Path] = []
-    for pattern in outputs:
-        matched = sorted(p for p in project_dir.glob(pattern) if p.is_file())
-        if not matched and not _is_wildcard(pattern):
-            raise ReproError(f"declared output {pattern!r} produced no file")
-        files.extend(matched)
-    files = sorted(set(files))
-    if not files:
-        raise ReproError("reproduction produced none of its declared output files")
 
-    if not any(str(p) not in before or _hash_file(p) != before[str(p)] for p in files):
-        raise ReproError(
-            "every declared output is a pre-existing carried file unchanged by the run "
-            "— the attestation would bind an input, not a computed product"
-        )
-
+def _digest_outputs(project_dir: Path, outputs: list[str], before: dict[str, tuple[int, str]],
+                    deadline: float | None = None) -> str:
+    """Hash the v3 sorted path/size/per-file-digest transcript; reject unchanged inputs."""
+    deadline = deadline if deadline is not None else time.monotonic() + MAX_REPRO_SECONDS
+    files = _output_hashes(project_dir, outputs, deadline, require_matches=True)
     h = hashlib.blake2b(digest_size=32)
-    for path in files:
-        if path.stat().st_size > MAX_OUTPUT_BYTES:
-            raise ReproError(f"output {path.name} exceeds the {MAX_OUTPUT_BYTES}-byte cap")
-        h.update(path.relative_to(project_dir).as_posix().encode("utf-8"))
-        h.update(b"\0")
-        with path.open("rb") as fh:
-            for chunk in iter(lambda fh=fh: fh.read(_CHUNK), b""):
-                h.update(chunk)
+    h.update(OUTPUT_DIGEST_DOMAIN)
+    h.update(len(files).to_bytes(8, "big"))
+    for name, (size, digest) in sorted(files.items()):
+        if before.get(name) == (size, digest):
+            raise ReproError(f"declared output {name!r} is a carried file unchanged by the run")
+        relative = Path(name).relative_to(Path(project_dir).resolve()).as_posix().encode("utf-8")
+        h.update(len(relative).to_bytes(8, "big"))
+        h.update(relative)
+        h.update(size.to_bytes(8, "big"))
+        h.update(bytes.fromhex(digest))
     return h.hexdigest()
 
 
@@ -228,13 +327,21 @@ def run_and_digest(project_dir: Path, spec: ReproSpec) -> str:
     """Run ``spec.command`` in ``project_dir`` (sandboxed) and digest its outputs.
 
     Snapshots outputs before running (so a carried input cannot masquerade as a
-    product), runs the child in its own process group (so a timeout reaps orphans),
-    denies the network and confines writes where the platform supports it, and closes
-    stdin.
+    product), closes stdin, and retains the launch process-group identity before
+    waiting. Linux bubblewrap runs the command as private PID 1 and reports it,
+    so cleanup kills namespace init itself and the kernel reaps every detached
+    descendant before collection (a killed member may linger as a zombie until its
+    adopter reaps it, which cannot execute or write). macOS Seatbelt denies process
+    creation, so a recipe that needs subprocesses must run on the Linux backend.
     """
-    project_dir = Path(project_dir)
-    before = _snapshot(project_dir, spec.outputs)
-    argv = _sandbox_wrap(list(spec.command), project_dir)
+    project_dir = Path(project_dir).resolve()
+    deadline = time.monotonic() + max(1, min(spec.timeout, MAX_REPRO_SECONDS))
+    before = _snapshot(project_dir, spec.outputs, deadline)
+    command = list(spec.command)
+    if not command:
+        raise ReproError("reproduction declares no command")
+    if command[0] == "{python}":
+        command[0] = sys.executable
 
     # Streams go to files, not pipes. `communicate()` buffers whatever the child
     # writes into the *parent's* address space, and none of the child's limits reach
@@ -245,28 +352,60 @@ def run_and_digest(project_dir: Path, spec: ReproSpec) -> str:
     # as a success. Redirecting to real files puts the child's own RLIMIT_FSIZE back
     # in the path, and the parent reads only a bounded prefix for its message.
     with tempfile.TemporaryDirectory(prefix="docxplus-repro-") as stream_dir:
+        scratch = Path(stream_dir) / "tmp"
+        scratch.mkdir()
+        environment = _scrubbed_env()
+        environment.update({key: str(scratch) for key in ("TMPDIR", "TMP", "TEMP")})
         stdout_path = Path(stream_dir) / "stdout"
         stderr_path = Path(stream_dir) / "stderr"
-        with open(stdout_path, "wb") as out_stream, open(stderr_path, "wb") as err_stream:
+        status_path = Path(stream_dir) / "sandbox-status"
+        linux = sys.platform.startswith("linux")
+        with open(stdout_path, "wb") as out_stream, open(stderr_path, "wb") as err_stream, \
+                open(status_path, "w+b") as status_stream:
+            argv = _sandbox_wrap(command, project_dir, scratch,
+                                 status_fd=status_stream.fileno() if linux else None)
+            if linux:
+                _require_pidfd()
+            _remaining(deadline)
             proc = subprocess.Popen(
                 argv,
                 cwd=str(project_dir),
-                env=_scrubbed_env(),
+                env=environment,
                 stdin=subprocess.DEVNULL,
                 stdout=out_stream,
                 stderr=err_stream,
                 preexec_fn=_apply_limits if os.name == "posix" else None,  # noqa: PLW1509 - single-threaded, POSIX rlimits
+                pass_fds=(status_stream.fileno(),) if linux else (),
                 start_new_session=True,
             )
+            # start_new_session establishes PGID == PID before exec; retain it now,
+            # never rediscover it after wait() has reaped a short-lived leader.
+            launch_pgid = proc.pid
+            init = None
             try:
-                proc.wait(timeout=spec.timeout)
-            except subprocess.TimeoutExpired:
-                _kill_group(proc)
-                raise ReproError(
-                    f"reproduce command timed out after {spec.timeout}s"
-                ) from None
+                if linux:
+                    reported = _sandbox_init_pid(status_path, proc, deadline)
+                    if reported is not None:
+                        init = _pin_sandbox_init(reported, launch_pgid)
+                try:
+                    proc.wait(timeout=_remaining(deadline))
+                except subprocess.TimeoutExpired:
+                    raise ReproError(
+                        f"reproduce command timed out after {spec.timeout}s"
+                    ) from None
             finally:
-                _kill_group(proc)  # reap any surviving double-forked orphans
+                try:
+                    _terminate_sandbox_init(init)
+                finally:
+                    try:
+                        # While the monitor is still unreaped it owns its own
+                        # PGID, so a numeric group kill cannot reach a recycled
+                        # group. A reaped monitor's group holds nothing to kill:
+                        # the namespace init already died.
+                        if proc.poll() is None:
+                            _kill_group(launch_pgid)
+                    finally:
+                        proc.wait()  # always join the owned leader, including cleanup errors
         if proc.returncode != 0:
             with open(stderr_path, "rb") as handle:
                 tail = handle.read(MAX_CAPTURED_STDERR)
@@ -274,43 +413,155 @@ def run_and_digest(project_dir: Path, spec: ReproSpec) -> str:
                 f"reproduce command failed (exit {proc.returncode}): "
                 f"{tail.decode('utf-8', 'replace')}"
             )
-    return _digest_outputs(project_dir, spec.outputs, before)
+    return _digest_outputs(project_dir, spec.outputs, before, deadline)
 
 
-def _kill_group(proc: subprocess.Popen) -> None:
-    if os.name != "posix":  # pragma: no cover - non-POSIX has no process groups
+def _sandbox_init_pid(status_path: Path, monitor: subprocess.Popen,
+                      deadline: float) -> int | None:
+    """Return bubblewrap's reported init PID in the caller's PID namespace.
+
+    bubblewrap writes one JSON object with ``child-pid`` after starting the
+    command, before it waits. A monitor that exits without writing it never
+    started a sandbox, so there is nothing to own.
+    """
+    while True:
+        try:
+            with status_path.open("rb") as handle:
+                raw = handle.read(_STATUS_LIMIT + 1)
+        except OSError:
+            raw = b""
+        if len(raw) > _STATUS_LIMIT and b"\n" not in raw:
+            raise ReproError("bubblewrap status exceeded its bound")
+        # Parse complete lines only, and ignore objects without `child-pid`:
+        # bubblewrap documents that future members/objects may appear.
+        for line in raw.split(b"\n")[:-1] if b"\n" in raw else ():
+            try:
+                value = json.loads(line)
+            except ValueError as exc:
+                raise ReproError("bubblewrap status is not JSON") from exc
+            pid = value.get("child-pid") if isinstance(value, dict) else None
+            if type(pid) is int and pid > 0:
+                return pid
+        if monitor.poll() is not None:
+            return None
+        _remaining(deadline)
+        time.sleep(0.005)
+
+
+def _require_pidfd() -> None:
+    """Prove kernel pidfd support before launching anything that needs custody.
+
+    Pinning must happen after the sandbox reports its init, so support is probed
+    on our own process first: an unsupported kernel refuses before carried code
+    can run at all.
+    """
+    try:
+        descriptor = os.pidfd_open(os.getpid(), 0)
+    except (AttributeError, OSError) as exc:
+        raise ReproError("Linux pidfd support is required to own the sandbox init") from exc
+    os.close(descriptor)
+
+
+def _pin_sandbox_init(pid: int, monitor_pid: int) -> int | None:
+    """Pin the reported init instance, or None once it has already exited.
+
+    A pidfd pins the process instance rather than a reusable PID, so a recycled
+    number can never be signalled later. A reported PID whose parent is not this
+    monitor is unattributable and refuses; absent pidfd support refuses too,
+    because the namespace leader could not be killed.
+    """
+    try:
+        descriptor = os.pidfd_open(pid, 0)
+    except ProcessLookupError:
+        return None
+    except (AttributeError, OSError) as exc:
+        raise ReproError("Linux pidfd support is required to own the sandbox init") from exc
+    try:
+        status = Path(f"/proc/{pid}/status").read_text()
+        parent = int(next(line.split()[1] for line in status.splitlines()
+                          if line.startswith("PPid:")))
+    except (OSError, StopIteration, ValueError):
+        os.close(descriptor)
+        return None
+    if parent != monitor_pid:
+        os.close(descriptor)
+        # The reported PID is not this monitor's child: refuse rather than run a
+        # sandbox whose namespace leader cannot be attributed.
+        raise ReproError("sandbox init is not owned by its monitor")
+    return descriptor
+
+
+def _terminate_sandbox_init(descriptor: int | None) -> None:
+    """Kill the private namespace leader; the kernel then kills every member."""
+    if descriptor is None:
         return
     try:
-        os.killpg(os.getpgid(proc.pid), 9)
-    except (ProcessLookupError, PermissionError, OSError):
-        pass
+        signal.pidfd_send_signal(descriptor, signal.SIGKILL, None, 0)
+    except ProcessLookupError:
+        pass  # It exited on its own; the pinned instance is already gone.
+    except OSError as exc:
+        raise ReproError("could not terminate the sandbox init") from exc
+    finally:
+        os.close(descriptor)
+
+
+def _kill_group(launch_pgid: int) -> None:
+    """Kill the retained launch group, even after its leader has been reaped."""
+    if os.name != "posix":  # pragma: no cover - unsupported platform refuses execution
+        return
+    try:
+        os.killpg(launch_pgid, 9)
+    except ProcessLookupError:
+        return  # The entire group already exited.
+    except OSError as exc:
+        raise ReproError("could not clean up the reproduction process group") from exc
 
 
 class ReproError(RuntimeError):
     """A reproduction run failed to execute (distinct from a digest mismatch)."""
 
 
+def require_output_digest_scheme(attestation: dict) -> str:
+    """Refuse missing/legacy schemes without executing or reinterpreting signed bytes."""
+    if attestation.get("output_digest_scheme") != OUTPUT_DIGEST_SCHEME:
+        raise ReproError("unsupported or missing reproduction output_digest_scheme")
+    return OUTPUT_DIGEST_SCHEME
+
+
 def attest(project_dir: Path, spec: ReproSpec) -> dict:
     """Author-side: run the recipe once and build a signed-in attestation dict."""
+    from . import crypto, payloads
+
+    source_digest = crypto.digest(payloads.pack_project(Path(project_dir)))
     return {
         "command": list(spec.command),
         "outputs": list(spec.outputs),
         "timeout": spec.timeout,
+        "output_digest_scheme": OUTPUT_DIGEST_SCHEME,
         "output_digest": run_and_digest(Path(project_dir), spec),
         "toolchain": toolchain_fingerprint(),
+        "source_digest": source_digest,
     }
 
 
 def reproduce_and_compare(project_dir: Path, attestation: dict) -> dict:
     """Reader-side (opt-in): re-run the attested recipe and compare digests."""
+    from . import crypto, payloads
+
+    require_output_digest_scheme(attestation)
+    source_match = attestation.get("source_digest") == crypto.digest(
+        payloads.pack_project(Path(project_dir))
+    )
     spec = ReproSpec.from_dict(attestation)
     actual = run_and_digest(Path(project_dir), spec)
     expected_tc = attestation.get("toolchain", {})
     actual_tc = toolchain_fingerprint()
     return {
+        "output_digest_scheme": OUTPUT_DIGEST_SCHEME,
         "expected": attestation["output_digest"],
         "actual": actual,
-        "match": actual == attestation["output_digest"],
+        "match": source_match and actual == attestation["output_digest"],
+        "source_match": source_match,
         # A digest match on a *different* toolchain is weaker evidence; surface it.
         "toolchain_match": expected_tc == actual_tc,
         "toolchain_expected": expected_tc,
@@ -352,6 +603,7 @@ __all__ = [
     "MAX_CAPTURED_STDERR",
     "MAX_OUTPUT_BYTES",
     "MAX_REPRO_SECONDS",
+    "OUTPUT_DIGEST_SCHEME",
     "RECIPE_FILE",
     "ReproError",
     "ReproSpec",
@@ -359,6 +611,7 @@ __all__ = [
     "hermetic_extract_and_reproduce",
     "load_recipe",
     "reproduce_and_compare",
+    "require_output_digest_scheme",
     "run_and_digest",
     "toolchain_fingerprint",
 ]

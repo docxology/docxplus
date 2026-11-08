@@ -50,6 +50,7 @@ FROM python:3.15.2-slim-bookworm AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash bubblewrap coreutils util-linux git procps ca-certificates \
     pandoc=2.17.1.1-2~deb12u1 pandoc-data=2.17.1.1-2~deb12u1 \
+    libreoffice-writer poppler-utils \
     texlive-xetex texlive-latex-extra texlive-fonts-recommended \
     texlive-science fonts-dejavu-core fonts-liberation lmodern \
     libgmp10 libffi8 liblua5.3-0 libyaml-0-2 libssl3 \

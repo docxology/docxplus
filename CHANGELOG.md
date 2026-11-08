@@ -7,6 +7,77 @@ Findings referenced by number are recorded in full in [`docs/redteam-audit.md`](
 
 ## [Unreleased]
 
+- Linux reproduction runs the command as private PID 1 and pins bubblewrap's
+  reported init with a pidfd, so success, timeout and cleanup destroy the
+  namespace and every detached descendant instead of leaving a helper-reaper
+  zombie; missing pidfd support refuses. `--` terminates bubblewrap's own
+  options, so a carried recipe cannot supply `--share-net`/`--bind`; a program
+  name beginning with `-` refuses before any process starts.
+
+- Release validation offers the validate-only
+  `--allow-unmasked-procfs-for-daemon ID` exception for an explicitly selected,
+  provision-bound Linux rootless daemon inside an operator-controlled isolated VM.
+  Default proc/kernel masking incompatibility still refuses; no automatic fallback
+  or host/global policy changes. The container-only `systempaths=unconfined`
+  profile loses Docker's outer proc and kernel-path masking/read-only defenses
+  while retaining production bubblewrap, private PID/proc and every other
+  confinement/custody control. Actual qualification adds kernel read-only `/sys`
+  and non-mutating kernel-control write-open attempts (EACCES/EPERM/EROFS, or
+  ENOENT where the interface is absent) alongside namespace, ancestor PID/proc
+  invisibility and signal, positive scratch and detached-child probes. Fresh
+  source-bound receipts remain required; this is not a new qualification claim.
+
+## [2.0.0] — 2026-11-08
+
+- Clean cutover to authenticated manifest **format 3.0**: profile-separated typed,
+  counted, length-framed part/hash/type/authority/relationship transcripts include
+  relationship IDs. Primary algorithms and co-signer identities/algorithms are
+  authenticated. Rebuild and re-sign trusted format-2 inputs; no legacy verifier.
+- Genuine provider ML-KEM-768/ML-DSA-65 (`cryptography >= 50`) reaches DOCX/ODT
+  signing, co-signing and recipient sealing. Portable suite-typed DXHK private keys
+  validate derived public halves; mixed/ambiguous families and simulated material
+  refuse. Pin full composite keys; component standards do not certify the product.
+- Threshold share tags are checksums, not VSS. Signed full-share commitments
+  authenticate issued bytes only under a verified, pinned manifest.
+- Password modules admit exactly two frames before KDF work, with common bounded
+  KDF parameters and power-of-two padding. No universal deniability claim.
+- Shared archive preflight caps ZIP-directory allocation and bounded gzip/TAR
+  metadata. Package compression agrees with reader limits; intake includes UTF-16
+  XML, channel/path budgets and unsupported-channel refusal. Generic dispatch
+  normalizes ZIP/package-admission errors to `ContainerError`.
+- Descriptor-pinned bounded project capture and fresh private extraction refuse
+  unsafe paths, existing nonempty trees and missing platform capabilities.
+  Secret/document/share/key outputs preflight and stage before per-entry atomic
+  publication; the set is not cross-file crash-atomic.
+- Typed JSON/text/project CLI sealing includes threshold and portable hybrid keys.
+  Rust media capacity queries the actual CLI with the encoding metadata/signing
+  policy. DXL1 rejects truncated/overlength frames; statistics expose `p_value`
+  for pair-equality compatibility, not an embedding posterior.
+- Media extraction requires an explicit supported backend and nonempty `parts`;
+  obsolete single-part aliases and MCE part/namespace guessing are removed.
+- Namespace-aware insertion preserves existing XML/QName bindings and terminal
+  section properties in both profiles. DOCX drawing IDs include header/body IDs;
+  custom-property allocation recognizes numeric PID aliases without rewriting them.
+- Duplicate co-signing identities refuse before base-package mutation, rather than
+  producing a document that its own reader cannot open.
+- Reproduction authenticates `docxplus-output-tree-v3-blake2b-256`, refuses old or
+  missing schemes before execution, and reports `source_match`. Private scratch,
+  Linux PID/proc/session custody and reaping remain platform-qualified controls;
+  macOS Seatbelt denies process creation, so subprocess recipes require Linux.
+  Host-root readability remains.
+- Evidence checks use actual exported artifacts, bidirectional project inventories
+  and one reference dossier. The Office gate retains render-save-render PDF/text/
+  raster receipts without claiming payload preservation through editing.
+  Host qualification binds all sixteen Office artifacts to collected hashes/sizes,
+  installed-wheel inputs, runtime tools, actual text and both no-skip JUnit suites.
+  Wheel build/validate/extract exercises all four non-media DOCX channels and ODT
+  package parts before actual Office render-save-render.
+- Historical audit records and reports remain historical. Each release requires
+  fresh source-bound qualification and regenerated manuscript/examples.
+
+Release receipts identify the exercised source, tools, coverage, artifacts and
+Office controls. No version-specific DOI is assigned without its own archival record.
+
 ## [1.1.0] — 2026-11-07
 
 ### Changed

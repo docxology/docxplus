@@ -1,6 +1,6 @@
 paper:
-  title: "docxplus: An Intelligent Document Container over Standards-Conforming OOXML"
-  subtitle: "Carrying signed, encrypted, modular, self-verifying payloads inside an ordinary .docx"
+  title: "docxplus: An Intelligent Document Container over OOXML and ODF Package Extension Points"
+  subtitle: "Carrying signed, encrypted, modular payloads inside ordinary DOCX and ODT files"
   version: "{{VERSION}}"
   date: "{{DOC_DATE}}"
 

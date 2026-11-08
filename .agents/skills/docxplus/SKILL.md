@@ -1,7 +1,7 @@
 ---
 name: docxplus
 description: docxplus intelligent document container — build/read/validate a byte-valid .docx or .odt that also carries a signed, encrypted, modular intelligence layer through spec-sanctioned side-channels, with a steganographer media backend.
-version: 1.1.0
+version: 2.0.0
 author: docxology
 license: MIT
 tags: [ooxml, odf, docx, odt, steganography, document-security, thin-orchestrator]
@@ -19,14 +19,14 @@ this skill carries the entry points and the contracts, not the module map.
 - Producing or reading a docxplus file — a `.docx` or `.odt` carrying an intelligence
   layer.
 - Adding a payload channel, payload type, sealing mode, or crypto option.
-- Validating that a produced document is both format-conforming and
-  manifest-consistent.
+- Checking a produced document's supported package structure and manifest consistency;
+  full ISO/RNG/XSD conformance and universal consumer compatibility are separate claims.
 - Deciding what a verification result actually lets you conclude.
 
 ## Quick reference
 
 ```bash
-uv venv && uv pip install -e '.[dev,media,figures]'   # all three extras; see AGENTS.md
+uv sync --locked --all-extras                 # pinned standalone toolchain; see AGENTS.md
 ./run.sh                                    # preflight, tests, build, dossier, round trips, render, living
 .venv/bin/python -m ruff check src scripts tests  # CI's first gate (ruff pinned in the dev extra)
 .venv/bin/python -m pytest --cov=src -q     # 90% gate
@@ -46,22 +46,24 @@ uv run docxplus odt-extract out.odt brief --password s3cret
 uv run docxplus verify out.docx --expected-key author.pub
 ```
 
-`docxplus --help` lists all 19 subcommands; `docs/cli.md` is the contract.
+`docxplus --help` is the current command surface; `docs/cli.md` is the contract.
 
 ## Contracts
 
-- The surface `.docx`/`.odt` stays conforming (`validate.py` is the gate).
+- Both `.docx` and `.odt` use standards-defined package extension points. The selected
+  structural checks in `validate.py` are not complete conformance certification.
 - Encryption is payload-level only; the document stays openable.
-- The manifest is authoritative; readers bind to it, never guess part names.
-- Both profiles share the sealing and unsealing code. A change to one lineage must
-  hold for both — never fork it.
-- **`validate` is conformance; `verify` is authenticity, and authenticity requires a
-  pinned key.** The key inside a manifest is self-asserted, so an unpinned check
-  proves self-consistency only.
-- Execution happens in exactly one place: `reproduce.py`, behind an explicit
-  `allow_execution=True`. Nothing on a read, extract, or verify path executes
-  anything.
-- Deterministic output: fixed ZIP timestamps, sorted entries, no wall-clock.
-- No mocks; ground spec claims in `docs/standards-report.md`.
-- The steganographer backend is optional (needs the built Rust binary); absence skips,
-  failure raises — never a silent no-op.
+- The authenticated format-3 manifest is authoritative; readers never guess locations.
+  Rebuild and re-sign trusted legacy inputs; there is no legacy verification fallback.
+- Both profiles share sealing and unsealing. Changes must hold for both, never fork it.
+- A valid self-signature proves self-consistency, not identity. Authenticity requires
+  pinning the complete expected key, including both halves of a hybrid identity.
+- Carried code executes only through `reproduce.py` with explicit `allow_execution=True`.
+  Reads, extraction and verification never execute carried code; a requested trusted
+  media decoder may run. Missing confinement refuses execution. Neither platform is
+  a hermetic environment or a host-secret read boundary.
+- Archive composition fixes timestamps and ordering for the same parts. Cryptographic
+  entropy and explicit author attestations are not promised bit-for-bit reproducible.
+- Ground spec claims in `docs/standards-report.md` and real consumer evidence, not mocks.
+- Backend absence may skip optional tests, but requesting an unavailable backend or
+  receiving a failed/invalid response raises. Never implicitly build or mutate a sibling.

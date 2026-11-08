@@ -8,11 +8,11 @@ without any of them knowing about the others.
 
 | Module | id | Payload lives in | In-spec basis | Capacity |
 | --- | --- | --- | --- | --- |
-| `custom_xml.py` | `custom_xml` | `customXml/itemN.xml` | mapped content-control data is flat Open XML markup | unbounded |
-| `package_part.py` | `package_part` | `intelligence/payloadN.dxp` | a package may contain additional files | unbounded |
+| `custom_xml.py` | `custom_xml` | `customXml/itemN.xml` | mapped content-control data is flat Open XML markup | package/XML budgets |
+| `package_part.py` | `package_part` | `intelligence/payloadN.dxp` | a package may contain additional files | package budgets |
 | `metadata.py` | `metadata` | a custom document property in `docProps/custom.xml` | custom document properties | bounded — short routing tags only |
-| `mce.py` | `mce` | an `<mc:Choice>` inside `word/document.xml` | Markup Compatibility `AlternateContent` | unbounded, but writes into the main story part |
-| `stego_media.py` | `stego_media` | the LSBs of a displayed PNG (`word/media/` or `Pictures/`) | embedded image parts plus LSB steganography | bounded by carrier pixels |
+| `mce.py` | `mce` | an `<mc:Choice>` inside `word/document.xml` | Markup Compatibility `AlternateContent` | package/XML budgets |
+| `stego_media.py` | `stego_media` | displayed PNG LSBs (`word/media/` or `Pictures/`) | embedded image parts plus LSB steganography | Python DXL1 framing or exact Rust CLI capacity |
 
 `base.py` holds the contract both sides bind to: the `Channel` protocol
 (`embed` / `extract` / `capacity`) and `ChannelRecord`, the manifest-facing description
@@ -23,15 +23,15 @@ not build.
 Exact capacity numbers, visibility under each viewer, cost, and caveats are in
 [`../../../docs/channels.md`](../../../docs/channels.md), which is the reference; the
 normative definitions are in
-[`../../../docs/format-spec.md`](../../../docs/format-spec.md). `tests/test_docs.py` fails
-the build if a registered channel is missing from either.
+[`../../../docs/format-spec.md`](../../../docs/format-spec.md). Keep both aligned
+with consumer-visible channel behavior.
 
 ## Two things worth knowing before you pick one
 
 **Not every channel crosses to ODF.** `custom_xml` has no ODF analogue (there is no
 custom XML datastore part) and neither does `mce` (there is no Markup Compatibility
-element). ODT payloads ride as ODF package entries — the unbounded channel. A recipe
-written against `custom_xml` will not port.
+element). ODT supports budgeted package entries and displayed-image `stego_media`;
+`metadata` has no implemented ODF analogue. A `custom_xml` recipe does not port directly.
 
 **`stego_media` is the only one with an optional dependency.** It needs Pillow, and
 optionally the steganographer Rust CLI for the premium backend. `available_channels()`

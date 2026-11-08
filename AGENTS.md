@@ -2,7 +2,7 @@
 
 Standalone research repo implementing **docxplus**, an intelligent OOXML/ODF document
 container. Follows the docxology `template_code_project` paradigm (tested `src/`, thin
-`scripts/`, no-mocks tests, ≥90% coverage) but does **not** import the template's
+`scripts/`, no-mocks tests, >=90% coverage) but does **not** import the template's
 shared `infrastructure/` layer — it is self-contained.
 
 Read this file, then the `AGENTS.md` in whichever directory you are about to touch.
@@ -92,31 +92,29 @@ drift apart on the details that matter under attack.
 
 ## Documentation is a checked surface
 
-Docs rot silently: a new module, channel, or subcommand ships and nothing fails.
-`tests/test_docs.py` makes that a build failure instead — every module has an
-architecture entry, every CLI command a reference entry, every channel a page, every
-directory both guides, every internal link a live target.
+Keep architecture, CLI and channel contracts aligned when their APIs change.
+Documentation checks exercise live relative links, rendering, references and
+diagnostics; they are not assertions of incidental prose, counts or defaults.
 
 Two rules follow, and they are the ones that get broken:
 
-1. **Never type a drift-prone number.** Values come from
-   `src/docxplus/manuscript_vars.variables()`, which reads live code constants and the repo. In
-   the manuscript they are `{{TOKENS}}`; in a README they are literals *pinned by a
-   test*. A hand-typed count is how the root README came to claim eight audit cycles
-   when the record held fourteen.
-2. **Do not restate an enforced inventory.** `docs/architecture.md` owns the module
-   map, `docs/cli.md` owns the subcommand list, `docs/README.md` owns the doc index.
-   A second, unenforced copy is a second thing to forget.
+1. **Do not freeze drift-prone numbers or phrases.** Manuscript metrics use
+   `{{TOKENS}}` derived from `src/docxplus/manuscript_vars.variables()`.
+   README claims should name the contract and source-bound evidence, not require
+   tests of incidental wording, counts or defaults.
+2. **Do not duplicate an inventory.** `docs/architecture.md` owns the module
+   map, `docs/cli.md` the subcommands, `docs/README.md` the index.
+   A second hand-maintained copy is another opportunity for drift.
 
-When a claim would drift, regenerate and cite the real number rather than freezing a
-stale one.
+Regeneration hydrates values; only actual source-bound receipts establish freshness.
+Historic audit/report values stay historic, never a new release qualification.
 
 ## Adding a channel
 
 Implement the `Channel` protocol in `src/docxplus/channels/` (`embed`/`extract`/`capacity`),
 register it in `channels/__init__.py`, and add a real round-trip test. The manifest
 records the channel id; unknown ids fail explicitly on read. Then document it in
-`docs/channels.md` and `docs/format-spec.md` — the suite requires both. Full recipe:
+`docs/channels.md` and `docs/format-spec.md` with actual contracts. Full recipe:
 [`src/docxplus/channels/AGENTS.md`](src/docxplus/channels/AGENTS.md).
 
 ## Prose

@@ -1,4 +1,8 @@
 {
+  "authored_command": [
+    "python3",
+    "compute.py"
+  ],
   "checks": [
     {
       "detail": "",
@@ -26,7 +30,7 @@
       "ok": true
     },
     {
-      "detail": "{\"attested\": true, \"signed\": true, \"verified\": true, \"attestation\": {\"output_digest\": \"40997aec9d445275db49e456285057487043fae6e1cd8067689054b9d254b7f1\", \"command\": [\"/source/docxplus/.venv/bin/python\", \"compute.py\"], \"toolchain\": {\"implementation\": \"CPython\", \"platform\": \"Linux-6.12.115+deb13.1-cloud-arm64-aarch64-with-glibc2.36\", \"python\": \"3.15.2\"}}}",
+      "detail": "{\"attested\": true, \"signed\": true, \"self_consistent\": true, \"authentic\": true, \"verified\": true, \"attestation\": {\"command\": [\"python3\", \"compute.py\"], \"output_digest\": \"f191655b6a424653f388d556829027978031da3c6fe1d6d488c049462f22d801\", \"output_digest_scheme\": \"docxplus-output-tree-v3-blake2b-256\", \"outputs\": [\"result.json\"], \"source_digest\": \"b8682fa4ad02360dc9c1bb92712ff12371022c76a1652c67b48998f57e7698c3\", \"timeout\": 60, \"toolchain\": {\"implementation\": \"CPython\", \"platform\": \"Linux-6.12.115+deb13.1-cloud-arm64-aarch64-with-glibc2.36\", \"python\": \"3.15.2\"}}}",
       "name": "docx.attestation_verified",
       "ok": true
     },
@@ -56,7 +60,7 @@
       "ok": true
     },
     {
-      "detail": "{\"attested\": true, \"signed\": true, \"verified\": true, \"attestation\": {\"output_digest\": \"40997aec9d445275db49e456285057487043fae6e1cd8067689054b9d254b7f1\", \"command\": [\"/source/docxplus/.venv/bin/python\", \"compute.py\"], \"toolchain\": {\"implementation\": \"CPython\", \"platform\": \"Linux-6.12.115+deb13.1-cloud-arm64-aarch64-with-glibc2.36\", \"python\": \"3.15.2\"}}}",
+      "detail": "{\"attested\": true, \"signed\": true, \"self_consistent\": true, \"authentic\": true, \"verified\": true, \"attestation\": {\"command\": [\"python3\", \"compute.py\"], \"output_digest\": \"f191655b6a424653f388d556829027978031da3c6fe1d6d488c049462f22d801\", \"output_digest_scheme\": \"docxplus-output-tree-v3-blake2b-256\", \"outputs\": [\"result.json\"], \"source_digest\": \"b8682fa4ad02360dc9c1bb92712ff12371022c76a1652c67b48998f57e7698c3\", \"timeout\": 60, \"toolchain\": {\"implementation\": \"CPython\", \"platform\": \"Linux-6.12.115+deb13.1-cloud-arm64-aarch64-with-glibc2.36\", \"python\": \"3.15.2\"}}}",
       "name": "odt.attestation_verified",
       "ok": true
     },
@@ -101,7 +105,7 @@
       "missing_files": [],
       "unexpected_files": []
     },
-    "project_payload_digest": "21846260a13535f0114c0f8eb8268b37a3b8714a6c8cc8d718fa00149b1bbe07"
+    "project_payload_digest": "b8682fa4ad02360dc9c1bb92712ff12371022c76a1652c67b48998f57e7698c3"
   },
   "failures": [],
   "fidelity_boundary": {
@@ -142,10 +146,16 @@
       "attestation": {
         "attestation": {
           "command": [
-            "/source/docxplus/.venv/bin/python",
+            "python3",
             "compute.py"
           ],
-          "output_digest": "40997aec9d445275db49e456285057487043fae6e1cd8067689054b9d254b7f1",
+          "output_digest": "f191655b6a424653f388d556829027978031da3c6fe1d6d488c049462f22d801",
+          "output_digest_scheme": "docxplus-output-tree-v3-blake2b-256",
+          "outputs": [
+            "result.json"
+          ],
+          "source_digest": "b8682fa4ad02360dc9c1bb92712ff12371022c76a1652c67b48998f57e7698c3",
+          "timeout": 60,
           "toolchain": {
             "implementation": "CPython",
             "platform": "Linux-6.12.115+deb13.1-cloud-arm64-aarch64-with-glibc2.36",
@@ -153,10 +163,12 @@
           }
         },
         "attested": true,
+        "authentic": true,
+        "self_consistent": true,
         "signed": true,
         "verified": true
       },
-      "bytes": 4417,
+      "bytes": 5390,
       "comparison": {
         "content_mismatches": [],
         "executable_bit_mismatches": [],
@@ -175,10 +187,16 @@
       "attestation": {
         "attestation": {
           "command": [
-            "/source/docxplus/.venv/bin/python",
+            "python3",
             "compute.py"
           ],
-          "output_digest": "40997aec9d445275db49e456285057487043fae6e1cd8067689054b9d254b7f1",
+          "output_digest": "f191655b6a424653f388d556829027978031da3c6fe1d6d488c049462f22d801",
+          "output_digest_scheme": "docxplus-output-tree-v3-blake2b-256",
+          "outputs": [
+            "result.json"
+          ],
+          "source_digest": "b8682fa4ad02360dc9c1bb92712ff12371022c76a1652c67b48998f57e7698c3",
+          "timeout": 60,
           "toolchain": {
             "implementation": "CPython",
             "platform": "Linux-6.12.115+deb13.1-cloud-arm64-aarch64-with-glibc2.36",
@@ -186,10 +204,12 @@
           }
         },
         "attested": true,
+        "authentic": true,
+        "self_consistent": true,
         "signed": true,
         "verified": true
       },
-      "bytes": 3523,
+      "bytes": 4551,
       "comparison": {
         "content_mismatches": [],
         "executable_bit_mismatches": [],

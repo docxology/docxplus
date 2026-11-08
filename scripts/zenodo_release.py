@@ -26,6 +26,7 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -44,6 +45,56 @@ REPO_URL = "https://github.com/docxology/docxplus"
 TOKEN_ENV = "ZENODO_PROD_TOKEN"
 
 
+def _provider_url(path: str, *, api: str = API) -> str:
+    """Admit HTTPS URLs only at the configured provider authority."""
+    try:
+        base = urllib.parse.urlsplit(api)
+        target = urllib.parse.urlsplit(path)
+        if not target.scheme and not target.netloc and path.startswith("/"):
+            path = f"{api.rstrip('/')}{path}"
+            target = urllib.parse.urlsplit(path)
+        trusted = (
+            base.scheme == target.scheme == "https"
+            and base.hostname is not None
+            and target.hostname == base.hostname
+            and (target.port if target.port is not None else 443)
+            == (base.port if base.port is not None else 443)
+            and base.username is None
+            and base.password is None
+            and target.username is None
+            and target.password is None
+            and not target.fragment
+        )
+    except ValueError:
+        trusted = False
+    if not trusted:
+        raise urllib.error.URLError(
+            "refusing Zenodo URL: HTTPS at the configured provider authority is required"
+        )
+    return path
+
+
+class _ProviderRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def __init__(self, api: str) -> None:
+        self.api = api
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        # urllib can copy Authorization into redirected requests. Check before
+        # constructing that request, including HTTPS-to-HTTP downgrades.
+        _provider_url(newurl, api=self.api)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _provider_open(
+    request: str | urllib.request.Request, *, api: str = API, timeout: int = 180,
+):
+    """Open a provider request without forwarding credentials to another origin."""
+    url = request.full_url if isinstance(request, urllib.request.Request) else request
+    _provider_url(url, api=api)
+    opener = urllib.request.build_opener(_ProviderRedirectHandler(api))
+    return opener.open(request, timeout=timeout)
+
+
 def _token() -> str:
     token = os.environ.get(TOKEN_ENV, "").strip()
     if not token:
@@ -53,20 +104,23 @@ def _token() -> str:
 
 
 def _call(method: str, path: str, *, payload: dict | None = None, raw: bytes | None = None,
-          content_type: str = "application/json") -> dict:
-    url = path if path.startswith("http") else f"{API}{path}"
+          content_type: str = "application/json", api: str = API) -> dict:
+    url = _provider_url(path, api=api)
     body = raw if raw is not None else (json.dumps(payload).encode() if payload is not None else None)
     request = urllib.request.Request(url, data=body, method=method)
     request.add_header("Authorization", f"Bearer {_token()}")
     if body is not None:
         request.add_header("Content-Type", content_type)
     try:
-        with urllib.request.urlopen(request, timeout=180) as response:
+        with _provider_open(request, api=api) as response:
             text = response.read()
             return json.loads(text) if text else {}
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", "replace")[:600]
         sys.stderr.write(f"Zenodo {method} {url} -> HTTP {exc.code}\n{detail}\n")
+        raise SystemExit(1) from None
+    except urllib.error.URLError as exc:
+        sys.stderr.write(f"Zenodo request refused or failed: {exc.reason}\n")
         raise SystemExit(1) from None
 
 
@@ -97,14 +151,15 @@ def reserve(version: str) -> None:
                       "bucket": draft["links"]["bucket"]}, indent=2))
 
 
-def upload(deposition_id: str, paths: list[str]) -> None:
-    draft = _call("GET", f"/deposit/depositions/{deposition_id}")
-    bucket = draft["links"]["bucket"]
+def upload(deposition_id: str, paths: list[str], *, api: str = API) -> None:
+    draft = _call("GET", f"/deposit/depositions/{deposition_id}", api=api)
+    bucket = _provider_url(draft["links"]["bucket"], api=api)
     for path in paths:
         file_path = Path(path)
         data = file_path.read_bytes()
-        _call("PUT", f"{bucket}/{file_path.name}", raw=data,
-              content_type="application/octet-stream")
+        name = urllib.parse.quote(file_path.name, safe="")
+        _call("PUT", f"{bucket.rstrip('/')}/{name}", raw=data,
+              content_type="application/octet-stream", api=api)
         print(f"  uploaded {file_path.name} ({len(data):,} bytes)")
 
 
@@ -119,15 +174,19 @@ def main() -> int:
         sys.stderr.write(__doc__ or "")
         return 2
     command = sys.argv[1]
-    if command == "reserve":
-        reserve(sys.argv[2])
-    elif command == "upload":
-        upload(sys.argv[2], sys.argv[3:])
-    elif command == "publish":
-        publish(sys.argv[2])
-    else:
-        sys.stderr.write(f"unknown command: {command}\n")
-        return 2
+    try:
+        if command == "reserve":
+            reserve(sys.argv[2])
+        elif command == "upload":
+            upload(sys.argv[2], sys.argv[3:])
+        elif command == "publish":
+            publish(sys.argv[2])
+        else:
+            sys.stderr.write(f"unknown command: {command}\n")
+            return 2
+    except urllib.error.URLError as exc:
+        sys.stderr.write(f"Zenodo request refused or failed: {exc.reason}\n")
+        return 1
     return 0
 
 

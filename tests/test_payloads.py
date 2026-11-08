@@ -116,10 +116,9 @@ def test_pack_names_the_over_limit_members(tmp_path):
     big.write_bytes(b"z" * 500)
     with pytest.raises(ValueError, match="decompression cap") as info:
         payloads.pack_project(proj, max_uncompressed=100)
-    # The heaviest members are named — what to shrink or exclude first. The total
-    # and the cap are both stated, so the reader can see how far over it is.
+    # Bounded capture identifies the offending member and selected budget without
+    # reading the remaining source merely to calculate an exact oversized total.
     assert "big.dat" in str(info.value)   # the member that pushed it over
-    assert "502 bytes" in str(info.value)  # measured inflated size
     assert "100-byte" in str(info.value)   # the budget it exceeded
 
 
@@ -151,3 +150,156 @@ def test_default_cap_still_admits_ordinary_trees_and_exclusions_keep_bytes_off_t
     out = tmp_path / "out"
     assert (out / "src.py").exists()
     assert not (out / "__pycache__").exists()
+
+
+def _project_archive(entries, *, pax=None):
+    import io
+    import tarfile
+
+    result = io.BytesIO()
+    with tarfile.open(fileobj=result, mode="w:gz", format=tarfile.PAX_FORMAT) as archive:
+        for name, data in entries:
+            member = tarfile.TarInfo(name)
+            if data is None:
+                member.type = tarfile.DIRTYPE
+                member.mode = 0o755
+            else:
+                member.size = len(data)
+            if pax:
+                member.pax_headers = pax
+            archive.addfile(member, None if data is None else io.BytesIO(data))
+    return result.getvalue()
+
+
+@pytest.mark.parametrize("entries", [
+    [("same", b"first"), ("same", b"second")],
+    [("a", b"file"), ("a/b", b"child")],
+    [("a/b", b"child"), ("a", b"file")],
+])
+def test_project_conflicts_are_rejected_before_destination_publication(tmp_path, entries):
+    """Archive ordering must not partially write a conflicting tree into user storage."""
+    destination = tmp_path / "out"
+    with pytest.raises(ValueError):
+        payloads.unpack_project(_project_archive(entries), destination)
+    assert not destination.exists()
+
+
+def test_project_metadata_is_bounded_before_pax_parsing(tmp_path):
+    """An ignored PAX comment must not bypass the extracted-data decompression cap."""
+    archive = _project_archive([("file", b"data")], pax={"comment": "x" * (2 * 1024**2)})
+    with pytest.raises(ValueError):
+        payloads.unpack_project(archive, tmp_path / "out", max_uncompressed=1024)
+    assert not (tmp_path / "out").exists()
+
+
+def test_project_extraction_preserves_existing_files_and_root_privacy(tmp_path):
+    """Root directory entries cannot chmod a private destination or overwrite prior work."""
+    destination = tmp_path / "out"
+    destination.mkdir(mode=0o700)
+    archive = _project_archive([(".", None), ("file", b"recovered")])
+    payloads.unpack_project(archive, destination)
+    assert destination.stat().st_mode & 0o777 == 0o700
+    assert (destination / "file").read_bytes() == b"recovered"
+    with pytest.raises(FileExistsError):
+        payloads.unpack_project(_project_archive([("file", b"replacement")]), destination)
+    assert (destination / "file").read_bytes() == b"recovered"
+
+
+@pytest.mark.parametrize("name", [
+    r"dir\file", "C:relative", "c:/absolute", "/absolute", "bad\nname", "bad\x7fname",
+    "dir//file", "dir/./file", "dir/../file", "file/",
+])
+def test_project_portable_path_boundaries_refuse_before_publication(tmp_path, name):
+    """No host may reinterpret an archive path as a drive, escape or control name."""
+    destination = tmp_path / "out"
+    with pytest.raises(ValueError, match="unsafe path"):
+        payloads.unpack_project(_project_archive([(name, b"data")]), destination)
+    assert not destination.exists()
+
+
+@pytest.mark.parametrize("name", ["", ".", "./"])
+def test_project_root_metadata_is_inert(tmp_path, name):
+    """Conventional tar root records neither create members nor widen root modes."""
+    destination = tmp_path / "out"
+    payloads.unpack_project(_project_archive([(name, None), ("file", b"data")]), destination)
+    assert destination.stat().st_mode & 0o777 == 0o700
+    assert (destination / "file").read_bytes() == b"data"
+
+
+@pytest.mark.parametrize("budget", [-1, True, 1.5])
+def test_project_content_budget_requires_a_nonnegative_integer(tmp_path, budget):
+    """Both boundaries reject invalid budgets rather than interpreting them as sizes."""
+    root = tmp_path / "source"
+    root.mkdir()
+    with pytest.raises(payloads.ProjectPackError):
+        payloads.pack_project(root, max_uncompressed=budget)
+    destination = tmp_path / "out"
+    with pytest.raises(ValueError):
+        payloads.unpack_project(_project_archive([]), destination, max_uncompressed=budget)
+    assert not destination.exists()
+
+
+def test_project_content_budget_is_inclusive_and_symmetric(tmp_path):
+    """An exact byte budget works for both author and reader; one byte less refuses."""
+    root = tmp_path / "source"
+    root.mkdir()
+    (root / "file").write_bytes(b"data")
+    with pytest.raises(payloads.ProjectPackError, match="decompression cap"):
+        payloads.pack_project(root, max_uncompressed=3)
+    blob = payloads.pack_project(root, max_uncompressed=4)
+    destination = tmp_path / "out"
+    with pytest.raises(ValueError, match="decompression cap"):
+        payloads.unpack_project(blob, destination, max_uncompressed=3)
+    assert not destination.exists()
+    payloads.unpack_project(blob, destination, max_uncompressed=4)
+    assert (destination / "file").read_bytes() == b"data"
+
+
+def test_global_pax_state_is_refused_before_tree_publication(tmp_path):
+    import io
+    import tarfile
+
+    encoded = io.BytesIO()
+    with tarfile.open(fileobj=encoded, mode="w:gz", format=tarfile.PAX_FORMAT,
+                      pax_headers={"comment": "global state"}) as archive:
+        for name in ("first", "second"):
+            archive.addfile(tarfile.TarInfo(name), io.BytesIO())
+    with pytest.raises(ValueError):
+        payloads.unpack_project(encoded.getvalue(), tmp_path / "out")
+    assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize("fault", ["size_override", "directory_body", "stacked", "concatenated_gzip"])
+def test_physical_and_effective_tar_offsets_cannot_disagree(tmp_path, fault):
+    import gzip
+    import tarfile
+
+    header = tarfile.TarInfo("outer")
+    header.size = 512
+    body = tarfile.TarInfo("smuggled").tobuf()
+    prefix = b""
+    if fault == "size_override":
+        pax = tarfile.TarInfo("pax")
+        pax.type, pax.size = tarfile.XHDTYPE, 9
+        prefix = pax.tobuf() + b"9 size=0\n" + bytes(503)
+    elif fault == "directory_body":
+        header.type = tarfile.DIRTYPE
+    elif fault == "stacked":
+        extension = tarfile.TarInfo("long")
+        extension.type, extension.size = tarfile.GNUTYPE_LONGNAME, 2
+        prefix = (extension.tobuf() + b"x\0" + bytes(510)) * 2
+    encoded = gzip.compress(prefix + header.tobuf() + body + bytes(1024), mtime=0)
+    if fault == "concatenated_gzip":
+        encoded = gzip.compress(b"", mtime=0) + encoded
+    with pytest.raises(ValueError):
+        payloads.unpack_project(encoded, tmp_path / "out")
+    assert not (tmp_path / "out").exists()
+
+
+def test_unicode_and_long_project_paths_still_roundtrip(tmp_path):
+    source = tmp_path / "source"
+    name = "résumé-" + "long" * 40
+    (source / name).mkdir(parents=True)
+    (source / name / "数据.txt").write_text("π", encoding="utf-8")
+    payloads.unpack_project(payloads.pack_project(source), tmp_path / "out")
+    assert (tmp_path / "out" / name / "数据.txt").read_text(encoding="utf-8") == "π"

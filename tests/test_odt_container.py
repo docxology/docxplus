@@ -15,7 +15,7 @@ import pytest
 
 from docxplus import crypto
 from docxplus.container import ContainerError
-from docxplus.odt import MIMETYPE_ODT
+from docxplus.odt import MIMETYPE_ODT, build_manifest_xml
 from docxplus.odt_container import OdtPlusBuilder, OdtPlusReader
 from docxplus.validate import validate_odt_bytes
 
@@ -81,10 +81,10 @@ def test_validator_rejects_a_package_whose_mimetype_is_not_first():
     with zipfile.ZipFile(buf, "w") as zf:
         zf.writestr("content.xml", b"<a/>")
         zf.writestr("mimetype", MIMETYPE_ODT)
-        zf.writestr("META-INF/manifest.xml", b"<m/>")
+        zf.writestr("META-INF/manifest.xml", build_manifest_xml([("content.xml", "text/xml")]))
     report = validate_odt_bytes(buf.getvalue())
     assert not report.ok
-    assert any("not 'mimetype'" in e for e in report.opc_errors)
+    assert report.opc_errors
 
 
 # -- intelligence contract: every sealing lineage -----------------------------
@@ -116,19 +116,19 @@ def test_multi_recipient_sealing_round_trip():
     assert reader.extract("packet", private_key=b_priv) == b"for two"
 
 
-def test_threshold_sealing_requires_quorum_and_verifiable_shares():
+def test_threshold_sealing_requires_quorum_and_checksummed_shares():
     from docxplus import shamir
 
     builder = OdtPlusBuilder().add_threshold("quorum", b"dead-man payload", k=2, n=3)
     data = builder.build()
     shares = builder.threshold_shares["quorum"]
-    assert all(shamir.is_verifiable(s) for s in shares)
+    assert all(shamir.is_checksummed(s) for s in shares)
 
     reader = OdtPlusReader.from_bytes(data)
     assert reader.extract("quorum", shares=shares[:2]) == b"dead-man payload"
 
     # The downgrade the OPC profile refuses must be refused here too.
-    downgraded = bytes([shares[0][1]]) + bytes(shares[0][shamir._VSS_HEADER:])
+    downgraded = bytes([shares[0][1]]) + bytes(shares[0][shamir._CHECKSUM_HEADER:])
     with pytest.raises(ContainerError):
         reader.extract("quorum", shares=[downgraded, shares[1]])
 
@@ -405,29 +405,29 @@ def test_validator_reports_unreadable_bytes_without_crashing():
 
 def test_validator_rejects_a_compressed_mimetype():
     data = _raw_odt(
-        {"META-INF/manifest.xml": b"<m/>", "content.xml": b"<c/>"}, stored=False
+        {"META-INF/manifest.xml": build_manifest_xml([("content.xml", "text/xml")]),
+         "content.xml": b"<c/>"}, stored=False
     )
     report = validate_odt_bytes(data)
     assert not report.ok
-    assert any("must be STORED" in e for e in report.opc_errors)
+    assert report.opc_errors
 
 
 def test_validator_rejects_a_wrong_mimetype_payload():
     data = _raw_odt(
-        {"META-INF/manifest.xml": b"<m/>", "content.xml": b"<c/>"},
+        {"META-INF/manifest.xml": build_manifest_xml([("content.xml", "text/xml")]),
+         "content.xml": b"<c/>"},
         mimetype=b"application/zip",
     )
     report = validate_odt_bytes(data)
     assert not report.ok
-    assert any("not the OpenDocument Text media type" in e for e in report.opc_errors)
+    assert report.opc_errors
 
 
 def test_validator_reports_missing_structural_parts():
     report = validate_odt_bytes(_raw_odt({}))
     assert not report.ok
-    joined = " ".join(report.opc_errors)
-    assert "missing META-INF/manifest.xml" in joined
-    assert "missing content.xml" in joined
+    assert report.opc_errors
 
 
 def test_validator_reports_a_part_absent_from_the_odf_manifest():
@@ -505,10 +505,11 @@ def test_validator_reports_a_merkle_root_that_disagrees_with_the_module_set():
 def test_reader_refuses_a_package_that_is_not_opendocument_text():
     """`to_bytes` always writes the ODT media type, so build the hostile ZIP directly."""
     data = _raw_odt(
-        {"META-INF/manifest.xml": b"<m/>", "content.xml": b"<c/>"},
+        {"META-INF/manifest.xml": build_manifest_xml([("content.xml", "text/xml")]),
+         "content.xml": b"<c/>"},
         mimetype=b"application/vnd.oasis.opendocument.spreadsheet",
     )
-    with pytest.raises(ContainerError, match="not an OpenDocument Text"):
+    with pytest.raises(ContainerError):
         OdtPlusReader.from_bytes(data)
 
 
@@ -605,3 +606,32 @@ def test_scan_caps_part_count():
     report, _ = intake.safe_open_odt(data, policy=intake.IntakePolicy(max_parts=2))
     assert report.oversized is True
     assert not report.ok
+
+
+def test_builder_preserves_existing_payload_names_and_explicitly_replaces_manifest():
+    from docxplus.odt import OdtPackage
+
+    first = OdtPlusBuilder().add_module("old", b"original").build()
+    base = OdtPackage.from_bytes(first)
+    original = base.parts["intelligence/payload1.dxp"]
+    private, public = crypto.generate_signing_key()
+    data = OdtPlusBuilder(base_package=base).add_module("new", b"replacement").sign(private).build()
+    reader = OdtPlusReader.from_bytes(data)
+    assert reader.package.parts["intelligence/payload1.dxp"] == original
+    assert reader.manifest.slot("new").location["part"] == "intelligence/payload2.dxp"
+    assert reader.extract("new") == b"replacement"
+    assert reader.verify_provenance(expected_public_key=public)
+
+
+@pytest.mark.parametrize("declaration", ["version", "manifest_type"])
+def test_odf_authority_declarations_are_surface_authenticated(declaration):
+    private, public = crypto.generate_signing_key()
+    reader = OdtPlusReader.from_bytes(
+        OdtPlusBuilder().add_module("m", b"payload").sign(private).build()
+    )
+    assert reader.verify_provenance(expected_public_key=public)
+    if declaration == "version":
+        reader.package.manifest_version = "1.2"
+    else:
+        reader.package.media_types["intelligence/manifest.json"] = "text/plain"
+    assert not reader.verify_provenance(expected_public_key=public)

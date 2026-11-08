@@ -1,5 +1,29 @@
 # DOCX and ODT: A Standards-First Technical Research Report (as of August 2026)
 
+## Implementation scope and component authority
+
+This literature/specification report is not a certificate that docxplus satisfies
+every cited standard. Software 2.0 / manifest format 3.0 checks selected structural,
+namespace, topology and signed-package invariants. Complete ISO/XSD/RNG conformance,
+Office acceptance and scientific reproducibility require different evidence.
+
+The emitted ODF surface targets 1.3. Its package authority is therefore
+[ODF 1.3 Part 2 (OASIS Standard, 27 April 2021)](https://docs.oasis-open.org/office/OpenDocument/v1.3/os/part2-packages/OpenDocument-v1.3-os-part2-packages.html),
+not a claim of universal 1.3/1.4 compatibility. Clauses 4.3 and 4.16.11/13/14
+permit file-entry preferred-view-mode, size and version attributes. Standard
+preferred-view modes are preserved/bound; implementation-defined QName modes need
+namespace context and are refused by the supported subset rather than discarded.
+
+The separate hybrid primitive APIs use ML-KEM-768 and ML-DSA-65. Verified component
+citations: NIST, *Module-Lattice-Based Key-Encapsulation Mechanism Standard*,
+[FIPS 203](https://csrc.nist.gov/pubs/fips/203/final), 13 August 2024,
+[DOI 10.6028/NIST.FIPS.203](https://doi.org/10.6028/NIST.FIPS.203); and NIST,
+*Module-Lattice-Based Digital Signature Standard*,
+[FIPS 204](https://csrc.nist.gov/pubs/fips/204/final), 13 August 2024,
+[DOI 10.6028/NIST.FIPS.204](https://doi.org/10.6028/NIST.FIPS.204). These support
+algorithm identities, not FIPS certification or a formal proof of docxplus's hybrid
+combiner. Normal document signing/sealing remains Ed25519/DXE2.
+
 ## Executive summary
 
 DOCX and ODT are both ZIP-packaged, XML-vocabulary word-processing formats, but they descend from different standardization cultures and encode different engineering trade-offs. DOCX is the WordprocessingML member of the Office Open XML (OOXML) family, standardized as ECMA-376 and ISO/IEC 29500, whose stated design goal is "to be capable of faithfully representing the pre-existing corpus of word-processing documents, spreadsheets and presentations that had been produced by the Microsoft Office applications (from Microsoft Office 97 to Microsoft Office 2008, inclusive)" ([ISO/IEC 29500-1:2016](https://www.iso.org/standard/71691.html)). ODT is the text-document member of the OpenDocument Format (ODF) family, standardized by OASIS and as ISO/IEC 26300, designed as an "XML-based, application-independent and platform-independent" format for authoring, editing, viewing, exchange and archiving ([ODF 1.4 Part 1](https://docs.oasis-open.org/office/OpenDocument/v1.4/OpenDocument-v1.4-part1-introduction.html)).

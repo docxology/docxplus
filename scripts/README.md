@@ -16,7 +16,7 @@ is the order.
 | `02_roundtrip_report.py` | reads that document back, verifies every module, writes `output/reports/roundtrip.json` | `build` |
 | `03_capacity_figure.py` | the per-channel capacity plot (needs matplotlib) | `figure` |
 | `04_dossier.py` | builds and verifies the self-verifying dossier — every sealing lineage in one document | `dossier` |
-| `05_living_manuscript.py` | the manuscript that carries and reproduces its own source | `living` |
+| `05_living_manuscript.py` | carries the selected repository tree and attests a dependency-free source-hash demonstration, not full-project reproduction | `living` |
 | `06_project_roundtrip.py` | a synthetic project tree, shaped to contain the awkward cases, through both profiles | `roundtrip` |
 | `07_template_roundtrip.py` | a **real** external repository through all four emitted formats, diffed file by file | `roundtrip` |
 
@@ -37,13 +37,21 @@ every other stage green.
 
 ## Why 06 and 07 both exist
 
-A synthetic tree can be shaped until it passes. A real one cannot. `06` carries a tree
-built specifically to contain the hard cases — an executable entrypoint, an empty
-directory, a zero-byte file, non-ASCII and spaced filenames — and checks 18 invariants
-including cross-profile nesting and byte-identical payload parity. `07` carries the
-docxology `template_code_project` (126 files, 13 directories) through `.docx`,
-`.docxplus`, `.odt`, and `.odtplus`, reads each back *from that name*, and diffs
-against the original. Both, every run.
+`06` carries a selected synthetic fixture containing an executable entrypoint,
+empty directory, zero-byte file and non-ASCII/spaced filenames; it checks the
+reported invariants, cross-profile nesting and payload parity. `07` carries the
+captured `template_code_project` snapshot through `.docx`, `.docxplus`, `.odt` and
+`.odtplus`, reading each name and comparing with its source. Inventory counts belong
+to the generated report, not a hardcoded example. Neither selection proves general
+fidelity. Committed reports are historical unless tied to a fresh source-bound run.
+
+Comparisons read the actual exported artifacts and enumerate both directions:
+extra extracted entries fail alongside missing/changed content, execute bits and
+empty directories. `reference_docs.build_reference_dossier()` returns one
+`ReferenceDossier` (serialized data and ephemeral verification credentials);
+`04_dossier.py` and manuscript tables use that specimen, not independent rebuilds.
+Its source uses Argon2id, nested annex default Scrypt; source extraction itself is
+not reproduction-attested. Living/synthetic recipes own their separate claims.
 
 ## Release validation
 
@@ -82,6 +90,14 @@ tree, excluding its venv/build/output/cache directories; it is read, not execute
 or released. Preserve file modes. The supervisor rechecks exhaustive inventories,
 digests and the acquired image before and after validation.
 
+An authorized repository-owned private lane can keep a byte-identical supervisor
+deployment, its independent source snapshots and its outputs in disjoint sibling
+directories. Retain `scripts/validate_release.py` and its checkout-relative
+`src/docxplus/archive_limits.py` companion in the deployment. Bind both deployed
+files to the tested docxplus snapshot; do not remove containment, inventory,
+privacy or runtime checks to accommodate a layout. Never use the live checkout as
+an input snapshot or hold a canonical lease around provisioning/compute.
+
 Given a captured manifest in `$MANIFEST`, a private output parent `$PRIVATE`, and
 explicit `$DOCKER_CONTEXT`, run the commands in
 [`../README.md`](../README.md#isolated-linux-release-validation).
@@ -97,6 +113,54 @@ bubblewrap even with the per-container seccomp exception. Choose a compatible
 isolated guest; do not change host policy, add capabilities or bypass production
 bubblewrap to make qualification pass.
 
+Docker's default nonempty `MaskedPaths` and `ReadonlyPaths` are also required.
+Some nested namespace configurations refuse bubblewrap's private proc mount under
+those outer restrictions. The default remains refusal, not automatic fallback.
+Only when needed inside an operator-controlled isolated **Linux rootless VM**, an
+operator may explicitly authorize a single provision-bound daemon:
+
+```bash
+python3 scripts/validate_release.py validate --inputs "$MANIFEST" \
+    --provision-record "$PRIVATE/provision-new/provision.json" \
+    --output "$PRIVATE/validation-unmasked-new" --docker-context "$DOCKER_CONTEXT" \
+    --allow-unmasked-procfs-for-daemon "$VERIFIED_DAEMON_ID"
+```
+
+Set `VERIFIED_DAEMON_ID` to the recorded `build.custody.daemon.ID` only after
+confirming that this is the intended isolated daemon. The supervisor independently
+rechecks its current identity: the option must exactly match it, the daemon must
+report Linux and `name=rootless` in `SecurityOptions`, and provisioning custody
+must still match. A wrong ID or ineligible daemon refuses before compute-container
+creation. This is a validate-only ID option, not a boolean switch, a Docker context
+alias, or permission to change provisioning or host/global policy.
+
+The selected compute container alone receives
+`--security-opt systempaths=unconfined`. This removes Docker's outer proc **and
+kernel-path** masking/read-only defenses, not just the obstruction to private proc
+mounting; some outer read restrictions are lost. Validation requires the actual
+unmasked path fields and exact selected security options, and records the profile
+and authorized daemon identity in its lifecycle/result evidence. It still checks
+every other control before/after start: UID 1000, zero capabilities,
+no-new-privileges, network-none, read-only root/source/runtime, private PID
+namespace, no host mounts/sockets/credentials, resource/lifetime bounds,
+source/image custody and stop/reap ownership. Production bubblewrap remains
+mandatory with private user/PID/network namespaces and private procfs; do not
+disable it, add capabilities/privileged mode, or relax host policy.
+
+`qualification.json` must contain actual kernel read-only `/sys` evidence in
+`read_only_filesystems` and `kernel_write_refusals` for
+`/proc/sys/kernel/hostname`, `/proc/sysrq-trigger` and
+`/sys/kernel/uevent_helper`. These probes use only `O_WRONLY | O_CLOEXEC`, with no
+create, truncate or write. Only actual `EACCES`, `EPERM`, `EROFS` or `ENOENT`
+refusals qualify; a successful open is closed and fails qualification. The
+receipt also requires the unchanged network/write denials, real production
+private PID/proc, ancestor-root invisibility and signal denial, positive
+project/scratch writes and successful-leader detached-child teardown. Ancestor
+descriptors are closed before exec (close-on-exec, no descriptor passing), which
+is a code property rather than a probe. These representative probes are
+additional evidence, not proof that all removed outer read restrictions are
+preserved or certification of arbitrary host kernels or macOS sandbox guarantees.
+
 Evidence streams out before tmpfs disappears: qualification, full logs, coverage,
 real CLI cases, complete `run.sh all`, regenerated PDF/figures/template reports,
 wheel/sdist and installed-wheel roundtrips. The host verifies bounded archive
@@ -106,6 +170,30 @@ source-drift checks and a new native source-integration lease.
 Installed-wheel checks use the wheel's real console script and fresh venv Python.
 The script is interpreted explicitly because writable `/work` remains `noexec`;
 the workflow never grants executable scratch storage to make a smoke test pass.
+
+### Office render-save-render receipt
+
+The installed-wheel gate builds, validates and extracts every non-media DOCX
+channel (custom XML, package parts, properties and MCE), plus ODT package parts.
+It exports real DOCX/ODT, renders each through LibreOffice, saves through Writer's
+profile-specific filter, and renders the saved package. Each invocation owns private
+profile/home/cache/temp state. Both PDFs must retain visible text sentinels, omit
+hidden payload text and yield nonblank raster previews.
+`office/evidence.json` uses `docxplus.release-office.v1`, recording actual tool
+versions/SHA-256 identities and hashes/sizes of original/saved documents, PDFs,
+extracted text and PNG previews. The release gate also requires genuine text and
+Python/Rust carrier interoperability cases rather than skipped cases.
+The host additionally compares all sixteen exported artifact hashes/sizes against
+its own collected inventory, original documents against installed-wheel inputs,
+tool versions against the qualified runtime, and text against the visible/hidden
+sentinels (including hidden base64). Both actual exported JUnit suites must contain
+the required Office cases without duplicate identities, skips, errors or failures.
+
+This qualifies only the recorded application/version/fixtures and visible
+rendering. **Payload survival and provenance after an Office edit are not asserted**;
+saving can strip modules or invalidate signatures. A current-source successful
+receipt is still required before claiming qualification. No fresh Office or Linux
+custody pass is implied by these instructions.
 
 ## Outputs
 

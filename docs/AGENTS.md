@@ -1,10 +1,9 @@
 # docs/ — reference documentation
 
-The index is [`README.md`](README.md), and it is enforced: `tests/test_docs.py` fails
-the build if a document here is not linked from it, or if it links something that does
-not exist. This file used to carry a second, hand-maintained list of the same
-documents; it drifted — omitting `manuscript-pipeline.md` — and is gone. Add a
-document, add it to the index.
+The documentation index is [`README.md`](README.md). Add a document, add it to
+the index, and keep relative links live. Behavioral rendering/reference/diagnostic
+checks matter; do not add source-text assertions to freeze incidental wording,
+inventory counts or defaults.
 
 ## What each document owns
 
@@ -39,8 +38,7 @@ Ownership matters more than contents, because it decides where a fact belongs.
 - **Record negative results.** `redteam-audit.md` keeps work that was built, measured,
   and withdrawn, and keeps the occasions when an earlier fix turned out to be
   incomplete. That record is a finding, not a log, and it stays.
-- **Every document opens with an H1**, and every relative link resolves. Both are
-  enforced.
+- **Every document opens with an H1**, and every relative link resolves.
 - **The project is `docxplus`.** Only `redteam-audit.md` may quote the pre-rename name,
   because it records the rename as a finding.
 - Prose is timeless present-state, told once. No session narration.

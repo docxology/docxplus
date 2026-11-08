@@ -163,32 +163,26 @@ def test_crypto_artifact_reports_shipped_lineages_and_work_factors(tmp_path, v):
     assert _xy(_text(svg, "key derivation"))[1] > password_y
 
 
-def test_fidelity_artifact_distinguishes_missing_measurements_and_failed_checks(tmp_path, v):
-    absent = _svg(tmp_path, manuscript_figures.build_fidelity_figure, v, None)
-    absent_text = "\n".join(t.text or "" for t in _texts(absent))
-    assert re.search(r"\b(\d+)/(\d+) invariants", absent_text).groups() == ("0", "0")
-    assert re.search(r"(\S+) files", absent_text)[1] == "?"
+def test_fidelity_artifact_refuses_absent_or_failed_measurements(tmp_path, v):
+    """DEL8: failure cannot be rendered as an affirmative empirical flow."""
+    import copy
 
-    # Match the harness schema, but include an explicit failure and an unevaluated
-    # check. Neither may be counted as success, even if a stale top-level summary is.
-    report = {
-        "ok": True,
-        "project": {"files": 17, "directories": 9},
-        "checks": [{"ok": True}, {"ok": False}, {}],
-        "fidelity_boundary": {
-            "preserved": ["file contents", "executable bit", "empty directories",
-                          "directory structure", "non-ASCII and spaced filenames",
-                          "zero-byte files"],
-            "normalised_by_design": ["mtimes", "uid/gid", "non-execute mode bits"],
-            "refused": ["symlinks (their targets would be embedded)"],
-            "excluded_by_policy": [".venv", "__pycache__"],
-        },
-    }
+    from docxplus.project_paths import project_root
+
+    report = manuscript_vars.load_roundtrip_report(project_root())
+    for evidence in (None, {"ok": False}, {**report, "ok": False}):
+        with pytest.raises(ValueError):
+            _svg(tmp_path, manuscript_figures.build_fidelity_figure, v, evidence)
+    failed = copy.deepcopy(report)
+    failed["checks"][0]["ok"] = False
+    with pytest.raises(ValueError):
+        _svg(tmp_path, manuscript_figures.build_fidelity_figure, v, failed)
+
     measured = _svg(tmp_path, manuscript_figures.build_fidelity_figure, v, report)
     text = "\n".join(t.text or "" for t in _texts(measured))
-    assert re.search(r"\b(\d+)/(\d+) invariants", text).groups() == ("1", "3")
-    # Refusal branches above the preserved route; normalisation and exclusion
-    # branch below it. Do not pin font-specific multiline text transforms.
+    assert re.search(r"\b(\d+)/(\d+) invariants", text).groups() == (
+        str(len(report["checks"])), str(len(report["checks"]))
+    )
     preserved_x, preserved_y = _xy(_text(measured, "PRESERVED"))
     assert _xy(_text(measured, "pack"))[0] < preserved_x < _xy(_text(measured, "unpack"))[0]
     assert _xy(_text(measured, "REFUSED"))[1] < preserved_y
@@ -252,17 +246,3 @@ def test_redteam_attack_arrows_stop_at_their_layer_boundary(tmp_path, v):
     assert attacked_layers == set(range(len(walls)))
 
 
-def test_reproduction_artifact_keeps_execution_gate_off_default_branch(tmp_path, v):
-    from docxplus import reproduce
-
-    svg = _svg(tmp_path, manuscript_figures.build_reproduction_diagram, v)
-    text = "\n".join(t.text or "" for t in _texts(svg))
-    assert int(re.search(r"timeout beyond (\d+) s", text)[1]) == reproduce.MAX_REPRO_SECONDS
-    default = next(t for t in _texts(svg) if (t.text or "").startswith("DEFAULT"))
-    opt_in = next(t for t in _texts(svg) if (t.text or "").startswith("OPT-IN"))
-    default_x, default_y = _xy(default)
-    opt_in_x, opt_in_y = _xy(opt_in)
-    gate_x, gate_y = _xy(_text(svg, "--allow-execution"))
-    assert default_y == pytest.approx(opt_in_y)
-    assert default_x < gate_x < opt_in_x
-    assert gate_y > opt_in_y

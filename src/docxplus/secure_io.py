@@ -21,6 +21,7 @@ ordinary use — so that caller opts into replacement explicitly.
 from __future__ import annotations
 
 import os
+import tempfile
 from pathlib import Path
 
 #: Owner read/write only. The mode a private key has on every system that takes
@@ -41,8 +42,22 @@ def write_secret(path: str | Path, data: bytes | str, *, overwrite: bool = False
     """
     path = Path(path)
     payload = data.encode("utf-8") if isinstance(data, str) else data
+    if overwrite:
+        # Never truncate an existing inode: it may be shared, world-readable, or
+        # a symlink. Publish a complete private file in one atomic replacement.
+        descriptor, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+        temporary = Path(name)
+        try:
+            with os.fdopen(descriptor, "wb") as stream:
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+        return path
 
-    flags = os.O_WRONLY | os.O_CREAT | (os.O_TRUNC if overwrite else os.O_EXCL)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     try:
         handle = os.open(path, flags, SECRET_MODE)
     except FileExistsError:
@@ -56,9 +71,6 @@ def write_secret(path: str | Path, data: bytes | str, *, overwrite: bool = False
     except BaseException:
         path.unlink(missing_ok=True)
         raise
-    # An existing file reopened with O_TRUNC keeps its old mode, so tighten it.
-    if overwrite:
-        os.chmod(path, SECRET_MODE)
     return path
 
 

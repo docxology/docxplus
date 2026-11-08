@@ -1,5 +1,5 @@
-"""docxplus — a byte-valid OOXML .docx that also carries a modular, signed,
-encrypted intelligence layer through spec-sanctioned side-channels.
+"""docxplus — DOCX and ODT containers with modular, signed and payload-encrypted
+intelligence layers through standards-defined package extension points.
 
 Public surface:
 
@@ -26,7 +26,7 @@ from .reproduce import (
 from .shamir import combine_weighted, split_weighted
 from .validate import assert_valid, validate_bytes, validate_odt_bytes
 
-__version__ = "1.1.0"
+__version__ = "2.0.0"
 
 __all__ = [
     "DocxPlusBuilder",

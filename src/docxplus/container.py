@@ -7,7 +7,7 @@ v0.2 capabilities (see docs/design-rationale.md, docs/cookbook.md):
   (a nested container), via the :mod:`payloads` registry.
 * **Sealing modes** — plain, ``password`` (AES-GCM/PBKDF2), ``recipients`` (X25519
   multi-recipient), ``threshold`` (Shamir k-of-n over the content key), ``decoy``
-  (two secrets under two passwords for plausible deniability).
+  (two secrets under two passwords with a common visible framing policy).
 * **Provenance** — a signed Merkle root binds the whole module set.
 
 The surface .docx stays a conforming, openable Office document throughout; sealing
@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from . import channels as channel_registry
 from . import crypto, payloads, shamir
@@ -25,8 +26,11 @@ from .manifest import Manifest, read_manifest, write_manifest
 from .opc import OpcPackage, read_package
 from .wordml import new_base_document
 
-#: The sealing lineages a module can use (decoy is recorded as ``password`` so it is
-#: indistinguishable). Single source of truth for docs/manuscript generation.
+if TYPE_CHECKING:
+    from .odt_container import OdtPlusReader
+
+#: The sealing lineages a module can use; decoys have no separate manifest marker.
+#: Shared framing alone is not a universal plausible-deniability guarantee.
 SEALING_LINEAGES = ("plain", "password", "recipients", "threshold")
 
 
@@ -58,54 +62,26 @@ class _Pending:
 
 
 def _compute_surface_digest(pkg: OpcPackage) -> str:
-    """Digest everything a consumer could render or follow, except the manifest itself.
+    """Bind the complete OPC graph using the unambiguous format-3 transcript."""
+    import hashlib
 
-    **This binds the part graph, not a list of filenames.** The previous version
-    selected parts by name prefix (`word/document.xml`, `word/header*`, and so on),
-    which put a naming convention in the trust path and left a forgery open: OPC
-    decides which part is the main story through the *officeDocument relationship*,
-    not the filename. An attacker could add `word/document2.xml` carrying different
-    text, repoint that relationship at it, and leave every signed byte untouched.
-    `verify_provenance(expected_public_key=trusted)` returned True while a renderer
-    displayed the attacker's text — the signature answered "did the key-holder attest
-    these bytes under this filename", which is not the question any reader is asking.
-
-    So the digest now covers, in sorted order:
-
-    * every part in the package and its bytes;
-    * the content-type map, which decides what each part *is*;
-    * the relationship graph, which decides which part a consumer actually follows.
-
-    Only ``intelligence/manifest.json`` and the relationship pointing at it are
-    excluded, because the manifest carries this digest and cannot contain itself.
-    Payload parts are covered too; that overlaps the Merkle root harmlessly, and
-    "everything except one named exception" is a rule that survives a new channel
-    being added, which a prefix list demonstrably did not.
-    """
     from .manifest import MANIFEST_PART
+    from .opc import _surface_hasher, _surface_record
 
-    chunks: list[bytes] = []
-    for name in sorted(pkg.parts):
-        if name == MANIFEST_PART:
-            continue
-        chunks.append(b"P\x00" + name.encode("utf-8") + b"\x00" + pkg.parts[name])
-
+    h = _surface_hasher(b"OPC")
+    for name, data in sorted(pkg.parts.items()):
+        if name != MANIFEST_PART:
+            _surface_record(h, b"P", name.encode(), len(data).to_bytes(8, "big"),
+                            hashlib.sha256(data).digest())
     for ext, ctype in sorted(pkg.default_types.items()):
-        chunks.append(b"D\x00" + ext.encode("utf-8") + b"\x00" + ctype.encode("utf-8"))
+        _surface_record(h, b"D", ext.encode(), ctype.encode())
     for part, ctype in sorted(pkg.override_types.items()):
-        if part.lstrip("/") == MANIFEST_PART:
-            continue
-        chunks.append(b"O\x00" + part.encode("utf-8") + b"\x00" + ctype.encode("utf-8"))
-
-    for source in sorted(pkg.relationships):
-        for rel in sorted(pkg.relationships[source], key=lambda r: (r.type, r.target, r.id)):
-            if rel.target.lstrip("/") == MANIFEST_PART:
-                continue
-            chunks.append(
-                b"R\x00" + source.encode("utf-8") + b"\x00" + rel.type.encode("utf-8")
-                + b"\x00" + rel.target.encode("utf-8") + b"\x00" + rel.mode.encode("utf-8")
-            )
-    return crypto.digest(b"\x00".join(chunks))
+        _surface_record(h, b"O", part.encode(), ctype.encode())
+    for source, rels in sorted(pkg.relationships.items()):
+        for rel in sorted(rels, key=lambda r: (r.id, r.type, r.target, r.mode)):
+            _surface_record(h, b"R", *(v.encode() for v in
+                            (source, rel.id, rel.type, rel.target, rel.mode)))
+    return h.hexdigest()
 
 
 @dataclass
@@ -199,7 +175,11 @@ class DocxPlusBuilder:
             # working tree, so the attested digest matches exactly what a reader
             # reproduces (the packed subset — no .venv, output/, caches).
             with tempfile.TemporaryDirectory() as td:
-                clean = payloads.unpack_project(blob, Path(td) / "proj")
+                clean = payloads.unpack_project(
+                    blob, Path(td) / "proj",
+                    max_uncompressed=(payloads.MAX_PROJECT_UNCOMPRESSED
+                                      if max_uncompressed is None else max_uncompressed),
+                )
                 self._pending[-1].reproduction = _repro.attest(clean, spec)
         return self
 
@@ -223,7 +203,7 @@ class DocxPlusBuilder:
         decoy_password: str, channel_id: str = "package_part", payload_type: str = "bytes",
         kdf: str = "scrypt",
     ) -> DocxPlusBuilder:
-        """Two payloads under two passwords; neither reveals the other."""
+        """Two independently encrypted payloads sharing visible KDF/size policy."""
         if channel_id not in channel_registry.available_channels():
             raise ContainerError(f"unknown channel: {channel_id}")
         if any(m.slot == slot for m in self._pending):
@@ -236,13 +216,9 @@ class DocxPlusBuilder:
         return self
 
     def sign(self, private_key: bytes) -> DocxPlusBuilder:
-        """Sign the manifest (its Merkle-bound canonical body) with Ed25519."""
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
+        """Sign the manifest with the strict key family's actual signature scheme."""
+        self._public_key = crypto.signing_public_key(private_key)
         self._private_key = private_key
-        self._public_key = Ed25519PrivateKey.from_private_bytes(
-            private_key
-        ).public_key().public_bytes_raw()
         return self
 
     def add_cosigner(self, private_key: bytes) -> DocxPlusBuilder:
@@ -252,6 +228,7 @@ class DocxPlusBuilder:
 
     # -- build -------------------------------------------------------------
     def build(self) -> bytes:
+        cosignatures = _cosigner_descriptors(self._cosigners)
         pkg = self.base_package or new_base_document(
             self.paragraphs, title=self.title, creator=self.creator
         )
@@ -262,22 +239,19 @@ class DocxPlusBuilder:
             record = self._place(pkg, m)
             manifest.add(record)
 
-        # Bind all visible document text and story parts into the signed body:
-        # covers document.xml, headers, footers, footnotes, endnotes, and comments.
+        # Install manifest authority before hashing; exclude only manifest bytes.
+        write_manifest(pkg, manifest)
         manifest.surface_digest = _compute_surface_digest(pkg)
 
+        if self._public_key is not None:
+            manifest.algorithm = crypto.signing_algorithm(self._public_key)
+        manifest.cosignatures = cosignatures
         body = manifest.canonical_body()
         if self._private_key is not None and self._public_key is not None:
             manifest.public_key = self._public_key.hex()
             manifest.signature = crypto.sign(body, self._private_key).hex()
-
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
-        for priv in self._cosigners:
-            pub = Ed25519PrivateKey.from_private_bytes(priv).public_key().public_bytes_raw()
-            manifest.cosignatures.append(
-                {"public_key": pub.hex(), "value": crypto.sign(body, priv).hex()}
-            )
+        for entry, priv in zip(manifest.cosignatures, self._cosigners, strict=True):
+            entry["value"] = crypto.sign(body, priv).hex()
 
         write_manifest(pkg, manifest)
         return pkg.to_bytes()
@@ -311,24 +285,23 @@ def seal_module(m: _Pending, shares_sink: dict[str, list[bytes]]) -> tuple[bytes
     aad = m.slot.encode("utf-8")  # bind every ciphertext to its module slot
 
     if m.decoy is not None:
-        # A decoy is a password module carrying two envelopes; the manifest
-        # records mode "password" so it is indistinguishable from an ordinary
-        # encrypted module (the old "decoy" label advertised the hidden payload).
+        # Both frames use one visible KDF and size bucket, as ordinary modules do.
+        # This limited policy is not a universal plausible-deniability guarantee.
         real, real_pw, decoy, decoy_pw = m.decoy
+        real_bytes, decoy_bytes = ptype.pack(real), ptype.pack(decoy)
+        size = _password_bucket(max(len(real_bytes), len(decoy_bytes)))
         sealed = _frame_seq([
-            crypto.encrypt(ptype.pack(real), real_pw, aad=aad, kdf=m.kdf),
-            crypto.encrypt(ptype.pack(decoy), decoy_pw, aad=aad, kdf=m.kdf),
+            crypto.encrypt(_pad_password(real_bytes, size), real_pw, aad=aad, kdf=m.kdf),
+            crypto.encrypt(_pad_password(decoy_bytes, size), decoy_pw, aad=aad, kdf=m.kdf),
         ])
         return sealed, {"mode": "password"}
 
     plaintext = ptype.pack(m.obj)
     if m.password is not None:
-        # Pad with an undecryptable chaff frame so an ordinary password module
-        # carries exactly two frames, byte-indistinguishable from a decoy module.
-        # An observer cannot prove the second frame is (or is not) a hidden
-        # payload — that is the deniability the format offers.
+        size = _password_bucket(len(plaintext))
         return _frame_seq([
-            crypto.encrypt(plaintext, m.password, aad=aad, kdf=m.kdf), _chaff(aad)
+            crypto.encrypt(_pad_password(plaintext, size), m.password, aad=aad, kdf=m.kdf),
+            _chaff(aad, size=size, kdf=m.kdf),
         ]), {"mode": "password"}
     if m.recipients is not None:
         # Record neither identities nor count — the manifest must not leak the
@@ -344,11 +317,12 @@ def seal_module(m: _Pending, shares_sink: dict[str, list[bytes]]) -> tuple[bytes
         k, n = m.threshold
         content_key = _random_key()
         sealed = crypto.encrypt_with_key(plaintext, content_key, aad=aad)
-        # Issue VSS-tagged shares and record that fact in the manifest. The
-        # manifest is signed, so `vss` cannot be flipped off to force the reader
-        # to accept a header-stripped (downgraded) share.
-        shares_sink[m.slot] = shamir.split(content_key, k, n, verifiable=True)
-        return sealed, {"mode": "threshold", "k": k, "n": n, "vss": True}
+        # Checksums detect corruption; signed full-share commitments bind issuance.
+        shares_sink[m.slot] = shamir.split(content_key, k, n, checksummed=True)
+        return sealed, {
+            "mode": "threshold", "k": k, "n": n, "checksummed_shares": True,
+            "share_digests": [crypto.digest(share) for share in shares_sink[m.slot]],
+        }
     return plaintext, {"mode": "plain"}
 
 
@@ -411,7 +385,8 @@ class DocxPlusReader:
         else:
             plaintext = self._unseal(
                 slot, mode, sealed, aad, password, private_key, shares,
-                require_vss=bool(record.sealing.get("vss", False)),
+                require_checksum=bool(record.sealing.get("checksummed_shares", False)),
+                share_digests=record.sealing.get("share_digests"),
             )
 
         if as_object:
@@ -419,7 +394,8 @@ class DocxPlusReader:
         return plaintext
 
     def _unseal(
-        self, slot, mode, sealed, aad, password, private_key, shares, *, require_vss=False
+        self, slot, mode, sealed, aad, password, private_key, shares, *,
+        require_checksum=False, share_digests=None,
     ) -> bytes:
         """Decrypt a sealed module, converting any crypto failure to ContainerError.
 
@@ -437,7 +413,11 @@ class DocxPlusReader:
             if mode == "recipients":
                 return crypto.unseal_multi(sealed, private_key, aad=aad)
             if mode == "threshold":
-                key = shamir.combine(shares, require_verifiable=require_vss)
+                if not isinstance(share_digests, list) or not share_digests:
+                    raise ContainerError("threshold module missing signed share commitments")
+                if any(crypto.digest(share) not in share_digests for share in shares):
+                    raise ContainerError("threshold share does not match signed commitment")
+                key = shamir.combine(shares, require_checksum=require_checksum)
                 return crypto.decrypt_with_key(sealed, key, aad=aad)
         except ContainerError:
             raise
@@ -445,13 +425,16 @@ class DocxPlusReader:
             raise ContainerError(f"cannot open module {slot!r}: {exc}") from exc
         raise ContainerError(f"unknown sealing mode: {mode}")  # pragma: no cover
 
-    def extract_project(self, slot: str, dest: str | Path, **creds) -> Path:
+    def extract_project(
+        self, slot: str, dest: str | Path, *,
+        max_uncompressed: int = payloads.MAX_PROJECT_UNCOMPRESSED, **creds,
+    ) -> Path:
         """Recover a ``project`` module and unpack it into ``dest``."""
         record = self._record(slot)
         if record.payload_type != "project":
             raise ContainerError(f"module {slot!r} is not a project payload")
         blob = self.extract(slot, **creds)
-        return payloads.unpack_project(blob, Path(dest))
+        return payloads.unpack_project(blob, Path(dest), max_uncompressed=max_uncompressed)
 
     #: Guards against a maliciously deep matryoshka chain exhausting resources.
     MAX_NEST_DEPTH = 32
@@ -467,48 +450,48 @@ class DocxPlusReader:
         return channel_registry.get_channel(record.channel).extract(self.package, record)
 
     def verify_reproduction(self, slot: str, expected_public_key: bytes | None = None) -> dict:
-        """Cryptographically verify a project module's reproduction attestation —
-        **executing nothing**. Confirms an attestation exists, that the signature
-        binds it to exactly these carried bytes and the visible text, and (when
-        ``expected_public_key`` is given) that a trusted key signed it.
+        """Check an attestation without executing code.
 
-        Returns ``{attested, signed, verified, attestation|unverified_attestation}``.
-        ``verified`` is the load-bearing field: an attested claim is trustworthy only
-        when ``verified`` is true. This is the default trust path — the reader relies
-        on the signer's attested run without executing anything.
+        Self-consistency binds intact carried bytes and the self-asserted signer.
+        Authenticity additionally requires a caller-pinned signing key.
         """
         record = self._record(slot)
         att = record.reproduction
-        signed = self.verify_provenance(expected_public_key)
+        signed = self.verify_provenance()
         # Bind the attestation to the ACTUAL carried bytes: the signature covers
         # record.digest, but the stored bytes could have been swapped post-signing —
         # in which case the signature would already fail, but confirm it here so a
         # "verified" verdict never rides on unread bytes.
         stored_ok = crypto.digest(self._stored_bytes(record)) == record.digest
-        verified = bool(signed and stored_ok)
+        self_consistent = bool(att and signed and stored_ok)
+        verified = bool(
+            self_consistent and expected_public_key is not None
+            and _key_matches(self.manifest.public_key, expected_public_key)
+        )
         if not att:
             # "verified" must never read as true for a module carrying no attestation:
             # a caller checking that field alone would conclude a reproduction claim
             # was validated when none was ever made.
-            return {"attested": False, "signed": signed, "verified": False}
+            return {
+                "attested": False, "signed": signed, "self_consistent": False,
+                "authentic": False, "verified": False,
+            }
         result = {
             "attested": True,
             "signed": signed,
-            "verified": verified,  # signature valid (optionally to a trusted key) AND bytes intact
+            "self_consistent": self_consistent,
+            "authentic": verified,
+            "verified": verified,
         }
         # Only surface the attested claim as bound when it is cryptographically
         # verified; otherwise the digest/command are self-asserted and untrusted.
         key = "attestation" if verified else "unverified_attestation"
-        result[key] = {
-            "output_digest": att.get("output_digest", ""),
-            "command": att.get("command", []),
-            "toolchain": att.get("toolchain", {}),
-        }
+        result[key] = dict(att)
         return result
 
     def reproduce(self, slot: str, dest: str | Path, *, allow_execution: bool = False, **creds) -> dict:
         """OPT-IN, EXECUTES CARRIED CODE. Recover the project and re-run its attested
-        command in a best-effort hermetic sandbox, comparing output digests.
+        command in a best-effort sandbox, comparing output digests.
 
         This runs code authored by whoever built the document. Call it only with
         ``allow_execution=True`` and only in an environment you are willing to run
@@ -529,7 +512,7 @@ class DocxPlusReader:
 
         return _repro.reproduce_and_compare(project_dir, att)
 
-    def open_nested(self, slot: str, **creds) -> DocxPlusReader:
+    def open_nested(self, slot: str, **creds) -> DocxPlusReader | OdtPlusReader:
         """Recover a nested ``docxplus`` module and return a reader over it.
 
         Depth is tracked across the chain so a hostile deeply-nested document
@@ -540,7 +523,9 @@ class DocxPlusReader:
         record = self._record(slot)
         if record.payload_type != "docxplus":
             raise ContainerError(f"module {slot!r} is not a nested document")
-        child = DocxPlusReader.from_bytes(self.extract(slot, **creds))
+        from .odt_container import open_document
+
+        child = open_document(self.extract(slot, **creds))
         child._nest_depth = self._nest_depth + 1
         return child
 
@@ -549,7 +534,7 @@ class DocxPlusReader:
         return self.manifest.merkle_root()
 
     def signer(self) -> str:
-        """The hex Ed25519 public key that signed the manifest (``""`` if unsigned).
+        """The hex signing public key that signed the manifest (``""`` if unsigned).
 
         This key is *self-asserted* — it is carried inside the manifest. A valid
         signature proves the manifest was signed by whoever holds this key, not that
@@ -646,63 +631,102 @@ def _key_matches(manifest_key_hex: str, expected_public_key: bytes) -> bool:
         return False
 
 
+def _cosigner_descriptors(private_keys: list[bytes]) -> list[dict[str, str]]:
+    """Validate identities before mutating a base package or publishing bytes."""
+    entries, seen = [], set()
+    for private_key in private_keys:
+        public = crypto.signing_public_key(private_key)
+        if public in seen:
+            raise ContainerError("duplicate cosigner identity")
+        seen.add(public)
+        entries.append({"public_key": public.hex(), "algorithm": crypto.signing_algorithm(public)})
+    return entries
+
+
 def _frame_seq(envelopes: list[bytes]) -> bytes:
-    """Frame one-or-more envelopes as ``[u32 len | envelope]…`` (self-delimiting)."""
+    """Frame exactly two password envelopes with explicit u32 lengths."""
+    if len(envelopes) != 2:
+        raise ContainerError("password modules require exactly two frames")
     return b"".join(len(e).to_bytes(4, "big") + e for e in envelopes)
 
 
-def _chaff(aad: bytes) -> bytes:
-    """A well-formed but undecryptable envelope: a random payload under a random,
-    discarded password. Indistinguishable from a real second envelope."""
+def _password_bucket(length: int) -> int:
+    """Common visible power-of-two size policy for ordinary and decoy frames."""
+    return max(256, 1 << (length + 7).bit_length())
+
+
+def _pad_password(plaintext: bytes, size: int) -> bytes:
     import secrets
 
-    size = 16 + secrets.randbelow(240)
-    return crypto.encrypt(secrets.token_bytes(size), secrets.token_hex(16), aad=aad)
+    return (len(plaintext).to_bytes(8, "big") + plaintext
+            + secrets.token_bytes(size - 8 - len(plaintext)))
+
+
+def _unpad_password(plaintext: bytes) -> bytes:
+    if len(plaintext) < 256 or len(plaintext) & (len(plaintext) - 1):
+        raise ContainerError("invalid password padding bucket")
+    length = int.from_bytes(plaintext[:8], "big")
+    if length > len(plaintext) - 8:
+        raise ContainerError("invalid password plaintext length")
+    return plaintext[8:8 + length]
+
+
+def _chaff(aad: bytes, *, size: int = 256, kdf: str = "scrypt") -> bytes:
+    """Encrypt common-policy padding under a discarded random password."""
+    import secrets
+
+    return crypto.encrypt(_pad_password(b"", size), secrets.token_hex(32), aad=aad, kdf=kdf)
 
 
 def _iter_frames(blob: bytes):
+    """Admit all framing and envelopes before yielding anything for KDF work."""
+    from .opc import MAX_ENTRY_BYTES
+
+    frames: list[bytes] = []
+    envelopes = []
     i = 0
-    while i < len(blob):
-        length = int.from_bytes(blob[i : i + 4], "big")
+    for _ in range(2):
+        if len(blob) - i < 4:
+            raise ContainerError("password modules require exactly two complete frames")
+        length = int.from_bytes(blob[i:i + 4], "big")
         i += 4
-        yield blob[i : i + length]
+        if not 0 < length <= MAX_ENTRY_BYTES or length > len(blob) - i:
+            raise ContainerError("invalid password frame length")
+        frame = blob[i:i + length]
         i += length
+        try:
+            envelope = crypto.validate_password_envelope(frame)
+        except ValueError as exc:
+            raise ContainerError(f"invalid password envelope: {exc}") from exc
+        bucket = len(envelope.ciphertext) - 16
+        if bucket < 256 or bucket & (bucket - 1):
+            raise ContainerError("invalid password frame padding bucket")
+        frames.append(frame)
+        envelopes.append(envelope)
+    if i != len(blob):
+        raise ContainerError("trailing password frame data")
+    first, second = envelopes
+    if (first.kdf_id, first.params, len(first.ciphertext)) != (
+        second.kdf_id, second.params, len(second.ciphertext)
+    ):
+        raise ContainerError("password frames must share KDF and padding policy")
+    yield from frames
 
 
 def _open_password_frames(sealed: bytes, password: str, aad: bytes) -> bytes:
-    """Try **every** framed envelope with ``password``; return the one that opens.
-
-    A single-secret module has two frames — a real payload and undecryptable chaff —
-    and a decoy has two real ones under different passwords. They are identical in
-    the manifest and their sizes are drawn from overlapping ranges, so nothing static
-    separates them.
-
-    Returning at the first success used to separate them dynamically. The builder
-    writes the real payload into frame 1 and the decoy into frame 2, so supplying the
-    real password cost one key derivation and supplying the decoy cost two: 154 ms
-    against 307 ms measured here, a clean factor of two on a scrypt derivation nobody
-    can make cheap. Under the one threat this lineage exists for — an adversary who
-    has compelled a password and wants to know whether it was the whole story — a
-    stopwatch answered the question. The chaff frame, the shared manifest record and
-    the overlapping sizes were all defeated by the wall clock.
-
-    Every frame is therefore attempted whichever one matches, so the work is the same
-    for the real password, the decoy password, and a wrong one. The cost of opening
-    any password-sealed module is now the cost of deriving a key once per frame, and
-    that is the price of the property the format claims rather than an inefficiency
-    to optimise away.
-    """
+    """Admit exactly two frames, then attempt both; no universal deniability claim."""
+    frames = list(_iter_frames(sealed))
     opened: bytes | None = None
-    for env in _iter_frames(sealed):
+    for env in frames:
         try:
             candidate = crypto.decrypt(env, password, aad=aad)
-        except Exception:  # noqa: BLE001,S112 - wrong frame for this password; keep going
+        except ValueError:
             continue
         if opened is None:
             opened = candidate
     if opened is None:
         raise ContainerError("no envelope opened with this password")
-    return opened
+    return _unpad_password(opened)
 
 
 __all__ = [

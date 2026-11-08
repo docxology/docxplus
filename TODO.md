@@ -8,25 +8,28 @@ Active engineering and research backlog.
 - [x] Documentation cross-reference reconciliation: synchronize channel tables, security specs, and architecture references with current codebase features.
 
 ## Medium Improvements
-- [x] Post-quantum and hybrid cryptographic suite:
-  - Hybrid signature suite abstraction (Ed25519 + ML-DSA / stateful hash or quantum-resistant envelope shim).
-  - Hybrid KEM multi-recipient sealing (X25519 + ML-KEM / Kyber hybrid abstraction).
-  - Algorithm-agile envelope versioning (`DXE3` hybrid envelope format) supporting quantum-resistant key encapsulation and signing.
-- [x] Expanded MCE & ODT channel edge-case handling:
-  - MCE namespace prefix normalization, fallback content validation, and multiple nested AlternateContent blocks.
-  - ODT custom metadata properties (`meta.xml` user-defined field mapping) and package collision safeguards.
-  - Safe handling of case-folding and attribute collision in MCE/ODT streams.
+- [x] Genuine provider-backed hybrid cryptography (`cryptography >= 50`):
+  - Ed25519 + ML-DSA-65 dual signatures; both verify under the full composite key pin.
+  - X25519 + ML-KEM-768 DXE3 sealing for homogeneous hybrid recipient sets.
+  - Portable DXHK signing/recipient private-key suites with exact framing and checked
+    derived public halves; both profiles and CLI use them. No simulated shim,
+    stateful-hash suite or classical fallback is implemented.
+- [x] MCE handling and ODT package collision safeguards.
+- [ ] ODT custom metadata channel (`meta.xml` user-defined fields): not implemented;
+      package-entry and displayed-image transports are the supported ODF channels.
 
 ## Major Improvements
-- [x] Advanced multi-recipient threshold and access-structure schemes:
-  - Verifiable dynamic threshold schemes with weighted multi-custodian quorum.
-  - Proactive share verification and reconstruction integrity guards.
-- [x] Sandboxed reproducible extraction and hermetic execution engine:
-  - Isolated temporary execution boundary with strict filesystem and process caps.
-  - Deterministic artifact verification and reproducible provenance attestation generator.
-- [x] Full cross-format fuzzing & stress validation suite:
-  - Differential fuzzing between DOCX (OPC) and ODT (ODF) parsers.
-  - Malformed XML, zip bomb, cyclic relationship, truncated encryption envelope, and corrupted stego-carrier fuzz targets.
+- [x] Shamir k-of-n confidentiality and issued-share integrity:
+  - Public tagged-share checksums detect corruption, not polynomial/issuer authenticity.
+  - Signed full-share digest commitments authenticate issued bytes under a verified,
+    pinned manifest; no weighted/dynamic/proactive VSS scheme is implemented.
+- [x] Opt-in confined reproduction with private scratch and versioned output-tree-v3
+      comparison; `match` requires source and selected-output equality.
+  - Linux private PID/proc/session and reaping controls require actual qualification.
+  - macOS detached-descendant custody is weaker; host files remain readable.
+    This is not a hermetic execution engine or aggregate resource quota.
+- [x] Selected malformed-package, envelope and carrier boundary regressions in both profiles.
+      Their existence is not a full differential-fuzzing/stress qualification claim.
 
 ## Maintenance
 

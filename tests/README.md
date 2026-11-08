@@ -50,11 +50,10 @@ bytes to private extracted artifacts, rejecting oversized PAX metadata and
 disguised non-gzip input before publication.
 
 **The documentation and the paper** — `test_docs`, `test_manuscript_vars`,
-`test_numbering`. These are why a stale doc fails the build rather than reaching a
-reader: every module has an architecture entry, every CLI command a reference entry,
-every channel a page, every directory both guides, every internal link a target, every
-drift-prone number derived rather than typed, and every figure and formalism numbered
-at render time rather than by hand.
+`test_numbering`. Relative links must resolve; actual manuscript variable rendering
+must leave no unresolved markers; references must be unambiguous and declared;
+fatal renderer diagnostics must fail the gate. Prose, source text, inventories and
+incidental counts/defaults are not pinned. The release pipeline exercises the real renderer.
 
 **Interop** — `test_interop`, including optional headless LibreOffice openability
 verification. The claim is that these files open in real software; where the software

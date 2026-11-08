@@ -6,7 +6,7 @@ Each document answers one question. Start with the one that matches yours.
 
 | Doc | Answers |
 | --- | --- |
-| [`format-spec.md`](format-spec.md) | **What is a docxplus file?** The normative container specification — manifest, channels, envelopes, sealing modes, provenance, file names. Implementable from this document plus the OOXML standard alone. |
+| [`format-spec.md`](format-spec.md) | **What is a docxplus file?** Format 3 manifest, channel, envelope and authenticated migration contracts for OOXML and ODF; implementation structural checks are not complete standards certification. |
 | [`channels.md`](channels.md) | **Where do payloads physically live?** Per-channel reference: capacity, visibility, cost, caveats, and what does not cross to ODF. |
 | [`design-rationale.md`](design-rationale.md) | **Why is it built this way?** First-principles decomposition, and which constraints are real versus inherited. |
 | [`standards-report.md`](standards-report.md) | **What do OOXML and ODF actually permit?** The standards-first research report every structural claim traces back to. |
@@ -31,9 +31,10 @@ Each document answers one question. Start with the one that matches yours.
 
 ## Conventions
 
-Numbers in the manuscript and in these docs derive from live code constants through
-`src/docxplus/manuscript_vars.py`. Nothing drift-prone is typed by hand; a stale literal fails
-the test suite rather than reaching a reader.
+Drift-prone manuscript metrics use tokens from `src/docxplus/manuscript_vars.py`.
+Some values come from source inventories, others from available generated reports.
+Token hydration is not a freshness/success check: current empirical claims need
+source-bound receipts; historical results must remain identified as historical.
 
 The same rule covers *numbering*: no figure, table, section, equation, or formalism
 number is written into a source. Labels are declared and referenced, and the numbers

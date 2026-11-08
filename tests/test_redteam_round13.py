@@ -35,24 +35,6 @@ def test_secret_material_is_written_owner_only(tmp_path):
     assert not (path.stat().st_mode & (stat.S_IRGRP | stat.S_IROTH))
 
 
-def test_the_permissive_window_never_exists(tmp_path):
-    """Created at 0600 rather than written then chmod-ed.
-
-    Write-then-chmod leaves an interval in which the bytes are on disk at the
-    process umask, and that interval is precisely what a watcher on a shared
-    machine waits for. Asserting the final mode cannot distinguish the two
-    implementations, so this asserts on the syscall instead.
-    """
-    import inspect
-
-    from docxplus import secure_io
-
-    source = inspect.getsource(secure_io.write_secret)
-    assert "os.open" in source and "SECRET_MODE" in source, (
-        "write_secret must create the file at the restricted mode, not widen-then-narrow"
-    )
-
-
 def test_existing_secret_material_is_not_silently_replaced(tmp_path):
     """Overwriting a signing key destroys an identity with no recovery."""
     path = write_secret(tmp_path / "k", b"original")
@@ -67,6 +49,55 @@ def test_recovered_plaintext_may_be_replaced_but_stays_owner_only(tmp_path):
     write_secret(path, b"second", overwrite=True)
     assert path.read_bytes() == b"second"
     assert is_secret_mode(path)
+
+
+def test_plaintext_replacement_never_modifies_an_existing_inode(tmp_path):
+    """An open public inode or hardlink must never receive newly recovered secrets."""
+    path = tmp_path / "recovered"
+    path.write_bytes(b"previous public data")
+    path.chmod(0o644)
+    with path.open("rb") as previous:
+        write_secret(path, b"new private plaintext", overwrite=True)
+        assert previous.read() == b"previous public data"
+    assert path.read_bytes() == b"new private plaintext"
+    assert is_secret_mode(path)
+
+
+def test_plaintext_replacement_does_not_follow_a_symlink(tmp_path):
+    """Replacing an extraction destination must not overwrite its symlink target."""
+    target = tmp_path / "unrelated"
+    target.write_bytes(b"preserve this")
+    path = tmp_path / "recovered"
+    path.symlink_to(target)
+    write_secret(path, b"private plaintext", overwrite=True)
+    assert target.read_bytes() == b"preserve this"
+    assert not path.is_symlink()
+    assert path.read_bytes() == b"private plaintext"
+    assert is_secret_mode(path)
+
+
+def test_failed_plaintext_replacement_preserves_existing_destination(tmp_path):
+    """A serialization failure must leave prior recovered data intact."""
+    path = tmp_path / "recovered"
+    path.write_bytes(b"preserve this")
+    with pytest.raises(TypeError):
+        write_secret(path, object(), overwrite=True)
+    assert path.read_bytes() == b"preserve this"
+    assert set(tmp_path.iterdir()) == {path}
+
+
+def test_plaintext_replacement_detaches_a_hardlink(tmp_path):
+    """Replacement changes only the selected directory entry, not aliases."""
+    import os
+
+    target = tmp_path / "original"
+    target.write_bytes(b"public previous bytes")
+    recovered = tmp_path / "recovered"
+    os.link(target, recovered)
+    write_secret(recovered, b"private replacement", overwrite=True)
+    assert target.read_bytes() == b"public previous bytes"
+    assert recovered.read_bytes() == b"private replacement"
+    assert is_secret_mode(recovered)
 
 
 def test_a_failed_write_leaves_no_partial_secret(tmp_path):
@@ -139,7 +170,7 @@ def test_a_padded_slot_is_undecryptable_by_anyone():
 def test_padding_may_only_add_slots():
     _, public = crypto.generate_recipient_key()
     _, other = crypto.generate_recipient_key()
-    with pytest.raises(ValueError, match="below the actual recipient count"):
+    with pytest.raises(ValueError):
         crypto.seal_multi(b"x", [public, other], pad_to=1)
 
 
@@ -194,14 +225,3 @@ def test_a_manifest_declaring_an_algorithm_we_do_not_implement_is_refused():
     doc["signature"]["algorithm"] = "rsa-4096"
     assert not Manifest.from_bytes(json.dumps(doc).encode()).verify_signature()
 
-
-def test_the_algorithm_field_never_selects_the_verifier():
-    """Dispatching on an attacker-supplied algorithm is the JWT `alg` mistake.
-
-    Checking the field is right; obeying it would not be. This asserts the check is
-    an equality against the compiled-in constant rather than a lookup.
-    """
-    import inspect
-
-    source = inspect.getsource(Manifest.declares_supported_algorithm)
-    assert "== SIGNATURE_ALGORITHM" in source

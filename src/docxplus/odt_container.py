@@ -2,17 +2,17 @@
 
 `odt.py` builds a conforming ODF package; this module gives that package the
 *Intelligence Contract* — typed payloads, the four sealing lineages, a Merkle root
-over the module set, a surface digest over the visible ODF content, and an Ed25519
-signature binding all of it. Without this, ODT support was a surface-contract
+over the module set, a surface digest over the visible ODF content, and a signature
+whose actual key family binds all of it. Without this, ODT support was a surface-contract
 profile that could carry loose bytes, and the "standards parity" claim was wider
 than the code.
 
 **Reuse over reimplementation.** Sealing comes from
 :func:`container.seal_module`, the manifest and Merkle machinery from
 :mod:`manifest` and :mod:`provenance`, and the unsealing path is shared with the
-OPC reader. A parallel implementation would be free to drift on precisely the
-details that matter — the chaff frame that makes a decoy indistinguishable, the
-AAD slot binding, the VSS requirement recorded in the signed manifest — so it is
+OPC reader. A parallel implementation could drift on security-relevant details:
+the common visible password framing policy, the AAD slot binding, and the
+checksum policy and signed full-share commitments — so it is
 not written twice.
 
 **Channels.** ODF has no analogue of an OOXML custom XML datastore part, and no
@@ -31,7 +31,7 @@ from pathlib import Path
 from . import crypto, payloads
 from .channels.base import ChannelRecord
 from .channels.stego_media import OdtStegMediaChannel
-from .container import ContainerError, _Pending, seal_module
+from .container import ContainerError, _cosigner_descriptors, _Pending, seal_module
 from .container import DocxPlusReader as DocxPlusReaderDepth
 from .manifest import Manifest
 from .odt import MIMETYPE_ODT, OdtPackage, new_base_odt
@@ -41,34 +41,37 @@ ODT_MANIFEST_PART = "intelligence/manifest.json"
 CT_MANIFEST = "application/vnd.docxplus.manifest+json"
 CT_PAYLOAD = "application/vnd.docxplus.payload"
 
-#: Excluded from the surface digest. The intelligence manifest carries the digest and
-#: cannot contain itself. `mimetype` is a fixed constant the reader checks directly,
-#: and `META-INF/manifest.xml` is *derived* from the part set and media types — both
-#: of which are digested — so binding it again would add nothing while breaking the
-#: build/read symmetry: neither exists in `pkg.parts` until `to_bytes` generates them.
-#: `"/"` is the ODF root file-entry, likewise emitted only at serialisation.
+# Physical index bytes are regenerated from bound declarations and supported
+# entry attributes. Mimetype is checked directly; the intelligence manifest
+# cannot include its own bytes in the digest.
 _DIGEST_EXCLUDED = frozenset({ODT_MANIFEST_PART, "mimetype", "META-INF/manifest.xml", "/"})
 
 def compute_odt_surface_digest(pkg: OdtPackage) -> str:
-    """Digest every part and its declared media type, except the manifest itself.
+    """Bind ODF parts and declarations in a profile-separated format-3 transcript."""
+    import hashlib
 
-    Binds the package, not a list of names, for the reason the OOXML profile does
-    (`container._compute_surface_digest`): selecting parts by name puts a naming
-    convention in the trust path, and a consumer follows declarations rather than
-    filenames. Everything except ``intelligence/manifest.json`` — which carries this
-    digest and so cannot contain itself — is covered, including the ODF manifest that
-    declares what each entry is.
-    """
-    chunks: list[bytes] = []
-    for name in sorted(pkg.parts):
-        if name in _DIGEST_EXCLUDED:
-            continue
-        chunks.append(b"P\x00" + name.encode("utf-8") + b"\x00" + pkg.parts[name])
-    for name, media in sorted(pkg.media_types.items()):
-        if name in _DIGEST_EXCLUDED:
-            continue
-        chunks.append(b"M\x00" + name.encode("utf-8") + b"\x00" + media.encode("utf-8"))
-    return crypto.digest(b"\x00".join(chunks))
+    from .opc import _surface_hasher, _surface_record
+
+    h = _surface_hasher(b"ODF")
+    _surface_record(h, b"T", MIMETYPE_ODT)
+    if pkg.manifest_version is None:
+        _surface_record(h, b"V")
+    else:
+        _surface_record(h, b"V", pkg.manifest_version.encode("utf-8"))
+    for name, data in sorted(pkg.parts.items()):
+        if name not in _DIGEST_EXCLUDED:
+            _surface_record(h, b"P", name.encode(), len(data).to_bytes(8, "big"),
+                            hashlib.sha256(data).digest())
+    declarations = {name: pkg.media_types.get(name, "application/octet-stream")
+                    for name in pkg.parts if name not in _DIGEST_EXCLUDED}
+    declarations.update(pkg.media_types)
+    declarations.setdefault("/", MIMETYPE_ODT.decode("ascii"))
+    for name, media in sorted(declarations.items()):
+        _surface_record(h, b"M", name.encode(), media.encode())
+    for path, values in sorted(pkg.entry_attributes.items()):
+        for key, value in sorted(values.items()):
+            _surface_record(h, b"A", path.encode(), key.encode(), value.encode())
+    return h.hexdigest()
 
 
 @dataclass
@@ -128,7 +131,7 @@ class OdtPlusBuilder:
         self, slot: str, *, real: object, real_password: str, decoy: object,
         decoy_password: str, payload_type: str = "bytes", kdf: str = "scrypt",
     ) -> OdtPlusBuilder:
-        """Two payloads under two passwords; neither reveals the other."""
+        """Two encrypted payloads sharing visible KDF/size policy, without a marker."""
         if any(m.slot == slot for m in self._pending):
             raise ContainerError(f"duplicate slot: {slot}")
         payloads.get_type(payload_type)
@@ -174,7 +177,11 @@ class OdtPlusBuilder:
             # Attest over a clean extraction of the *packed* bytes, so the attested
             # digest matches what a reader reproduces rather than the author's tree.
             with tempfile.TemporaryDirectory() as td:
-                clean = payloads.unpack_project(blob, Path(td) / "proj")
+                clean = payloads.unpack_project(
+                    blob, Path(td) / "proj",
+                    max_uncompressed=(payloads.MAX_PROJECT_UNCOMPRESSED
+                                      if max_uncompressed is None else max_uncompressed),
+                )
                 self._pending[-1].reproduction = _repro.attest(clean, spec)
         return self
 
@@ -183,12 +190,9 @@ class OdtPlusBuilder:
         return self.add_module(slot, inner_document, payload_type="docxplus", **seal)
 
     def sign(self, private_key: bytes) -> OdtPlusBuilder:
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
+        """Select the signing identity from a strictly framed private key."""
+        self._public_key = crypto.signing_public_key(private_key)
         self._private_key = private_key
-        self._public_key = (
-            Ed25519PrivateKey.from_private_bytes(private_key).public_key().public_bytes_raw()
-        )
         return self
 
     def add_cosigner(self, private_key: bytes) -> OdtPlusBuilder:
@@ -196,6 +200,7 @@ class OdtPlusBuilder:
         return self
 
     def build(self) -> bytes:
+        cosignatures = _cosigner_descriptors(self._cosigners)
         pkg = self.base_package or new_base_odt(self.paragraphs, title=self.title, creator=self.creator)
         manifest = Manifest()
         self.threshold_shares = {}
@@ -210,6 +215,9 @@ class OdtPlusBuilder:
             else:
                 payload_index += 1
                 part = f"intelligence/payload{payload_index}.dxp"
+                while part in pkg.parts or part in pkg.media_types:
+                    payload_index += 1
+                    part = f"intelligence/payload{payload_index}.dxp"
                 pkg.add_part(part, sealed, CT_PAYLOAD)
                 record = ChannelRecord(
                     channel="odt_package_part",
@@ -225,21 +233,20 @@ class OdtPlusBuilder:
             record.reproduction = m.reproduction or {}
             manifest.add(record)
 
+        pkg.media_types[ODT_MANIFEST_PART] = CT_MANIFEST
         manifest.surface_digest = compute_odt_surface_digest(pkg)
+        if self._public_key is not None:
+            manifest.algorithm = crypto.signing_algorithm(self._public_key)
+        manifest.cosignatures = cosignatures
         body = manifest.canonical_body()
         if self._private_key is not None and self._public_key is not None:
             manifest.public_key = self._public_key.hex()
             manifest.signature = crypto.sign(body, self._private_key).hex()
+        for entry, priv in zip(manifest.cosignatures, self._cosigners, strict=True):
+            entry["value"] = crypto.sign(body, priv).hex()
 
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
-        for priv in self._cosigners:
-            pub = Ed25519PrivateKey.from_private_bytes(priv).public_key().public_bytes_raw()
-            manifest.cosignatures.append(
-                {"public_key": pub.hex(), "value": crypto.sign(body, priv).hex()}
-            )
-
-        pkg.add_part(ODT_MANIFEST_PART, manifest.to_bytes(), CT_MANIFEST)
+        # Manifest replacement is explicit; generic add_part refuses collisions.
+        pkg.parts[ODT_MANIFEST_PART] = manifest.to_bytes()
         return pkg.to_bytes()
 
 
@@ -254,11 +261,17 @@ class OdtPlusReader:
 
     @classmethod
     def from_bytes(cls, data: bytes) -> OdtPlusReader:
-        pkg = OdtPackage.from_bytes(data)
-        if pkg.parts.get("mimetype") not in (None, MIMETYPE_ODT):
-            raise ContainerError("not an OpenDocument Text package")
+        from .opc import OpcError
+
+        try:
+            pkg = OdtPackage.from_bytes(data)
+        except OpcError as exc:
+            raise ContainerError(f"unreadable ODT package: {exc}") from exc
         blob = pkg.parts.get(ODT_MANIFEST_PART)
         manifest = Manifest.from_bytes(blob) if blob else Manifest()
+        for record in manifest.records:
+            if record.channel not in ("odt_package_part", "stego_media"):
+                raise ContainerError(f"unknown ODT channel: {record.channel}")
         return cls(package=pkg, manifest=manifest)
 
     def has_intelligence(self) -> bool:
@@ -299,18 +312,23 @@ class OdtPlusReader:
             # failure modes, no chance of the two profiles diverging under attack.
             plaintext = DocxPlusReader._unseal(
                 self, slot, mode, sealed, aad, password, private_key, shares,
-                require_vss=bool(record.sealing.get("vss", False)),
+                require_checksum=bool(record.sealing.get("checksummed_shares", False)),
+                share_digests=record.sealing.get("share_digests"),
             )
         if as_object:
             return payloads.get_type(record.payload_type).unpack(plaintext)
         return plaintext
 
-    def extract_project(self, slot: str, dest: str | Path, **creds) -> Path:
+    def extract_project(
+        self, slot: str, dest: str | Path, *,
+        max_uncompressed: int = payloads.MAX_PROJECT_UNCOMPRESSED, **creds,
+    ) -> Path:
+        """Extract a project under an explicit budget independent of credentials."""
         record = self._record(slot)
         if record.payload_type != "project":
             raise ContainerError(f"module {slot!r} is not a project payload")
         blob = self.extract(slot, **creds)
-        return payloads.unpack_project(blob, Path(dest))
+        return payloads.unpack_project(blob, Path(dest), max_uncompressed=max_uncompressed)
 
     def _stored_bytes(self, record) -> bytes:
         """The bytes a module actually occupies in the package.
@@ -320,8 +338,9 @@ class OdtPlusReader:
         across replicas — recovers it. Shared with the OOXML profile by inheritance.
         """
         if record.channel == "stego_media":
-            backend = record.location.get("backend", "python_lsb")
-            return OdtStegMediaChannel(backend=backend).extract(self.package, record)
+            return OdtStegMediaChannel().extract(self.package, record)
+        if record.channel != "odt_package_part":
+            raise ContainerError(f"unknown ODT channel: {record.channel}")
         part = record.location.get("part")
         raw = self.package.parts.get(part)
         if raw is None:
@@ -405,19 +424,34 @@ def open_document(data: bytes):
     whether they were handed OOXML or ODF. ODF is identified positionally by its
     uncompressed ``mimetype`` first entry, which is exactly the property the format
     guarantees for this purpose; anything else is treated as OPC.
+
+    ZIP and package-admission failures raise ``ContainerError``, matching the
+    direct profile readers. Manifest-schema failures remain ``ValueError``.
     """
     import io
     import zipfile
 
     from .container import DocxPlusReader
+    from .opc import (
+        OpcError,
+        _guard_zip_bomb,
+        _preflight_zip,
+    )
 
     try:
+        expected_entries = _preflight_zip(data)
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
-            names = zf.namelist()
-            is_odf = bool(names) and names[0] == "mimetype" and zf.read("mimetype").startswith(
-                b"application/vnd.oasis.opendocument"
-            )
-    except zipfile.BadZipFile as exc:
+            from .odt import _guard_mimetype
+
+            infos = zf.infolist()
+            _guard_zip_bomb(infos, expected_entries)
+            names = [info.filename for info in infos]
+            if len(names) != len(set(names)):
+                raise OpcError("package contains duplicate ZIP entry names")
+            is_odf = "mimetype" in names
+            if is_odf:
+                _guard_mimetype(zf)
+    except (zipfile.BadZipFile, OpcError) as exc:
         raise ContainerError(f"not a readable document package: {exc}") from None
     return OdtPlusReader.from_bytes(data) if is_odf else DocxPlusReader.from_bytes(data)
 

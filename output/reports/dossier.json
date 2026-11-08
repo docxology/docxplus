@@ -1,5 +1,9 @@
 {
   "document": "/source/docxplus/output/documents/dossier.docx",
+  "paths": [
+    "/source/docxplus/output/documents/dossier.docx",
+    "/source/docxplus/output/documents/dossier.docxplus"
+  ],
   "modules": [
     "annex",
     "notes",
@@ -9,13 +13,15 @@
   ],
   "checks": {
     "opc_valid": true,
-    "provenance": true,
-    "merkle_root": "d00e281ebebf6bb5\u2026",
-    "project_reproduced": true,
+    "provenance_pinned": true,
+    "merkle_root": "a2df5bd21e546330\u2026",
+    "project_extracted": true,
     "nested_opened": true,
     "multi_recipient": true,
     "threshold_3of5": true,
     "decoy_real": true,
     "decoy_cover": true
-  }
+  },
+  "ok": true,
+  "module_table": "| Slot | Channel | Sealing |\n| --- | --- | --- |\n| `annex` | package_part | password |\n| `notes` | package_part | password |\n| `review` | package_part | recipients |\n| `source` | package_part | password |\n| `vault` | package_part | threshold |"
 }

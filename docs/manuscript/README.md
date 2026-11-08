@@ -35,9 +35,14 @@ uv run python scripts/render_manuscript.py                 # -> output/manuscrip
 ```
 
 The renderer fails if any `{{TOKEN}}` is undefined. The values come from
-`src/docxplus/manuscript_vars.variables()`, which reads code constants and the repository —
-so changing a constant changes the manuscript, and `tests/test_manuscript_vars.py`
-fails the build if a source file hard-codes a value that should be a token.
+`src/docxplus/manuscript_vars.variables()`, which reads constants and actual artifacts.
+Rendering/reference/diagnostic checks should exercise those outputs, not freeze
+incidental source wording or inventory counts.
+
+Hydration does not establish evidence freshness: source test-function counts are
+not executed-pass counts, and report tokens can describe historical runs. Fresh
+qualification needs receipts binding exact inputs and regenerated outputs. The
+living example hashes selected source, not the full test/figure/manuscript pipeline.
 
 It also fails on a pandoc diagnostic even when pandoc itself exits 0, which it does
 for an unresolved cross-reference and for a missing figure. The full pipeline,

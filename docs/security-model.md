@@ -12,15 +12,15 @@ an integrator must handle.
 | Payload confidentiality | AES-256-GCM over the payload; key from memory-hard **Argon2id** or **Scrypt** (default; PBKDF2-HMAC-SHA512 available), work factors capped on read | MS-OFFCRYPTO *agile* lineage (report §8.1); RFC 9106; OWASP-2023 |
 | Payload integrity | GCM auth tag for plaintext; the manifest digest binds the **stored (ciphertext) bytes** and is checked before decryption | avoids the offline plaintext-confirmation oracle a plaintext digest would give |
 | Context binding | the module **slot** is AAD in every AEAD operation | a ciphertext cannot be spliced into another slot |
-| Manifest + package integrity | Ed25519 signature over the canonical body binds the Merkle root over all modules **and** a `surface_digest` over the *entire package*: every part and its bytes, the whole content-type map, and every relationship edge | binding filenames is not enough — OPC resolves the rendered part through the officeDocument *relationship*, so a name-scoped digest let an attacker repoint it and keep a valid verdict |
+| Manifest + package integrity | key-family-authenticated Ed25519 or Ed25519 + ML-DSA-65 signature over the canonical body binds the module Merkle root and a profile-separated typed/count/length/hash `surface_digest` | binds part bytes, type/ODF authority and full relationship edges including IDs; primary algorithm and declared co-signer identities/algorithms are signed |
 | Authenticity (only with a pinned key) | `verify_provenance(expected_public_key=...)` / `signature_status(expected_public_key=...)` compare the signer to a caller-trusted key in constant time | the manifest's embedded key is **self-asserted**; without pinning, a forger can sign a fabricated document with their own key and it reads as self-consistent — never as authentic |
-| Metadata minimalism | the manifest records only sealing mode (+ threshold `k`/`n`); never recipient identities/counts or a decoy marker | blind-review packets do not leak reviewers |
-| Untrusted-input intake | zip-bomb caps (per-entry/total/ratio) on OPC read; project tar.gz caps + `data` filter + link/traversal rejection; nested-depth cap; KDF work-factor **and memory** caps (scrypt bounds `128·N·r`, not merely `N`) | report §14.3, §6.1 |
+| Metadata minimalism | sealing metadata omits recipient identities/counts and a decoy marker; threshold records include `k`, `n`, checksum policy and full-share commitments | envelope family, padded slot count, module roster and size ranges remain visible |
+| Untrusted-input intake | ZIP part/count/ratio budgets; shared bounded gzip/TAR physical preflight, path/link/member checks; nested-depth cap; KDF work/memory caps including `N·r·p` | byte/metadata budgets, not total-process-memory guarantees; see format-spec §8.1 |
 | Openability preserved | encryption is payload-level, never whole-package | report §6.3, §14.3 |
-| Premium media provenance | steganographer backend BLAKE3-hashes and Ed25519-signs the embedded packet | steganographer docs |
-| Share tampering detection | threshold shares carry VSS commitment tags; the signed manifest records that they are required, so a header-stripped share is refused rather than silently reconstructed | Feldman VSS; the tag binds only if the verifier demands it |
+| Optional media packet integrity | Rust generic packets hash content; explicit `signing_key` adds Ed25519 packet signing | default bridge packets are unsigned/non-ECC; packet identity requires a trusted pin, independently of document provenance |
+| Issued-share byte authentication | threshold manifests commit to BLAKE2b-256 digests of complete issued shares, checked before combine | requires a trusted signed manifest; the standalone tagged-share checksum is unkeyed, not Feldman/polynomial VSS |
 | Attestation log authenticity | a signed tree head over `(log_size, root_hash)`, domain-separated from the manifest signature, anchors the transparency log | a hash chain proves self-consistency, never authenticity |
-| Project-payload containment | packing refuses symlinks, so a tree cannot smuggle out-of-tree files into a document by reference; unpacking rejects link members and path traversal | the pack side was the open half: `is_file()` follows links, embedding the target's bytes |
+| Project-payload containment | descriptor-relative no-follow capture pins source inodes and bounds reads; extraction validates paths/types/budgets and publishes a fresh private tree | not a cross-file snapshot; missing safe descriptor capabilities refuse |
 | Sibling-profile parity | the ODT profile carries the same signed manifest, sealing lineages, Merkle root, and surface digest, sharing the OPC sealing/unsealing code rather than reimplementing it | a second front door must not be the weaker one, and duplicated crypto drifts |
 | Signature-coverage honesty | a package carrying OPC signatures is rejected unless their reference set covers the intelligence manifest and every part it names | a valid-looking signature over a stripped payload set is worse than no signature |
 
@@ -34,7 +34,7 @@ an integrator must handle.
   discoverable by anyone who opens the archive. Concealment (not just
   confidentiality) is only offered by the `stego_media` channel, and even there LSB
   stego is detectable by steganalysis — treat it as obfuscation, not secrecy. The
-  converse is not offered either: the shipped detector proves presence, never absence
+  shipped detector is a heuristic: it proves neither presence nor absence
   (see Steganalysis below).
 * **No watermarking.** docxplus does not implement visible or invisible watermarking,
   robust or fragile, and claims no marking that survives conversion or re-rendering.
@@ -45,25 +45,14 @@ an integrator must handle.
   that any lossy transform erases is not a watermark. Provenance that must outlive
   re-rendering needs a mechanism this format does not provide. Pinned by
   `tests/test_steganalysis_bounds.py`.
-* **Deniability is against inspection, not proof.** A decoy module is structurally
-  identical to an ordinary password module — same manifest record, same two-frame
-  layout, same envelope format, and the second frame is undecryptable chaff when
-  there is no decoy. Size does not separate them either: the chaff frame is randomly
-  sized, so no observed module size implies a particular payload length, and a
-  decoy's size falls inside the range an ordinary module already spans. **Nor does
-  timing**: every frame is attempted whichever one matches, so opening with the real
-  password, the cover password, or a wrong one costs the same. Returning at the first
-  success made the real payload in frame 1 cost one key derivation and the cover story
-  in frame 2 cost two, which measured as 154 ms against 307 ms — an adversary who had
-  compelled a password could time the extraction and learn whether they had been given
-  the whole story. Nothing in
-  the file *reveals* a hidden payload. Note the precise scope — this is
-  indistinguishability to an inspector holding one document and not knowing the
-  payload lengths, which is the stated threat; it is not a proof of
-  indistinguishability against a distributional attack, and the format does not
-  claim one. But an adversary who knows the scheme knows a second
-  frame is always present and cannot be compelled to accept it as chaff. This is
-  layered access with a cover story, not cryptographic proof of non-existence.
+* **Decoy framing is not universal deniability.** Ordinary and decoy password
+  modules use exactly two frames, one visible bounded KDF/parameter policy and
+  equal power-of-two padding buckets. All framing/envelopes are admitted before
+  KDF work and both frames are attempted. Ordinary chaff uses a discarded password;
+  a decoy instead carries a cover payload. This removes simple frame-count, KDF and
+  exact-length distinctions, not all timing or distributional differences.
+  Buckets leak size ranges and the manifest reveals use of the format. Neither
+  coercion resistance nor proof that another password does not exist is provided.
 * **Unsigned = no provenance.** Without a signature, an attacker who rewrites a
   module can also rewrite its digest; validation emits a loud WARNING for unsigned
   documents. Only a signed manifest makes the module set and surface text
@@ -95,31 +84,27 @@ an integrator must handle.
 * **Metadata leakage.** `docProps/core.xml` carries author/timestamps; scrub before
   release if that matters (report §14.4). The `metadata` channel deliberately
   *adds* named custom properties — do not put secrets there in cleartext.
-* **Steganalysis.** The `stego_media` channel changes pixel LSBs, and that is
-  detectable — treat it as obfuscation, never secrecy. `steg_bridge.py` ships the
-  chi-squared attack on LSB replacement in pure Python so a carrier can always be
-  assessed, with a prefix sweep that also localises a partially-filled carrier the
-  whole-image statistic would miss. The optional steganographer backend's `analyze`
-  command adds further tests when it is installed. Check your own carriers: the
-  point of shipping the attack is that you should run it before an adversary does.
+* **Steganalysis.** `p_value` is the chi-square upper-tail reference probability
+  for Pearson adjacent-pair equality, **not** a posterior probability of embedding.
+  Each populated pair contributes one degree of freedom; insufficient samples or
+  expected counts make the approximation unavailable (`available=False`,
+  `p_value=None`), not a clean negative. Balanced untouched covers can flag.
+  Prefix sweeps reuse samples; no independent-test calibration, general sensitivity,
+  false-positive rate or payload-size estimator is established. Optional external
+  analysis has its own contract.
 
-* **Carried project trees.** `unpack-project` writes plain files and directories and
-  nothing else: links, FIFOs, and device nodes are refused by a positive check rather
-  than a list of rejected types, and permission bits are clamped to 0644/0755 so
-  setuid and setgid never survive. None of this depends on the interpreter. It used
-  to — extraction was `extractall(filter="data")` with a fallback to an unfiltered
-  `extractall` on Python below 3.12, which `requires-python = ">=3.10"` makes a
-  supported configuration, and on which a payload carrying `run.sh` at mode 04755
-  extracted with the setuid bit intact.
-
-  **The attack's own boundary is part of the model.** Chi-squared PoV analysis keys
-  on the histogram flattening a *uniform* bit stream causes. A sealed module is
-  ciphertext and is therefore the maximally detectable case (p ≈ 1 at full fill); an
-  unsealed low-entropy payload — plaintext, a constant fill, a structured record —
-  is not detected at any fill rate and reports the same p ≈ 0 as an untouched
-  carrier. `analyze-carrier` can establish that a carrier *is* embedded. It cannot
-  establish that one is not, and no verdict from it should be read that way. This is
-  measured behaviour, pinned by `tests/test_steganalysis_bounds.py`.
+* **Carried project trees.** Only plain files/directories are published into a
+  fresh private 0700 root at an absent/empty destination. Nonempty destinations,
+  path aliases, conflicts, traversal, links, devices and FIFOs refuse. Carried
+  file execute bits are normalized to 0644/0755 inside that private root.
+  Compressed/file-data/member/node/metadata/path-depth budgets are independent;
+  physical TAR/PAX checks precede rich parsing. Shared `archive_limits.py` also
+  preflights ZIP directory allocation and bounded release-evidence gzip/TAR.
+  These limits are not whole-process memory quotas.
+* **Media/backend intake.** Python RGB/LSB processing has a shared pixel cap, not
+  a total-memory guarantee. Rust discovery is only explicit `STEGANOGRAPHER_BIN` or PATH,
+  never a sibling checkout or automatic Cargo build. An explicitly invalid backend
+  fails; absent optional capability is not a pass. Wheel use needs no source sibling.
 
 ## Executing carried code (reproduction)
 
@@ -129,24 +114,55 @@ run code a document carries. Its safety rests on two invariants:
 1. **The document is inert data.** No read, parse, render, `validate`, `extract`,
    `verify_provenance`, or `verify_reproduction` path executes a byte. Only
    `reproduce(..., allow_execution=True)` does, and only on an explicit call.
-2. **Execution is confined (best-effort).** The re-run happens in a scrubbed
-   environment (no host credentials, `HOME=/nonexistent`, stdin closed), in its own
-   process group so a timeout reaps orphaned grandchildren, under
-   CPU/address-space/process-count/**file-size** limits and a clamped wall-clock
-   timeout. The network is denied and **writes are confined to the project and temp
-   directories** via a `sandbox-exec` seatbelt profile (macOS) or `bwrap` (Linux).
+2. **Execution requires confinement.** Missing Seatbelt on macOS or bubblewrap on
+   Linux raises `ReproError`; there is no raw/unshare-only fallback. Private scratch,
+   scrubbed environment, stdin closure and a wall-clock deadline limit exposure.
+   Linux uses private user/PID/network namespaces, private procfs, a new session
+   and a read-only host root. The carried command is private
+   PID 1, `--` ends bubblewrap's own options so a command cannot supply
+   `--share-net`/`--bind`, and the reported init is pinned with a pidfd. Success,
+   timeout and cleanup all kill that leader, so the kernel destroys every
+   detached descendant; absent pidfd support refuses execution. The launch group
+   is also retained before waiting and killed/reaped. Per-process limits are not
+   aggregate CPU/memory quotas.
 
-Honest residual risks, stated plainly: the sandbox is best-effort, not a microVM.
-On macOS/Linux-with-bwrap writes are confined to the project+temp dirs and the
-network is denied; on Linux with only `unshare -n` the network is denied but **writes
-are not confined**; on any other platform there is **no** confinement and the caller
-must supply their own jail. Resource limits are POSIX-only. A sandbox escape in the
-OS primitive would defeat confinement. Reproduction is therefore a build-server /
-disposable-VM activity a reader chooses, never a side effect of opening a file. A
-digest match attests process, not validity: it proves the declared command produced
-the sealed outputs on a matching toolchain — surfaced as `toolchain_match` — not that
-the method is correct. The reproduction binds only genuinely *computed* outputs: a
-declared output that is a carried input unchanged by the run is rejected.
+The read-only host root is still **readable**. Scrubbing environment variables and
+using `HOME=/nonexistent` does not hide host credential files. These controls are
+not hermetic isolation or a microVM. For untrusted code use a disposable isolated
+environment with no secrets. macOS Seatbelt confines writes and network and denies
+process creation (`process-fork`), so a carried recipe cannot spawn a child at all
+and needs no detached-descendant supervisor; it provides neither Linux's private
+PID/proc view nor pidfd custody, so a recipe that needs subprocesses must run on
+the Linux backend. Capability availability and production Linux custody need fresh
+platform qualification, not inference.
+Output collection uses deadlines and nofollow regular-file checks; every output
+must be new/content-changed. Signed `output_digest_scheme` must equal
+`docxplus-output-tree-v3-blake2b-256`; missing/old schemes refuse before execution.
+`match` requires both `source_match` and selected-output digest equality;
+`toolchain_match` is reported separately. A signature authenticates a claim only.
+
+Release validation normally also requires Docker's outer proc/kernel path masks;
+incompatible nested private-proc mounts refuse. The validate-only option
+`--allow-unmasked-procfs-for-daemon ID` is an explicit, provision-bound exception
+for an operator-controlled isolated Linux rootless VM. It must match the currently
+verified daemon ID, with Linux and `name=rootless` eligibility checked before
+compute creation. It adds container-local `systempaths=unconfined`, removing
+Docker's outer proc **and kernel-path** masking/read-only defenses, including some
+read restrictions. It does not weaken the production sandbox or preserve those
+removed outer defenses by implication. UID 1000, zero capabilities,
+no-new-privileges, read-only root/source/runtime, network denial, private PID/proc,
+mount/credential restrictions, resource/TTL and source/image/reap custody remain
+mandatory. No automatic fallback or host/global policy changes are permitted.
+The actual guest receipt must prove kernel read-only `/sys`, non-mutating
+write-open refusals for representative proc/kernel controls (EACCES/EPERM/EROFS,
+or ENOENT where the interface is absent), ancestor PID/proc invisibility and
+signal denial, writable project/scratch controls and detached-child teardown.
+Ancestor descriptors are not inherited by construction (close-on-exec and no
+descriptor passing), which is a code fact rather than receipt evidence.
+Passing these probes qualifies only the recorded environment, not arbitrary
+kernels, all removed read protections, macOS sandbox guarantees or payload survival
+through Office editing. Operator procedure and evidence fields are in
+[`scripts/README.md`](../scripts/README.md#release-validation).
 
 ## Against a well-resourced adversary
 
@@ -154,15 +170,19 @@ The controls above assume an opponent who inspects, tampers, and forges. A state
 opponent additionally *collects at scale, waits, and compels*. Four boundaries follow
 from that and none of them is closed by the format alone.
 
-**Harvest now, decrypt later.** Classical key exchange is X25519 and classical signatures are Ed25519.
-Both fall to a cryptographically relevant quantum computer; AES-256-GCM does not, being
-reduced by Grover to a still-adequate ~128-bit margin. A document sealed today under purely
-classical asymmetric keys and collected today is readable by an opponent who acquires that capability
-before the payload stops mattering. docxplus provides hybrid post-quantum cryptographic primitives
-(`DXE3` hybrid KEM and dual-signing) in `crypto.py` combining classical algorithms with quantum-resistant
-encapsulation and signing shims under HKDF-SHA384. The password
-lineage is the classical symmetric alternative: content sealed under a high-entropy passphrase with
-Argon2id never performs an asymmetric key exchange, inheriting the full symmetric margin.
+**Harvest now, decrypt later.** Classical Ed25519/X25519-DXE2 documents do not
+claim post-quantum protection. Both profiles can instead use genuine provider
+ML-KEM-768 with X25519/HKDF-SHA384 (DXE3 recipients), and ML-DSA-65 with Ed25519
+(manifest, co-signature and log signing) through `cryptography >= 50`.
+Both signatures are required under a pin of the entire composite public identity.
+Portable `DXHK` private keys carry a version and signing/recipient suite tag, exact
+seed/public lengths and checked derived public halves. Mixed recipient families,
+wrong-suite, ambiguous and simulated keys refuse without a classical fallback.
+[NIST FIPS 203](https://doi.org/10.6028/NIST.FIPS.203) and
+[FIPS 204](https://doi.org/10.6028/NIST.FIPS.204) standardize the components; they
+do not certify docxplus or prove this hybrid construction. Generate fresh keys and
+redistribute full-key pins for simulated material. Rebuild and re-sign trusted
+format-2 inputs; no insecure legacy surface verifier or version-field rewrite.
 
 **Recipient count is observable, identities are not.** A DXE2 envelope carries one
 wrapped content key per recipient and records the number as a field, so the count is
@@ -202,20 +222,25 @@ so. Trust is pinned per verification by the caller passing `--expected-key`, so
 revocation is whatever the caller's own key distribution does — which is a real answer,
 but it is the caller's answer and not the format's.
 
-**The signature binds no time.** The canonical body covers the version, the module
-records, the Merkle root, and the surface digest. It carries no timestamp, so a
-document alone cannot establish whether it was signed before or after a compromise.
-That ordering is exactly what the transparency log supplies, which is the argument for
-treating the log as part of the mechanism rather than as an optional extra: without it,
-"signed by a key that was later revoked" is unanswerable from the file.
+**The signature binds no trusted time.** The canonical body covers version, module
+records, Merkle root, surface digest, primary scheme and co-signer identities/schemes.
+It binds no trusted timestamp, so a document alone cannot establish pre-compromise signing.
+A pinned signed log head authenticates inclusion of the complete canonical attestation
+claim, not independent time or execution. It cannot by itself establish that a
+document predates compromise; external retained checkpoints/witnesses are required.
 
-**Crypto agility is absent by construction.** The manifest declares its signature
-algorithm and the verifier refuses any value it does not implement, but it never
-*dispatches* on the field — selecting a verifier from an attacker-supplied algorithm
-name is the JWT `alg`-confusion class. The field is also outside the signed body, so it
-is unauthenticated: flipping it turns a valid document into a refused one, a nuisance
-rather than a compromise. The consequence is that replacing Ed25519 means a format
-version, not a negotiation.
+**Key-family selection is not algorithm negotiation.** Strict key framing chooses
+Ed25519 or Ed25519 + ML-DSA-65. The authenticated primary/co-signer algorithm
+labels must match the parsed key family; they do not select an attacker-chosen
+verifier or authorize a classical fallback. Every co-signer identity and scheme
+is declared before signing; only signature values are omitted from that body.
+An authenticity policy still needs explicit caller-pinned identities.
+
+**Publication is per entry, not a transaction.** Keys and shares default to exclusive
+private creation. Plaintext replacement uses a complete private sibling temporary
+and atomic directory-entry replacement rather than following/truncating an old
+inode. Related keys, shares and dual-name documents preflight and stage before
+publication; this is not cross-file crash atomicity.
 
 ## Threat-model summary
 

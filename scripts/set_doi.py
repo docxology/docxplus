@@ -35,31 +35,39 @@ except ModuleNotFoundError:  # pragma: no cover
 
 from docxplus.project_paths import project_root
 
+if __package__:
+    from .zenodo_release import API, _provider_open
+else:
+    from zenodo_release import API, _provider_open
+
 DOI_RE = re.compile(r"^10\.\d{4,}/zenodo\.\d+$")
 
 
-def resolves(doi: str, *, timeout: int = 20) -> tuple[bool, str]:
-    """Confirm the DOI is real and ours, published or reserved.
+def _normalize_doi(value: object) -> str:
+    if not isinstance(value, str):
+        return ""
+    doi = value.strip().lower().removeprefix("https://doi.org/")
+    return doi if DOI_RE.fullmatch(doi) else ""
 
-    A published DOI is a public record and needs no credentials. A *reserved* one
-    exists only as a draft deposition, so it 404s on the records API and can be
-    checked only with the token that reserved it. Both are verified, because the
-    reserved case is the one that matters here: the PDF has to print the DOI
-    before the record carrying that PDF can be published, so the identifier is
-    always written while still reserved.
 
-    What is never allowed is writing a DOI on trust. An identifier that does not
-    resolve is worse than an absent one — absent is visibly incomplete, wrong is
-    quietly permanent.
+def resolves(doi: str, *, timeout: int = 20, api: str = API) -> tuple[bool, str]:
+    """Confirm the exact DOI exists publicly or on a token-accessible draft.
+
+    A title is descriptive metadata, not proof of project or account ownership.
+    The operator remains responsible for selecting the intended release record.
     """
+    doi = _normalize_doi(doi)
+    if not doi:
+        return False, "not a canonical Zenodo DOI"
     record = doi.rsplit(".", 1)[-1]
-    url = f"https://zenodo.org/api/records/{record}"
+    url = f"{api}/records/{record}"
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as response:
+        with _provider_open(url, timeout=timeout, api=api) as response:
             data = json.load(response)
+        returned = data.get("doi")
+        if _normalize_doi(returned) != doi:
+            return False, f"published record {record} identifies DOI {returned!r}, not {doi!r}"
         title = data.get("metadata", {}).get("title", "")
-        if "docxplus" not in title.lower():
-            return False, f"published record {record} is titled {title!r}, not this project"
         return True, f"published record: {title}"
     except urllib.error.HTTPError as exc:
         if exc.code != 404:
@@ -74,11 +82,11 @@ def resolves(doi: str, *, timeout: int = 20) -> tuple[bool, str]:
             "reserved draft cannot be checked either"
         )
     request = urllib.request.Request(
-        f"https://zenodo.org/api/deposit/depositions/{record}",
+        f"{api}/deposit/depositions/{record}",
         headers={"Authorization": f"Bearer {token}"},
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with _provider_open(request, timeout=timeout, api=api) as response:
             draft = json.load(response)
     except urllib.error.HTTPError as exc:
         return False, f"no published record and no draft deposition {record} (HTTP {exc.code})"
@@ -87,21 +95,23 @@ def resolves(doi: str, *, timeout: int = 20) -> tuple[bool, str]:
 
     reserved = draft.get("metadata", {}).get("prereserve_doi", {}).get("doi")
     title = draft.get("metadata", {}).get("title", "")
-    if reserved != doi:
+    if _normalize_doi(reserved) != doi:
         return False, f"draft {record} reserves {reserved!r}, not {doi!r}"
-    if "docxplus" not in title.lower():
-        return False, f"draft {record} is titled {title!r}, not this project"
     return True, f"reserved on draft deposition {record}: {title}"
 
 
-def concept_doi(version_doi: str, *, timeout: int = 20) -> str:
-    """The record's concept DOI, which always resolves to the latest version."""
+def concept_doi(version_doi: str, *, timeout: int = 20, api: str = API) -> str:
+    """The exact record's concept DOI, resolving to its latest version."""
+    version_doi = _normalize_doi(version_doi)
+    if not version_doi:
+        return ""
     record = version_doi.rsplit(".", 1)[-1]
     try:
-        with urllib.request.urlopen(
-            f"https://zenodo.org/api/records/{record}", timeout=timeout
-        ) as response:
-            return json.load(response).get("conceptdoi", "") or ""
+        with _provider_open(f"{api}/records/{record}", timeout=timeout, api=api) as response:
+            data = json.load(response)
+        if _normalize_doi(data.get("doi")) != version_doi:
+            return ""
+        return _normalize_doi(data.get("conceptdoi"))
     except Exception:  # noqa: BLE001, S110 — best-effort probe; a missing record falls through to the draft
         pass
     # A reserved DOI has no public record yet, and the badge is written *before*
@@ -111,12 +121,16 @@ def concept_doi(version_doi: str, *, timeout: int = 20) -> str:
     if not token:
         return ""
     request = urllib.request.Request(
-        f"https://zenodo.org/api/deposit/depositions/{record}",
+        f"{api}/deposit/depositions/{record}",
         headers={"Authorization": f"Bearer {token}"},
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return json.load(response).get("conceptdoi", "") or ""
+        with _provider_open(request, timeout=timeout, api=api) as response:
+            draft = json.load(response)
+        reserved = draft.get("metadata", {}).get("prereserve_doi", {}).get("doi")
+        if _normalize_doi(reserved) != version_doi:
+            return ""
+        return _normalize_doi(draft.get("conceptdoi"))
     except Exception:  # noqa: BLE001 — best-effort probe; badge simply keeps no concept DOI
         return ""
 
@@ -176,9 +190,9 @@ def main() -> int:
     if len(sys.argv) != 2:
         sys.stderr.write(f"usage: {sys.argv[0]} 10.5281/zenodo.NNNNNNN\n")
         return 2
-    doi = sys.argv[1].strip().removeprefix("https://doi.org/")
-    if not DOI_RE.match(doi):
-        sys.stderr.write(f"not a Zenodo DOI: {doi!r}\n")
+    doi = _normalize_doi(sys.argv[1])
+    if not doi:
+        sys.stderr.write(f"not a Zenodo DOI: {sys.argv[1]!r}\n")
         return 2
 
     ok, detail = resolves(doi)

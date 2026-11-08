@@ -7,9 +7,8 @@ container`, `from docxplus import channels`.
 The module inventory is **not** repeated in this file. It lives in
 [`README.md`](README.md) (grouped by layer, for orientation) and in
 [`../../docs/architecture.md`](../../docs/architecture.md) (authoritative, with data flow).
-Both are enforced by `tests/test_docs.py`. A third hand-maintained copy would drift,
-and did: this file once described sixteen modules while twenty-one shipped, hiding the
-entire ODT profile and the transparency log from anyone who read it.
+A third hand-maintained inventory would drift; keep those two aligned with
+actual interfaces, without tests of incidental names/counts/phrasing.
 
 ## Layering
 
@@ -38,9 +37,9 @@ import, the logic is in the wrong module.
 | Adding a… | Touch | Also required |
 | --- | --- | --- |
 | payload type | register it in `payloads.py` | real round-trip test; entry in `docs/format-spec.md` |
-| sealing mode | branch in `container._place` and `DocxPlusReader._unseal`, plus a `sealing.mode` value | the ODT profile inherits it through the shared sealing code — add a test proving that, do not fork the logic |
+| sealing mode | branch in `container.seal_module` and `DocxPlusReader._unseal`, plus `sealing.mode` metadata | prove both profiles share the actual sealing behavior; do not fork it |
 | channel | implement the `Channel` protocol in `channels/` | see [`channels/AGENTS.md`](channels/AGENTS.md) |
-| module | place it in the right layer | an entry in `README.md` **and** `docs/architecture.md`, or the suite fails |
+| module | place it in the right layer | update `README.md` and `docs/architecture.md` with the real responsibility |
 
 ## The two boundaries that are load-bearing
 

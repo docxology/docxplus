@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 import re
+import runpy
 import selectors
 import shutil
 import signal
@@ -22,11 +23,16 @@ import stat
 import subprocess
 import sys
 import tarfile
-import tempfile
 import time
 import uuid
+import xml.etree.ElementTree as ET
 from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
+
+# Keep the supervisor stdlib-only: load the shared, stdlib-only security leaf
+# without importing docxplus's optional/runtime dependency graph. A private
+# supervisor copy must retain this checkout-relative companion file.
+_ARCHIVES = runpy.run_path(str(Path(__file__).resolve().parents[1] / "src/docxplus/archive_limits.py"))
 
 INPUT_SCHEMA = "docxplus.release-inputs.v1"
 PROVISION_SCHEMA = "docxplus.release-provision.v1"
@@ -425,47 +431,15 @@ def inspect_image(runner, image_id):
 
 @contextmanager
 def bounded_tar(archive, limit, count_limit):
-    """Preflight bounded gzip bytes and physical headers before tar metadata parsing."""
-    metadata_limit = 16 * 1024**2
-    uncompressed_limit = limit + metadata_limit + 2048 * count_limit + 10240
-    with tempfile.TemporaryFile(dir=archive.parent) as raw:
-        copied = 0
-        with archive.open("rb") as encoded:
-            require(encoded.read(2) == b"\x1f\x8b", "Artifact archive must use gzip")
-            encoded.seek(0)
-            with gzip.GzipFile(fileobj=encoded) as decoded:
-                while block := decoded.read(min(1024**2, uncompressed_limit - copied + 1)):
-                    copied += len(block)
-                    require(copied <= uncompressed_limit, "Uncompressed archive exceeds bound")
-                    raw.write(block)
-        raw.seek(0)
-        headers = metadata_bytes = 0
-        metadata_types = {tarfile.XHDTYPE, tarfile.XGLTYPE,
-                          tarfile.GNUTYPE_LONGNAME, tarfile.GNUTYPE_LONGLINK}
-        regular_types = {tarfile.REGTYPE, tarfile.AREGTYPE, tarfile.DIRTYPE}
-        while raw.tell() < copied:
-            header = raw.read(512)
-            require(len(header) == 512, "Truncated physical tar header")
-            if header == bytes(512):
-                break
-            member = tarfile.TarInfo.frombuf(header, "utf-8", "surrogateescape")
-            headers += 1
-            require(headers <= 2 * count_limit + 4, "Physical tar header count exceeds bound")
-            require(member.type in regular_types | metadata_types,
-                    "Archive physical header contains links/special files")
-            require(member.size >= 0, "Negative physical tar payload")
-            next_header = raw.tell() + (member.size + 511) // 512 * 512
-            require(next_header <= copied, "Truncated physical tar payload")
-            if member.type in metadata_types:
-                metadata_bytes += member.size
-                require(member.size <= 64 * 1024 and metadata_bytes <= metadata_limit,
-                        "Tar metadata exceeds allocation bound")
-                metadata = raw.read(member.size)
-                require(not re.search(rb"(?:^|\n)\d+ GNU\.sparse[.=]", metadata),
-                        "Sparse artifact metadata is unsupported")
-            raw.seek(next_header)
-        raw.seek(0)
-        yield raw
+    """Use the same bounded physical TAR protocol as carried-project intake."""
+    try:
+        with archive.open("rb") as encoded, _ARCHIVES["bounded_tar"](
+            encoded, max_data_bytes=limit, max_members=count_limit,
+            temporary_directory=str(archive.parent),
+        ) as raw:
+            yield raw
+    except _ARCHIVES["ArchiveLimitError"] as exc:
+        raise Refusal(str(exc)) from exc
 
 
 def extract_archive(archive, destination, *, limit=MAX_BYTES, count_limit=MAX_FILES):
@@ -727,7 +701,40 @@ def provision(runner, output, manifest, raw, context, custody, token):
     return record
 
 
-def check_controls(inspected, image_id, image, token, input_hash):
+def procfs_profile(custody, allow_unmasked_procfs_for_daemon=None):
+    """Admit the outer proc/kernel masking exception only for its rootless daemon."""
+    daemon = custody["daemon"]
+    unmasked = allow_unmasked_procfs_for_daemon is not None
+    if unmasked:
+        require(isinstance(allow_unmasked_procfs_for_daemon, str)
+                and bool(allow_unmasked_procfs_for_daemon)
+                and allow_unmasked_procfs_for_daemon == daemon.get("ID"),
+                "Proc/kernel masking exception daemon ID does not match verified custody")
+        security_options = daemon.get("SecurityOptions")
+        require(daemon.get("OSType") == "linux" and isinstance(security_options, list)
+                and "name=rootless" in security_options,
+                "Proc/kernel masking exception requires a Linux rootless Docker daemon")
+    return {
+        "policy": "daemon-bound-unmasked" if unmasked else "docker-default",
+        "daemon_id": daemon["ID"],
+        "scope": "Validation compute container only; no provisioning or host policy change.",
+        "risk": (
+            "Explicit per-container systempaths=unconfined removes Docker's outer proc "
+            "AND kernel-path masks and read-only path protections. Use only inside an "
+            "operator-controlled isolated rootless Linux VM. UID 1000, zero capabilities, "
+            "no-new-privileges, read-only source/runtime, network denial and real private "
+            "PID/proc qualification remain mandatory; this does not preserve all outer "
+            "read restrictions or qualify arbitrary host kernels."
+            if unmasked else
+            "Docker's default outer proc/kernel path masking and read-only protections "
+            "are required; incompatibility is a refusal, never an automatic fallback."
+        ),
+    }
+
+
+def check_controls(inspected, image_id, image, token, input_hash, *, procfs_profile=None):
+    policy = "docker-default" if procfs_profile is None else procfs_profile.get("policy")
+    require(policy in {"docker-default", "daemon-bound-unmasked"}, "Unknown proc/kernel policy")
     config, host = inspected["Config"], inspected["HostConfig"]
     require(inspected.get("Image") == image_id and config.get("Image") == image_id,
             "Container image drift")
@@ -742,8 +749,10 @@ def check_controls(inspected, image_id, image, token, input_hash):
     require(host.get("Privileged") is False and not host.get("CapAdd")
             and {value.upper() for value in host.get("CapDrop", [])} == {"ALL"},
             "Container capability drift")
-    require(set(host.get("SecurityOpt", [])) ==
-            {"no-new-privileges=true", "seccomp=unconfined"},
+    security_options = {"no-new-privileges=true", "seccomp=unconfined"}
+    # Docker CLI consumes systempaths=unconfined into the path fields, not
+    # SecurityOpt. Require the actual selected path policy below.
+    require(set(host.get("SecurityOpt", [])) == security_options,
             "Container security policy drift")
     # Docker API accepts an empty PID mode for a new private namespace, not
     # the string 'private' (valid values are empty, host or container:<id>).
@@ -766,8 +775,15 @@ def check_controls(inspected, image_id, image, token, input_hash):
     require(host.get("RestartPolicy", {}).get("Name") == "no"
             and host.get("AutoRemove") is False and host.get("Init") is not True
             and host.get("LogConfig", {}).get("Type") == "none", "Container lifecycle drift")
-    require(host.get("MaskedPaths") and host.get("ReadonlyPaths"),
-            "Default Docker proc/kernel path protections are missing")
+    if policy == "daemon-bound-unmasked":
+        require(all(key in host and (host[key] is None or host[key] == [])
+                    for key in ("MaskedPaths", "ReadonlyPaths")),
+                "Explicit Docker proc/kernel unmasking was not applied")
+    else:
+        require(host.get("MaskedPaths") and host.get("ReadonlyPaths"),
+                "Default Docker proc/kernel path protections are missing")
+    return {"policy": policy, "security_options": host["SecurityOpt"],
+            "masked_paths": host["MaskedPaths"], "readonly_paths": host["ReadonlyPaths"]}
 
 
 def cleanup_container(runner, cid, output, evidence):
@@ -813,7 +829,94 @@ def cleanup_container(runner, cid, output, evidence):
     require(not errors, "Cannot prove container stop/reap: " + "; ".join(errors))
 
 
-def validate(runner, output, manifest, raw, record, custody, token):
+def check_office_export(output, qualification, results, artifacts):
+    """Bind Office assertions to the exported files, wheel inputs and actual JUnit."""
+    guest = output / "guest"
+    office = load_json(read_regular(guest / "office/evidence.json"))
+    tools = {"libreoffice", "pdftotext", "pdftoppm", "pdfimages"}
+    require(isinstance(office, dict) and office.get("schema") == "docxplus.release-office.v1"
+            and office.get("ok") is True, "Office export did not qualify")
+    require(isinstance(office.get("tools"), dict) and set(office["tools"]) == tools
+            and isinstance(office.get("tool_sha256"), dict)
+            and set(office["tool_sha256"]) == tools, "Incomplete Office tool identities")
+    runtime = qualification.get("runtime", {})
+    require(isinstance(runtime, dict) and isinstance(runtime.get("tools"), dict),
+            "Office runtime tool identities are absent")
+    require(all(isinstance(office["tools"][name], str) and office["tools"][name]
+                and office["tools"][name] == runtime["tools"].get(name)
+                and HASH_RE.fullmatch(str(office["tool_sha256"][name])) for name in tools),
+            "Office tool identities disagree with the qualified runtime")
+    for branch in ("installed_wheel", "artifacts"):
+        require(isinstance(results.get(branch), dict) and results[branch].get("office") == office,
+                "Office result copies disagree with the exported evidence")
+    require(isinstance(office.get("profiles"), dict)
+            and set(office["profiles"]) == {"docx", "odt"}, "Office profile evidence is incomplete")
+    files = artifacts["files"]
+    visible = "DOCXPLUS INSTALLED WHEEL VISIBLE SENTINEL"
+    hidden = "DOCXPLUS_HIDDEN_INSTALLED_WHEEL_SECRET"
+    hidden_encoded = base64.b64encode(hidden.encode()).decode()
+    for profile, info in office["profiles"].items():
+        require(isinstance(info, dict) and info.get("ok") is True
+                and info.get("visible_sentinel") == visible and info.get("hidden_sentinel") == hidden
+                and info.get("save_filter") == ("docx:Office Open XML Text" if profile == "docx"
+                                                else "odt:writer8"), "Invalid Office profile identity")
+        expected = {f"{phase}_{kind}": f"office/{profile}/{phase}/{name}"
+                    for phase in ("original", "saved")
+                    for kind, name in (("document", f"installed.{profile}"), ("pdf", "installed.pdf"),
+                                       ("text", "installed.txt"), ("preview", "first-page.png"))}
+        require(isinstance(info.get("artifacts"), dict) and set(info["artifacts"]) == set(expected),
+                "Office profile artifact set is incomplete")
+        for kind, path in expected.items():
+            record = info["artifacts"][kind]
+            actual = files.get(path, {})
+            require(isinstance(record, dict) and record.get("path") == path
+                    and type(record.get("bytes")) is int and record["bytes"] > 0
+                    and record.get("sha256") == actual.get("sha256")
+                    and record["bytes"] == actual.get("bytes"), "Office artifact binding disagrees")
+        original = files[expected["original_document"]]
+        installed = files.get(f"installed-wheel/installed.{profile}", {})
+        require(all(original[key] == installed.get(key) for key in ("sha256", "bytes")),
+                "Office input is not the installed-wheel document")
+        for phase in ("original", "saved"):
+            outcome = info.get(phase)
+            require(isinstance(outcome, dict) and all(outcome.get(flag) is True for flag in
+                    ("visible_text_preserved", "hidden_payload_absent", "preview_nonblank", "ok"))
+                    and type(outcome.get("preview_dark_pixels")) is int
+                    and outcome["preview_dark_pixels"] > 100, "Office render did not qualify")
+            text_path = expected[f"{phase}_text"]
+            raw = read_regular(guest / text_path, maximum=1024**2)
+            require(hashlib.sha256(raw).hexdigest() == files[text_path]["sha256"],
+                    "Office text changed after collection")
+            text = raw.decode("utf-8")
+            require(visible in text and hidden not in text and hidden_encoded not in text,
+                    "Office text contradicts visibility/privacy assertions")
+
+    class NoDoctype(ET.TreeBuilder):
+        def doctype(self, *_args):
+            raise Refusal("DTD-bearing JUnit evidence refused")
+
+    expected_cases = {f"test_libreoffice_headless_render[{carrier}-{profile}]"
+                      for carrier in ("none", "python_lsb", "steganographer")
+                      for profile in ("docx", "odt")}
+    for branch, filename in (("pytest", "pytest.xml"), ("pipeline_pytest", "pipeline-pytest.xml")):
+        root = ET.fromstring(read_regular(guest / filename, maximum=16 * 1024**2),
+                             parser=ET.XMLParser(target=NoDoctype()))
+        cases = [case for case in root.iter("testcase")
+                 if case.get("classname", "").endswith("test_interop")]
+        identities = [(case.get("classname"), case.get("name")) for case in cases]
+        require(expected_cases <= {case.get("name") for case in cases}
+                and len(set(identities)) == len(identities)
+                and all(not any(case.find(status) is not None for status in
+                                ("skipped", "failure", "error")) for case in cases),
+                "Required Office cases are absent, duplicated, skipped or failed")
+        require(isinstance(results.get(branch), dict)
+                and results[branch].get("office_executed") == [case.attrib for case in cases],
+                "Office execution summaries disagree with the actual JUnit")
+
+
+def validate(runner, output, manifest, raw, record, custody, token, *,
+             allow_unmasked_procfs_for_daemon=None):
+    profile = procfs_profile(custody, allow_unmasked_procfs_for_daemon)
     input_hash = digest(raw)
     require(record.get("schema") == PROVISION_SCHEMA, "Unsupported provision schema")
     require(record.get("inputs_sha256") == input_hash
@@ -841,6 +944,8 @@ def validate(runner, output, manifest, raw, record, custody, token):
             "--pid", "", "--ipc", "private", "--cgroupns", "private",
             "--memory", "8g", "--memory-swap", "8g", "--cpus", "4", "--pids-limit", "512",
             "--restart", "no", "--log-driver", "none", "--entrypoint", "timeout"]
+    if profile["policy"] == "daemon-bound-unmasked":
+        args += ["--security-opt", "systempaths=unconfined"]
     for path, options in TMPFS.items():
         args += ["--tmpfs", f"{path}:{options}"]
     args += [image_id, *COMMAND]
@@ -848,7 +953,7 @@ def validate(runner, output, manifest, raw, record, custody, token):
                 "docker_context": custody["context"]["Name"], "image_id": image_id,
                 "inputs_sha256": input_hash, "internal_ttl_seconds": TTL,
                 "host_timeout_seconds": TTL + 45, "namespace_reaped": False,
-                "seccomp": "unconfined",
+                "procfs_profile": profile, "seccomp": "unconfined",
                 "seccomp_risk": "Non-default per-container policy permits real unprivileged "
                                 "bubblewrap user/mount/network namespace syscalls; kernel "
                                 "capability, read-only mount, network and PID isolation remain. "
@@ -869,7 +974,8 @@ def validate(runner, output, manifest, raw, record, custody, token):
         require(cid, "Docker did not record a container ID")
         inspected = runner.json(["inspect", cid])[0]
         save(output / "container-before.json", inspected)
-        check_controls(inspected, image_id, image, token, input_hash)
+        evidence["procfs_controls_before_start"] = check_controls(
+            inspected, image_id, image, token, input_hash, procfs_profile=profile)
         require(inspected["State"]["Status"] == "created"
                 and not inspected["State"]["Running"], "Container started before inspection")
         evidence["controls_verified_before_start"] = True
@@ -907,6 +1013,15 @@ def validate(runner, output, manifest, raw, record, custody, token):
         except CONTROL_ERRORS as exc:
             failure = failure or exc
             evidence["drift_failure"] = str(exc)
+        if cid is not None:
+            try:
+                final_container = runner.json(["inspect", cid])[0]
+                evidence["procfs_controls_after_stop"] = check_controls(
+                    final_container, image_id, image, token, input_hash, procfs_profile=profile)
+                evidence["controls_verified_after_stop"] = True
+            except CONTROL_ERRORS as exc:
+                failure = failure or exc
+                evidence["controls_after_failure"] = str(exc)
         save(output / "lifecycle.json", evidence)
     # Never extract unverified partial archives, and never treat absent output as success.
     if stream is not None and stream.ended:
@@ -915,8 +1030,6 @@ def validate(runner, output, manifest, raw, record, custody, token):
     if failure is not None:
         raise failure
     require(evidence.get("namespace_reaped"), "No namespace stop/reap evidence")
-    final_container = runner.json(["inspect", cid])[0]
-    check_controls(final_container, image_id, image, token, input_hash)
     state = evidence["final_state"]
     require(not state.get("OOMKilled") and not state.get("Error")
             and state.get("ExitCode") == 0 and attach_code == 0,
@@ -928,10 +1041,15 @@ def validate(runner, output, manifest, raw, record, custody, token):
             and results.get("schema") == "docxplus.release-results.v1"
             and qualification.get("ok") is True and results.get("ok") is True,
             "Guest qualification/results did not succeed")
+    check_office_export(output, qualification, results, artifacts)
     return {"schema": "docxplus.release-validation.v1", "ok": True,
             "image_id": image_id, "inputs_sha256": input_hash, "sources": manifest["sources"],
+            "procfs_profile": profile,
+            "procfs_controls_before_start": evidence["procfs_controls_before_start"],
+            "procfs_controls_after_stop": evidence["procfs_controls_after_stop"],
             "lifecycle": "lifecycle.json", "qualification": "guest/qualification.json",
-            "results": "guest/results.json", "artifacts": "collected-artifacts.json"}
+            "results": "guest/results.json", "artifacts": "collected-artifacts.json",
+            "office": "guest/office/evidence.json"}
 
 
 def main():
@@ -944,6 +1062,13 @@ def main():
         command.add_argument("--docker-context", required=True)
         if name == "validate":
             command.add_argument("--provision-record", required=True, type=Path)
+            command.add_argument(
+                "--allow-unmasked-procfs-for-daemon", metavar="ID",
+                help="Explicit validate-only exception for this verified Linux rootless daemon ID: "
+                     "remove Docker's outer proc AND kernel-path masks/read-only protections "
+                     "for compute only (systempaths=unconfined). Isolated VM only; all other "
+                     "controls and real private PID/proc qualification remain required. "
+                     "No automatic fallback.")
     args = parser.parse_args()
     output = None
     def interrupted(signum, _frame):
@@ -971,7 +1096,9 @@ def main():
             provision_raw = read_regular(clean_path(args.provision_record))
             (output / "provision-input.json").write_bytes(provision_raw)
             record = load_json(provision_raw)
-            result = validate(runner, output, manifest, raw, record, custody, token)
+            result = validate(
+                runner, output, manifest, raw, record, custody, token,
+                allow_unmasked_procfs_for_daemon=args.allow_unmasked_procfs_for_daemon)
             require(read_regular(clean_path(args.inputs)) == raw, "Input manifest changed")
             require(read_regular(clean_path(args.provision_record)) == provision_raw,
                     "Provision record changed")

@@ -1,67 +1,64 @@
 # Evaluation {#sec:evaluation}
 
-> Every quantity in this section is substituted at render time from live code constants via
-> `scripts/render_manuscript.py` and `src/docxplus/manuscript_vars.py`. The manuscript sources contain no hardcoded
-> metrics, so a claim here cannot drift from the implementation without the render failing. The figures draw
-> from the same source.
+> Tokens are substituted from live constants, source inventories and available reports by
+> `src/docxplus/manuscript_vars.py`; retaining tokens prevents literal drift, not stale evidence.
+> Report-derived values below are historical unless a source-bound release receipt identifies the exact
+> final inputs and successful run. No fresh full-suite, coverage, native-Office or render result is asserted here.
 
 ## Round-Trip Integrity Across Every Sealing Mode {#sec:eval-roundtrip}
 
 The reference dossier (`src/docxplus/reference_docs.py`, `scripts/04_dossier.py`) carries 5
-heterogeneous modules in a single archive, covering all 4 sealing lineages
-(`password`, `plain`, `recipients`, `threshold`) across 2 of the 5 transport channels
-(`custom_xml`, `package_part`). Sealing is what the dossier is for; the remaining channels are exercised by the
-round-trip and channel test suites rather than here, and the table below is generated from the document the
-code actually produces:
+heterogeneous modules in a single archive, covering all 3 sealing lineages
+(`password`, `recipients`, `threshold`) across 1 of the 5 transport channels
+(`package_part`). Sealing is what the dossier is for; the remaining channels are exercised by the
+round-trip and channel suites rather than here. One `ReferenceDossier` supplies serialized artifact bytes
+and ephemeral credentials to both the exporter and table; checks read those bytes through its reader:
 
 | Slot | Channel | Sealing |
 | --- | --- | --- |
 | `annex` | package_part | password |
-| `brief` | custom_xml | plain |
 | `notes` | package_part | password |
 | `review` | package_part | recipients |
+| `source` | package_part | password |
 | `vault` | package_part | threshold |
 
-All 5 modules extract and verify:
+The generated dossier table specifies the fixture's intended extraction/verification checks:
 
-- **Structure.** The container passes OPC conformance (`opc_valid = True`): no part collisions, no broken
-  relationship pointers.
-- **Provenance.** The Ed25519 manifest signature, the module Merkle tree, and the composite
-  surface digest over the package graph all validate.
-- **Sealing.** Argon2id and Scrypt password modules decrypt; X25519 multi-recipient envelopes open for each
-  authorised key; Shamir $(k,n)$ shares reconstruct on reaching quorum and are refused when a share's
-  verifiable tag is absent or wrong; dual-frame decoy modules return their respective plaintexts under their
-  respective passphrases.
-- **Reproducibility.** Carried `project` tarballs unpack without path traversal, and reproduction
-  attestations verify cryptographically.
+- **Structure.** Selected OPC graph checks (collisions and relationship resolution), not full ISO conformance.
+- **Provenance.** Signature, module Merkle root and package-surface commitments recompute; a caller-pinned
+  key is needed to authenticate the signer.
+- **Sealing.** Selected password, recipient, threshold and decoy round trips, including signed full-share
+  digest membership before combine. Standalone share checksums do not establish malicious-share resistance.
+- **Project extraction.** The dossier source slot is extracted but is not reproduction-attested.
+  Living/synthetic suites own their recipe claims and separate local execution evidence.
 
-The harness comprises 518 test functions under a 90% coverage gate, with no mocks
-anywhere: tests run against real cryptographic primitives, real ZIP archives, real subprocess CLI
-invocations, and the compiled Rust steganography engine when it is present.
+The source inventory comprises 699 test functions under a 90% coverage policy,
+not that many freshly passed cases. Tests use real primitives, files and subprocesses; optional compiled-backend
+and native-application cases require their capabilities and cannot count a skip as an exercised result.
 
 ## A Manuscript That Carries Its Own Repository {#sec:living-manuscript}
 
-`scripts/05_living_manuscript.py` packs the complete, runnable docxplus repository — source and test suite —
-into a `.docx` carrying a signed reproduction attestation. That `.docx` is a sibling of the PDF you are
-reading, not this file; the evaluation below describes the carried archive, not the rendered paper.
+`scripts/05_living_manuscript.py` packs the selected docxplus repository tree into a `.docx` with a signed
+attestation for a dependency-free hash of selected Python source files. It does **not** rerun the tests,
+figures, rendered paper or full scientific workflow. The carried archive is distinct from this rendered PDF.
 
 ![Authoring runs left to right and ends at one self-contained file; what a reader does with that file forks. The default branch is entirely cryptographic and executes nothing. The other requires an explicit flag and re-runs the attested command under confinement. The fork exists because the two verdicts are not interchangeable: one says the author's claim has not been altered, the other says it reproduces on this machine, and neither substitutes for the other.](../../output/figures/reproduction_lifecycle.png){#fig:reproduction-lifecycle width=95%}
 
 A recipient can engage at three levels of increasing commitment. The last two are the branches that
 fork in [@fig:reproduction-lifecycle]:
 
-1. **Read it.** Open the `.docx` in Word, LibreOffice Writer, or Google Docs. Nothing about the intelligence
-   layer intrudes.
-2. **Verify it, executing nothing.** `docxplus verify-reproduction` checks the Ed25519 signature and the
-   digest chain over the attested recipe. This is the default trust path, and it treats the document as
-   inert data throughout.
+1. **Read it.** The public document surface is intended for ordinary Office consumers; native compatibility
+   remains an application/version/fixture-specific empirical question.
+2. **Verify it, executing nothing.** `docxplus verify-reproduction --expected-key ...` authenticates the
+   signed recipe claim against carried bytes. Unpinned verification establishes only self-consistency;
+   neither path witnesses execution.
 3. **Re-run it.** `docxplus reproduce` opts in to instantiating the project in a confined sandbox, executing
    the attested command, and comparing the resulting digests against the author's.
 
-The third tier is the interesting one precisely because it is optional. A document that reproduced itself on
-open would be malware; the value lies in the reader choosing, on their own hardware, when to spend that
-trust. What a match proves is bounded and worth stating: the declared command produced the sealed outputs on
-a matching toolchain. It says nothing about whether the method was sound.
+The third tier is optional and potentially dangerous. A successful local run compares the declared selected
+outputs in the observed environment; it does not establish independence from readable host inputs, an exact
+environment match, or scientific validity. The source-hash demonstration is intentionally narrower than a
+whole-project reproduction claim and is insensitive to changes outside its selected source set.
 
 ## Carrying a Project Out and Back {#sec:roundtrip}
 
@@ -69,17 +66,17 @@ The claim that a document can carry the software that produced it is only worth 
 the round trip, so the fidelity is measured rather than asserted. `scripts/06_project_roundtrip.py` builds a
 project tree chosen to contain exactly the cases naive packing loses — an executable entrypoint, an empty
 directory, a zero-byte file, filenames with spaces and non-ASCII characters, two files with identical
-content, and build junk that must *not* travel — carries it into both containers, and compares what comes
-back file by file, byte by byte, and mode by mode.
+content, and build junk that must *not* travel — carries it into both containers, then reads actual exported
+artifacts and enumerates both source and extracted trees. Extra entries fail alongside missing/changed
+files, execute bits and empty directories.
 
-Over a 14-file, 9-directory tree, all 18 of 18 invariants hold.
-Both profiles validate against their own conformance rules; both verify provenance under a pinned key and
-refuse a wrong one; both extract 12 files identical to the originals; both carry and
-cryptographically verify a reproduction attestation. The sealed `.docx` is 4,417 bytes and the
-`.odt` 3,523 bytes, and the packed project payload is *byte-identical between them* — parity that
-holds because the two profiles share the packing code rather than agreeing by inspection.
+The available report records a 14-file, 9-directory selected synthetic tree and
+18 of 18 checks, with 12 compared files. Those tokens describe the report,
+not a fresh run. It reports package sizes of 5,390 bytes (DOCX) and 4,551 bytes (ODT),
+plus cross-profile packed-payload parity. Shared packing makes consistent behavior plausible, but does not
+replace independent end-to-end evidence for either profile or imply arbitrary-project fidelity.
 
-![A real project tree carried into a container and diffed against what came back. The through-line is what survives byte for byte, including the executable bit — a carried entrypoint that returns non-executable is not carried software. Three diversions leave that line at the point they occur: metadata normalised because determinism is worth more than an mtime, symlinks refused outright because packing one would embed its target, and build directories never packed at all. Counts are read from the harness output at render time, so a fidelity regression changes this figure rather than merely failing a test.](../../output/figures/roundtrip_fidelity.png){#fig:fidelity width=95%}
+![A selected project fixture carried into a container and compared with what came back. The preservation contract includes file contents and the executable bit; metadata is normalized, symlinks refused by default and build directories excluded. Counts come from the available harness report at render time, not from a freshness check or a general fidelity proof.](../../output/figures/roundtrip_fidelity.png){#fig:fidelity width=95%}
 
 [@Fig:fidelity] states the contract in full: what is preserved, what is normalised away on purpose, what
 is refused outright, and what never travels at all.
@@ -106,44 +103,45 @@ verifying after extraction.
 
 ## Channel Capacity {#sec:capacity}
 
-Capacity spans four orders of magnitude, and the spread is the design's point rather than an artefact:
-different channels answer different needs.
+Capacity is channel- and backend-specific; no channel-local limit removes package entry/total/count budgets.
 
-![What bounds each channel, plotted against the axis on which they actually differ. `metadata` has a hard ceiling fixed by the format and flat in carrier size; `stego_media` scales with carrier area and overtakes that ceiling at roughly 147 pixels a side; the remaining three have no channel-imposed limit at all and are drawn as an open region rather than given an invented number. The marked points are measured rather than computed: a payload of exactly that size was embedded into a real carrier and read back before the point was plotted.](../../output/figures/capacity.png){#fig:capacity width=85%}
+![Channel capacity under the selected Python LSB framing and package budgets. Metadata has a fixed short-property ceiling; media scales with carrier area; the other channels have no channel-local ceiling. Regeneration performs boundary round trips before plotting measured points. A committed plate without a source-bound receipt is historical, not fresh capacity evidence.](../../output/figures/capacity.png){#fig:capacity width=85%}
 
 [@Fig:capacity] plots the spread on a log scale, distinguishing the channels with a real format ceiling
 from those that simply have none:
 
 - **`metadata`** is deliberately small, bounded at 8000 bytes in `docProps/custom.xml`:
   routing headers, identifiers, status flags, key shares.
-- **`custom_xml`, `package_part`, and `mce`** carry no format-imposed ceiling, scaling until host storage or
-  the reader's own decompression caps intervene.
-- **`stego_media`** scales with carrier resolution under 1-bit LSB encoding: a $256\times 256$ RGB PNG holds
-  24568 bytes, a $512\times 512$ PNG holds 98296. Under `redundancy=N` the payload is
-  replicated across $N$ carriers, trading capacity for survival of carrier loss.
+- **`custom_xml`, `package_part`, and `mce`** have no channel-local ceiling, but XML/base64, part, archive
+  metadata, count and total-size limits still apply.
+- **`python_lsb` media** uses DXL1 framing: a $256\times 256$ RGB PNG holds 24568 bytes and a
+  $512\times 512$ PNG holds 98296. Rust media instead queries actual CLI capacity with the
+  same metadata/signing policy as encode. Replication requires a surviving digest-matching carrier;
+  it does not preserve signed package authenticity through edits.
 
 ## Conformance, Openability, and Determinism {#sec:conformance}
 
-Generated packages comply with ISO/IEC 29500-2 [@iso29500]. Because protection is applied per payload rather
-than by wrapping the archive in an MS-OFFCRYPTO compound file [@msoffcrypto], the document stays readable by
-ordinary tools — the property [@sec:motivation] set out to preserve.
+The construction uses documented OPC/ODF extension points [@iso29500; @oasis_odf] and payload-level rather
+than whole-package encryption [@msoffcrypto]. Structural checks are not complete schema validation.
+Native application openability needs receipts naming each application/version and emitted fixture; no current
+Word/Google Docs proof or fresh LibreOffice conversion is inferred from unit tests or PDF generation.
+The release Office gate renders actual installed-wheel DOCX/ODT, saves through Writer, then renders again.
+Its tool-bound receipt retains original/saved document/PDF/text/raster hashes and visible/hidden sentinel
+checks. It qualifies the recorded fixture's visible rendering only, not payload survival or signature
+validity after Office editing. Qualification remains conditional until a fresh receipt is imported.
 
-Determinism is asserted, not assumed: `test_container.py::test_build_is_deterministic` requires byte-identical
-digests across repeated unencrypted builds. Encrypted and signed builds introduce fresh salts, IVs, and
-nonces by design, while part ordering stays fixed. Headless LibreOffice conversions confirm that the
-resulting files open and render.
+Repeated unencrypted-build tests express deterministic serialization obligations. Fresh salts/nonces make
+encrypted output intentionally nonidentical; fixed part order alone does not establish whole-workflow determinism.
 
 ## Adversarial Verification {#sec:threat-audit}
 
-Security claims are worth what their falsification attempts are worth, so the format has been through
-14 cycles of adversarial review closing 88 confirmed findings.
-Each cycle decomposed the design into atomic claims, attacked them from independent perspectives, and
-required a second reviewer to *reproduce* a finding against the running system before it was accepted.
-Every accepted finding produced both a fix and a regression test that fails without it. The complete
-record — severities, reproduction steps, and results withdrawn rather than shipped — is maintained in
-`docs/redteam-audit.md` and is not reproduced here.
+The audit record describes 14 review cycles and 88 confirmed
+findings. Historical regression claims, current static findings, observed baseline failures and unavailable
+fresh qualification are distinguished in `docs/redteam-audit.md`. Counts are not a security proof or pass tally.
+The newest source changes require final source-bound integration evidence; prior successful runs do not
+automatically qualify new format framing, keys, consumers or platform controls.
 
-![Threat classes grouped by the layer each one attacks, with the boundary it fails against drawn between the attack and the invariant. Every arrow stops on the wall. None of the classes is hypothetical — each was reproduced against a running build before its control was written — and the grouping shows what a flat list obscured: the coverage spans the surface contract, the manifest, the sealing layer, and the sandbox, rather than concentrating where the code was easiest to harden.](../../output/figures/redteam_matrix.png){#fig:redteam-matrix width=95%}
+![Threat classes grouped by layer and the intended controls that address them. Arrows depict design boundaries, not proof that every adversary or current platform probe is blocked. The audit distinguishes observed failures, source-derived mitigations and unavailable qualification evidence.](../../output/figures/redteam_matrix.png){#fig:redteam-matrix width=95%}
 
 [@Fig:redteam-matrix] maps the classes to their controls. Four findings generalise past this
 implementation, and they are the reason the review is worth reporting at all.
@@ -155,12 +153,11 @@ space between two individually correct components, the position Dolev and Yao fo
 [@dolevyao1983]. What closed it was a change of question — asking of each constraint whether it was a law
 of the format or a convention this project had chosen — rather than a better test.
 
-**A control is only as strong as the verifier's obligation to invoke it.** Verifiable secret shares
-[@feldman1987] carried integrity tags defeatable by stripping the header rather than by cryptanalysis,
-because nothing obliged the reconstructing party to demand the tagged form. Recording the requirement in
-the *signed* manifest moves it from the verifier's discretion to the attacker's impossibility. Downgrade
-resistance has to be structural; TLS reached the same conclusion about version negotiation only after
-repeated failures [@rfc8446].
+**A control needs an authenticated reference.** A public share checksum can be recomputed after mutation;
+requiring its header never made it Feldman VSS [@feldman1987]. Signed full-share digest commitments instead
+authenticate issued bytes under a pinned trusted manifest. That does not prove polynomial consistency or an
+honest dealer. The distinction is between an accidental-corruption check and an adversarial authenticity
+boundary; downgrade controls alone cannot upgrade the former into the latter.
 
 **Absence of a failing test is not evidence of a working control.** Two findings were silent: a
 determinism guarantee implemented by assignment to a non-existent attribute, and a capability documented

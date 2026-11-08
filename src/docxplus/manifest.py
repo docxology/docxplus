@@ -3,7 +3,7 @@
 The manifest is the modular spine of the format: a single JSON part
 (``intelligence/manifest.json``, with an Override content type) that enumerates
 every payload module, where it lives, its digest and size, whether it is
-encrypted, and an optional Ed25519 signature over the canonical manifest body.
+encrypted, and an optional key-family-bound signature over the canonical body.
 
 It plays the role the report assigns to ``META-INF/manifest.xml`` in ODF (report
 §2.2): the authoritative list of what the package carries, so a reader validates
@@ -16,15 +16,122 @@ import json
 from dataclasses import dataclass, field
 
 from .channels.base import ChannelRecord
+from .crypto import signing_algorithm
 from .crypto import verify as _verify
 from .opc import OpcPackage, Relationship
+from .shamir import MAX_X
 
 MANIFEST_PART = "intelligence/manifest.json"
 CT_MANIFEST = "application/vnd.docxplus.manifest+json"
 REL_MANIFEST = "urn:docxplus:intelligence:1.0/manifest"
 SIGNATURE_ALGORITHM = "ed25519"
 
-FORMAT_VERSION = "2.0"
+FORMAT_VERSION = "3.0"
+
+
+def _unique_object(pairs: list[tuple[str, object]]) -> dict:
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate manifest JSON key: {key}")
+        result[key] = value
+    return result
+
+
+def _is_digest(value: object) -> bool:
+    return (
+        isinstance(value, str) and len(value) == 64
+        and all(c in "0123456789abcdef" for c in value)
+    )
+
+
+def _validate_document(doc: object) -> None:
+    """Validate the single exact format-3 schema before creating records."""
+    if not isinstance(doc, dict) or set(doc) != {
+        "version", "modules", "merkle_root", "surface_digest", "signature", "cosignatures"
+    }:
+        raise ValueError("invalid manifest object fields")
+    if doc["version"] != FORMAT_VERSION:
+        raise ValueError(f"unsupported manifest version: {doc['version']!r}")
+    for key in ("merkle_root", "surface_digest"):
+        value = doc[key]
+        if not isinstance(value, str) or (value and not _is_digest(value)):
+            raise ValueError(f"invalid manifest {key}")
+    sig = doc["signature"]
+    if not isinstance(sig, dict) or set(sig) != {"algorithm", "public_key", "value"}:
+        raise ValueError("invalid manifest signature object")
+    if any(not isinstance(value, str) for value in sig.values()):
+        raise ValueError("manifest signature fields must be strings")
+    for key in ("public_key", "value"):
+        bytes.fromhex(sig[key])
+    if bool(sig["public_key"]) != bool(sig["value"]):
+        raise ValueError("signature requires both public_key and value")
+    if not isinstance(doc["cosignatures"], list):
+        raise TypeError("manifest cosignatures must be a list")
+    keys = set()
+    for entry in doc["cosignatures"]:
+        if (
+            not isinstance(entry, dict) or set(entry) != {"public_key", "algorithm", "value"}
+            or any(not isinstance(value, str) for value in entry.values())
+        ):
+            raise ValueError("invalid manifest cosignature")
+        public = bytes.fromhex(entry["public_key"])
+        bytes.fromhex(entry["value"])
+        if public in keys:
+            raise ValueError("duplicate manifest cosigner")
+        keys.add(public)
+    if not isinstance(doc["modules"], list):
+        raise TypeError("manifest modules must be a list")
+    fields = {
+        "channel", "slot", "size", "digest", "encrypted", "content_type",
+        "payload_type", "sealing", "location", "reproduction",
+    }
+    for module in doc["modules"]:
+        if not isinstance(module, dict) or set(module) != fields:
+            raise ValueError("invalid manifest module fields")
+        for key in ("channel", "slot", "digest", "content_type", "payload_type"):
+            if not isinstance(module[key], str):
+                raise TypeError(f"manifest module {key} must be a string")
+            module[key].encode("utf-8")
+        if not _is_digest(module["digest"]):
+            raise ValueError("module digest must be 32-byte lowercase hex")
+        if type(module["size"]) is not int or module["size"] < 0:
+            raise ValueError("manifest module size must be a nonnegative integer")
+        if type(module["encrypted"]) is not bool:
+            raise ValueError("manifest module encrypted must be a boolean")
+        if any(not isinstance(module[key], dict) for key in ("sealing", "location", "reproduction")):
+            raise ValueError("manifest module metadata must be objects")
+        if any(
+            not (
+                isinstance(value, list) and all(isinstance(part, str) for part in value)
+                if key == "parts" else isinstance(value, str)
+            )
+            for key, value in module["location"].items()
+        ):
+            raise ValueError("invalid module location values")
+        sealing = module["sealing"]
+        mode = sealing.get("mode")
+        if mode not in ("plain", "password", "recipients", "threshold"):
+            raise ValueError("unsupported manifest sealing mode")
+        if module["encrypted"] != (mode != "plain"):
+            raise ValueError("manifest encrypted flag disagrees with sealing mode")
+        if mode == "threshold":
+            if set(sealing) != {"mode", "k", "n", "checksummed_shares", "share_digests"}:
+                raise ValueError("threshold module requires signed share commitments and checksum policy")
+            k, n = sealing["k"], sealing["n"]
+            if type(k) is not int or type(n) is not int or not 1 <= k <= n <= MAX_X:
+                raise ValueError("invalid threshold parameters")
+            if sealing["checksummed_shares"] is not True:
+                raise ValueError("threshold module requires checksummed shares")
+            digests = sealing["share_digests"]
+            if (
+                not isinstance(digests, list) or len(digests) != n
+                or any(not _is_digest(digest) for digest in digests)
+                or len(set(digests)) != n
+            ):
+                raise ValueError("invalid threshold share commitments")
+        elif set(sealing) != {"mode"}:
+            raise ValueError("unsupported sealing metadata fields")
 
 
 @dataclass
@@ -33,20 +140,17 @@ class Manifest:
 
     records: list[ChannelRecord] = field(default_factory=list)
     version: str = FORMAT_VERSION
-    public_key: str = ""  # hex Ed25519 public key, if signed
-    signature: str = ""  # hex Ed25519 signature over canonical_body()
+    public_key: str = ""  # hex strictly framed signing public key, if signed
+    signature: str = ""  # hex signature over canonical_body()
     #: Digest of the whole part graph — every part, the content-type map, and every
     #: relationship edge, excluding only this manifest. Not a digest of
     #: word/document.xml: selecting the story part by name put a naming convention
     #: in the trust path, and OPC resolves it through the officeDocument
     #: relationship instead. See container._compute_surface_digest.
     surface_digest: str = ""
-    #: Detached co-signatures over the same canonical body: [{public_key, value}, ...].
+    #: Co-signatures: [{public_key, algorithm, value}, ...]; identities/schemes are signed.
     cosignatures: list[dict] = field(default_factory=list)
-    #: The signature algorithm the manifest declares. Recorded so a disagreement can
-    #: be refused; never used to *select* a verifier. Selecting on an attacker-
-    #: supplied algorithm field is the JWT `alg` confusion class, and this field is
-    #: not inside canonical_body, so it is not authenticated either.
+    #: Actual primary key family, authenticated by canonical_body().
     algorithm: str = SIGNATURE_ALGORITHM
 
     def add(self, record: ChannelRecord) -> None:
@@ -67,16 +171,24 @@ class Manifest:
         return _root([(r.slot, r.digest) for r in self.records])
 
     def canonical_body(self) -> bytes:
-        """Deterministic bytes signed/verified: version + modules + Merkle root.
+        """Sign version, modules, Merkle root, surface and actual signing schemes.
 
         Including the Merkle root means the signature binds the *set* of modules;
         dropping or injecting a module changes the root and breaks the signature.
+        All co-signer identities and algorithms must be declared before signing;
+        only their signature values are excluded from the canonical body.
         """
         body = {
             "version": self.version,
             "modules": [r.to_dict() for r in sorted(self.records, key=lambda x: x.slot)],
             "merkle_root": self.merkle_root(),
             "surface_digest": self.surface_digest,
+            "signature_algorithm": self.algorithm,
+            "cosigners": sorted(
+                ({"public_key": c["public_key"], "algorithm": c["algorithm"]}
+                 for c in self.cosignatures),
+                key=lambda c: (c["public_key"], c["algorithm"]),
+            ),
         }
         return json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
@@ -97,15 +209,13 @@ class Manifest:
 
     @classmethod
     def from_bytes(cls, blob: bytes) -> Manifest:
-        doc = json.loads(blob)
-        sig = doc.get("signature", {})
-        # `add` refuses a duplicate slot on the write path, but a manifest read from
-        # a package never goes through `add`, so a hand-crafted one could carry two
-        # records under one name. That is a parser differential: `slot()` returns the
-        # first match while a validator iterating `records` sees both, so the module
-        # a reader extracts need not be the module a validator checked. Refuse here,
-        # where untrusted bytes actually enter.
-        records = [ChannelRecord.from_dict(m) for m in doc.get("modules", [])]
+        try:
+            doc = json.loads(blob, object_pairs_hook=_unique_object)
+            _validate_document(doc)
+            sig = doc["signature"]
+            records = [ChannelRecord.from_dict(module) for module in doc["modules"]]
+        except (KeyError, TypeError, UnicodeError, RecursionError) as exc:
+            raise ValueError(f"malformed manifest: {exc}") from exc
         seen: set[str] = set()
         for record in records:
             if record.slot in seen:
@@ -113,12 +223,12 @@ class Manifest:
             seen.add(record.slot)
         return cls(
             records=records,
-            version=doc.get("version", FORMAT_VERSION),
-            public_key=sig.get("public_key", ""),
-            signature=sig.get("value", ""),
-            surface_digest=doc.get("surface_digest", ""),
-            algorithm=str(sig.get("algorithm", SIGNATURE_ALGORITHM)),
-            cosignatures=[dict(c) for c in doc.get("cosignatures", [])],
+            version=doc["version"],
+            public_key=sig["public_key"],
+            signature=sig["value"],
+            surface_digest=doc["surface_digest"],
+            algorithm=sig["algorithm"],
+            cosignatures=[dict(c) for c in doc["cosignatures"]],
         )
 
     def verify_cosignatures(self) -> dict[str, bool]:
@@ -133,7 +243,10 @@ class Manifest:
         for c in self.cosignatures:
             key, value = c.get("public_key", ""), c.get("value", "")
             try:
-                out[key] = _verify(body, bytes.fromhex(value), bytes.fromhex(key))
+                public = bytes.fromhex(key)
+                out[key] = (self.version == FORMAT_VERSION
+                            and c.get("algorithm") == signing_algorithm(public)
+                            and _verify(body, bytes.fromhex(value), public))
             except ValueError:
                 out[key] = False
         return out
@@ -142,21 +255,15 @@ class Manifest:
         return bool(self.signature and self.public_key)
 
     def declares_supported_algorithm(self) -> bool:
-        """True when the manifest names the signature algorithm this build implements.
-
-        The field was written and never read: a manifest could declare
-        ``"algorithm": "rsa-4096"`` and still verify, because verification hard-codes
-        Ed25519. Nothing was exploitable — hard-coding is what makes it safe, and
-        dispatching on the field instead would be the JWT ``alg``-confusion mistake —
-        but a recorded value nobody checks is a claim the format cannot keep, and it
-        left no way to notice a document from a future version using something else.
-
-        So the field is checked and never obeyed. Note that it sits outside
-        ``canonical_body`` and is therefore unauthenticated: flipping it can turn a
-        valid document into a refused one, which is a nuisance rather than a
-        compromise, and strictly better than accepting a statement known to be false.
-        """
-        return self.algorithm == SIGNATURE_ALGORITHM
+        """Check the authenticated scheme against the strictly parsed key family."""
+        if self.version != FORMAT_VERSION:
+            return False
+        if not self.public_key:
+            return self.algorithm == SIGNATURE_ALGORITHM
+        try:
+            return self.algorithm == signing_algorithm(bytes.fromhex(self.public_key))
+        except ValueError:
+            return False
 
     def verify_signature(self) -> bool:
         """True when a present signature validates over the canonical body."""
@@ -164,11 +271,14 @@ class Manifest:
             return False
         if not self.is_signed():
             return False
-        return _verify(
-            self.canonical_body(),
-            bytes.fromhex(self.signature),
-            bytes.fromhex(self.public_key),
-        )
+        try:
+            return _verify(
+                self.canonical_body(),
+                bytes.fromhex(self.signature),
+                bytes.fromhex(self.public_key),
+            )
+        except ValueError:
+            return False
 
 
 def write_manifest(pkg: OpcPackage, manifest: Manifest) -> None:

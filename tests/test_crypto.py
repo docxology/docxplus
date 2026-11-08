@@ -15,6 +15,7 @@ from docxplus.crypto import (
     encrypt,
     generate_signing_key,
     sign,
+    validate_password_envelope,
     verify,
 )
 
@@ -121,7 +122,7 @@ def test_argon2id_work_factor_caps():
         salt=os.urandom(16),
         nonce=os.urandom(12),
         params=bad_params,
-        ciphertext=b"dummy",
+        ciphertext=b"t" * 16,
     ).to_bytes()
-    with pytest.raises(ValueError, match="outside accepted range"):
-        decrypt(env, "pw")
+    with pytest.raises(ValueError):
+        validate_password_envelope(env)

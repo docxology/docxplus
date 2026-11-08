@@ -10,7 +10,7 @@ traps.
 ```python
 embed(pkg, payload, *, slot) -> ChannelRecord   # mutates pkg
 extract(pkg, record)         -> bytes
-capacity(pkg)                -> int | None      # None = effectively unbounded
+capacity(pkg)                -> int | None      # None = no channel-local limit
 ```
 
 `embed` receives the payload **already packed and already sealed**. A channel never
@@ -33,10 +33,10 @@ name is how a hostile package steers extraction.
    ZIP round trip is where part naming and content types actually get tested.
 4. A validation test that the surface document still conforms. `validate.py` is the
    gate.
-5. Entries in `docs/channels.md` **and** `docs/format-spec.md`. `tests/test_docs.py`
-   fails the build without both.
-6. State plainly whether it crosses to ODF. If it does not, say so in
-   `docs/channels.md` — two of the five do not, and silence reads as "it does".
+5. Update `docs/channels.md` **and** `docs/format-spec.md` with actual capacity,
+   placement, intake and authentication contracts, not source-text tests.
+6. State whether it crosses to ODF. `custom_xml`/`mce` are OOXML-only and
+   `metadata` has no implemented ODF analogue; silence must not imply parity.
 
 An unknown channel id must fail explicitly on read. Do not add a permissive fallback.
 
@@ -53,9 +53,9 @@ An unknown channel id must fail explicitly on read. Do not add a permissive fall
 - **Determinism is part of the contract.** Fixed part numbering, sorted entries, no
   wall-clock. Two builds of the same input produce the same bytes, and the round-trip
   suite compares bytes.
-- **Capacity must be honest.** `capacity` returning a number the channel cannot
-  actually hold turns a build into a truncation. Return `None` only when a new part
-  can genuinely always be added.
+- **Capacity must be honest.** A finite bound must account for actual framing,
+  metadata, signing and carrier dimensions; Rust uses its real `capacity` command.
+  `None` means no channel-local limit, never exemption from package budgets.
 - **The bounded channels are bounded for a reason.** `metadata` caps at a custom
   property's practical length and `stego_media` at carrier pixels; exceeding either
   must raise, never silently spill into a second location.

@@ -2,7 +2,7 @@
 
 DOCX carries a custom-properties part (``docProps/custom.xml``) alongside core and
 app properties (report §9). Named custom properties are a structured, in-spec
-metadata channel: small, human-inspectable, and preserved across round-trips.
+metadata channel: small, human-inspectable, and retained by library serialization.
 Suited to short payloads (identifiers, routing tags, digests) rather than bulk
 data. We base64-encode the payload into a single named ``lpwstr`` property.
 """
@@ -10,7 +10,7 @@ data. We base64-encode the payload into a single named ``lpwstr`` property.
 from __future__ import annotations
 
 import base64
-from xml.sax.saxutils import escape, quoteattr
+from xml.etree.ElementTree import Element, SubElement, tostring
 
 from defusedxml.ElementTree import fromstring as _safe_fromstring
 
@@ -43,12 +43,22 @@ class MetadataChannel:
             raise ValueError(
                 f"metadata channel holds at most {MAX_PAYLOAD} bytes; got {len(payload)}"
             )
-        props = _load_props(pkg)
+        root = _load_props(pkg)
         prop_name = f"dxplus_{slot}"
-        if prop_name in props:
+        if any(prop.get("name") == prop_name for prop in root):
             raise ValueError(f"metadata property collision for slot {slot!r}: {prop_name!r} already exists")
-        props[prop_name] = base64.b64encode(payload).decode("ascii")
-        _store_props(pkg, props)
+        try:
+            used_pids = {int(prop.attrib["pid"]) for prop in root}
+        except (KeyError, ValueError) as exc:
+            raise ValueError("existing custom property has no valid integer PID") from exc
+        pid = 2
+        while pid in used_pids:
+            pid += 1
+        prop = SubElement(root, f"{{{NS_CUSTOM}}}property", {
+            "fmtid": _FMTID, "pid": str(pid), "name": prop_name,
+        })
+        SubElement(prop, f"{{{NS_VT}}}lpwstr").text = base64.b64encode(payload).decode("ascii")
+        _store_props(pkg, root)
         return ChannelRecord(
             channel=self.id,
             slot=slot,
@@ -59,38 +69,28 @@ class MetadataChannel:
         )
 
     def extract(self, pkg: OpcPackage, record: ChannelRecord) -> bytes:
-        props = _load_props(pkg)
-        return base64.b64decode(props[record.location["property"]])
+        root = _load_props(pkg)
+        for prop in root:
+            if prop.get("name") == record.location["property"]:
+                value = prop.find(f"{{{NS_VT}}}lpwstr")
+                if value is None:
+                    raise ValueError("module metadata is not an lpwstr property")
+                return base64.b64decode(value.text or "", validate=True)
+        raise KeyError(record.location["property"])
 
     def capacity(self, pkg: OpcPackage) -> int | None:
         return MAX_PAYLOAD
 
 
-def _load_props(pkg: OpcPackage) -> dict[str, str]:
+def _load_props(pkg: OpcPackage) -> Element:
+    """Retain existing property types, attributes, IDs and compound values."""
     if CUSTOM_PART not in pkg.parts:
-        return {}
-    root = _safe_fromstring(pkg.parts[CUSTOM_PART])
-    props: dict[str, str] = {}
-    for prop in root:
-        name = prop.attrib.get("name")
-        value_el = list(prop)
-        if name and value_el:
-            props[name] = value_el[0].text or ""
-    return props
+        return Element(f"{{{NS_CUSTOM}}}Properties")
+    return _safe_fromstring(pkg.parts[CUSTOM_PART])
 
 
-def _store_props(pkg: OpcPackage, props: dict[str, str]) -> None:
-    entries = []
-    for pid, (name, value) in enumerate(sorted(props.items()), start=2):
-        entries.append(
-            f'<property fmtid="{_FMTID}" pid="{pid}" name={quoteattr(name)}>'
-            f'<vt:lpwstr>{escape(value)}</vt:lpwstr></property>'
-        )
-    xml = (
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        f'<Properties xmlns="{NS_CUSTOM}" xmlns:vt="{NS_VT}">'
-        f'{"".join(entries)}</Properties>'
-    ).encode()
+def _store_props(pkg: OpcPackage, root: Element) -> None:
+    xml = tostring(root, encoding="utf-8", xml_declaration=True)
 
     if CUSTOM_PART in pkg.parts:
         pkg.parts[CUSTOM_PART] = xml

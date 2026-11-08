@@ -109,3 +109,63 @@ def test_channel_record_roundtrip():
     assert rec2.sealing == rec.sealing
     assert rec2.reproduction == rec.reproduction
 
+
+
+@pytest.mark.parametrize("pid_spelling", ["2", "02", "+2"])
+def test_metadata_preserves_existing_typed_property_elements(pid_spelling):
+    """C18: adding a module must not coerce integers, dates, booleans or vectors."""
+    from xml.etree.ElementTree import fromstring
+
+    from docxplus.channels.metadata import (
+        CT_CUSTOM_PROPS,
+        CUSTOM_PART,
+        NS_CUSTOM,
+        NS_VT,
+        REL_CUSTOM_PROPS,
+    )
+    from docxplus.opc import Relationship, read_package
+
+    pkg = new_base_document(["Typed document properties"])
+    xml = (
+        f'<Properties xmlns="{NS_CUSTOM}" xmlns:vt="{NS_VT}">'
+        f'<property fmtid="{{D5CDD505-2E9C-101B-9397-08002B2CF9AE}}" pid="{pid_spelling}" name="Count"><vt:i4>42</vt:i4></property>'
+        '<property fmtid="{original-bool}" pid="7" name="Ready" linkTarget="Source">'
+        '<vt:bool>true</vt:bool></property>'
+        '<property fmtid="{original-date}" pid="100" name="When">'
+        '<vt:filetime>2020-01-02T03:04:05Z</vt:filetime></property>'
+        '<property fmtid="{original-vector}" pid="3" name="Labels">'
+        '<vt:vector size="2" baseType="lpstr">'
+        '<vt:lpstr>A &amp; B</vt:lpstr><vt:lpstr>C</vt:lpstr></vt:vector></property>'
+        '</Properties>'
+    ).encode()
+    pkg.add_part(CUSTOM_PART, xml, CT_CUSTOM_PROPS)
+    pkg.add_relationship(Relationship(pkg.next_rel_id(""), REL_CUSTOM_PROPS, CUSTOM_PART))
+    def tree(element):
+        return element.tag, element.attrib, element.text, [tree(child) for child in element]
+    original = [tree(prop) for prop in fromstring(xml)]
+    channel = get_channel("metadata")
+    first = channel.embed(pkg, b"first module", slot="one")
+    second = channel.embed(pkg, b"second module", slot="two")
+    restored = read_package(pkg.to_bytes())
+    root = fromstring(restored.parts[CUSTOM_PART])
+    assert [tree(prop) for prop in list(root)[:4]] == original
+    assert len({int(prop.attrib["pid"]) for prop in root}) == len(root)
+    assert channel.extract(restored, first) == b"first module"
+    assert channel.extract(restored, second) == b"second module"
+    assert sum(rel.type == REL_CUSTOM_PROPS for rel in restored.relationships.get("", [])) == 1
+
+
+def test_metadata_collision_with_existing_typed_property_preserves_bytes():
+    """A same-named typed property is a collision even without a string value."""
+    from docxplus.channels.metadata import CT_CUSTOM_PROPS, CUSTOM_PART, NS_CUSTOM, NS_VT
+
+    pkg = new_base_document(["x"])
+    xml = (
+        f'<Properties xmlns="{NS_CUSTOM}" xmlns:vt="{NS_VT}">'
+        '<property fmtid="{original}" pid="9" name="dxplus_reserved">'
+        '<vt:i4>42</vt:i4></property></Properties>'
+    ).encode()
+    pkg.add_part(CUSTOM_PART, xml, CT_CUSTOM_PROPS)
+    with pytest.raises(ValueError, match="metadata property collision"):
+        get_channel("metadata").embed(pkg, b"new", slot="reserved")
+    assert pkg.parts[CUSTOM_PART] == xml

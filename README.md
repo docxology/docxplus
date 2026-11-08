@@ -2,31 +2,30 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21983948.svg)](https://doi.org/10.5281/zenodo.21983948)
 
-> A byte-valid OOXML `.docx` that is **also** a modular, signed, encrypted
-> intelligence carrier. It opens as an ordinary document in Word, LibreOffice, and
-> Google Docs, while carrying structured payloads through the spec-sanctioned
-> side-channels that the OOXML/ODF standards actually permit.
+> An OOXML `.docx` or ODF `.odt` carrying a modular, signed, encrypted
+> intelligence layer through documented package extension points. Structural
+> validation is not a universal Office-application interoperability guarantee.
 
-**v1.1.0** · MIT · Python ≥ 3.11 · [CHANGELOG](CHANGELOG.md) ·
+**v2.0.0** · MIT · Python >= 3.11 · [CHANGELOG](CHANGELOG.md) ·
 [docs index](docs/README.md) · [CLI reference](docs/cli.md)
 
 docxplus is a standards-first reference implementation. Every channel it uses is
 grounded in a documented feature of ISO/IEC 29500 (OOXML) or its ODF cousin —
 custom XML parts, additional package parts, custom document properties, embedded
-media — layered with an Ed25519-signed manifest and AES-256-GCM payload
-encryption. The media channel bridges to
+media — layered with a key-family-authenticated signed manifest and AES-256-GCM
+payload encryption. The media channel bridges to
 [docxology/steganographer](https://github.com/docxology/steganographer) so the
 intelligence can ride inside the least-significant bits of an image the document
 visibly displays.
 
 ## Why this is not "just a zip trick"
 
-A `.docx` is an Open Packaging Conventions (OPC) ZIP. The standards report this
-project is built on (`docs/standards-report.md`) establishes the exact rules:
-mandatory `[Content_Types].xml` + `_rels/.rels`, every part reachable by
-following relationships, no duplicate entries, deterministic output. docxplus obeys
-all of them — so the surface document stays *conforming*, not merely openable —
-and then uses the standard's own extension points to carry more.
+A `.docx` is an Open Packaging Conventions (OPC) ZIP. The standards report
+[`docs/standards-report.md`](docs/standards-report.md) grounds the extension points.
+The implementation checks selected package graphs, namespaces and intelligence
+invariants; it does not implement complete ISO schema validation or prove that
+every Office application accepts every generated file. Deterministic archive
+serialization is a project policy, not an OPC conformance requirement.
 
 ## Channels (modules)
 
@@ -46,21 +45,21 @@ assigns to `META-INF/manifest.xml`.
 
 The primitives scale on five orthogonal axes (see `docs/design-rationale.md`):
 
-- **Typed payloads** — `bytes`, `text`, `json`, **`project`** (a whole reproducible
-  repo packed to a deterministic tar), **`docxplus`** (a nested container). A
-  document can literally carry the software that produced it.
-- **Cryptographic depth** — `password` (AES-GCM), **multi-recipient** (X25519, one
-  file that opens for many key-holders), **k-of-n threshold** (Shamir with
-  verifiable shares; no single holder can open it), and **decoy** (two secrets,
-  two passwords, structurally indistinguishable from an ordinary sealed module).
+- **Typed payloads** — `bytes`, `text`, `json`, **`project`** (a selected directory
+  tree packed to a deterministic tar), and **`docxplus`** (a nested container).
+  Carrying source does not by itself reproduce its results.
+- **Cryptographic depth** — `password` (AES-GCM), **multi-recipient** (X25519
+  or genuine X25519 + ML-KEM-768), **k-of-n threshold** (Shamir with signed
+  full-share digest commitments), and **decoy** (two bounded password frames
+  sharing a KDF and power-of-two padding policy, not universal deniability).
 - **Composition** — nest a sealed docxplus inside another (matryoshka).
 - **Provenance** — a signed **Merkle root** binds the whole module set, and a
-  `surface_digest` binds every visible story part; adding, dropping, or swapping a
-  module — or editing a footnote — breaks the signature.
-- **Covert depth** — the media channel's dual LSB backends, with chi-squared
-  steganalysis shipped so you can measure your own carrier's detectability.
+  profile-separated typed/count/length/hash `surface_digest` binds the package graph;
+  adding, dropping or swapping a module — or editing a footnote — breaks the signature.
+- **Covert depth** — dual LSB backends, with a chi-squared heuristic for inspecting
+  selected carriers, not a calibrated presence probability or absence guarantee.
 
-`docs/cookbook.md` gives 12 buildable document kinds (self-verifying dossier,
+`docs/cookbook.md` gives buildable document kinds (self-verifying dossier,
 dead-man's envelope, sealed referee packet, provenance ledger, …). The showcase
 `scripts/04_dossier.py` builds and verifies the sealing recipes in one file; the
 channel and round-trip recipes are covered by their own scripts and tests.
@@ -76,13 +75,13 @@ the details that matter under attack.
 ```bash
 uv run docxplus odt-build report.odt --module brief:brief.json --password s3cret \
     --signing-key key.hex
-uv run docxplus odt-validate report.odt        # ODF + intelligence conformance
+uv run docxplus odt-validate report.odt        # structural + intelligence checks
 uv run docxplus odt-extract report.odt brief --password s3cret
 ```
 
 Two OOXML channels have no ODF analogue and do not cross over: `custom_xml` (no
 custom XML datastore part) and `mce` (no Markup Compatibility element). ODT payloads
-ride as ODF package entries, the unbounded channel.
+ride as ODF package entries, bounded by archive intake limits.
 
 ## Two names, one file
 
@@ -90,14 +89,14 @@ Every export writes the document twice under two names, byte for byte identical:
 
 | | |
 | --- | --- |
-| `report.docx` / `report.odt` | the **surface contract**. Double-click it; Word or LibreOffice opens it |
+| `report.docx` / `report.odt` | the **surface contract**; application/version-specific openability requires its own evidence |
 | `report.docxplus` / `report.odtplus` | the same bytes, asserting the **intelligence contract** |
 
-An extension is a claim about content. `.docxplus` says "this carries a signed
-intelligence layer", and `docxplus validate` is what turns the assertion into a
-verdict — either name validates, because they are the same bytes. Writing both also
-removes a trap: a lone `.docxplus` on a system with no handler for it looks broken,
-while the identical `.docx` beside it does not.
+An extension is a claim about content. `.docxplus` asserts an intelligence
+manifest, not authenticity. `docxplus validate` checks selected structural and
+integrity obligations under either name; only caller-pinned verification authenticates it.
+Writing both names also avoids the missing-handler trap of a lone `.docxplus`;
+the ordinary `.docx` surface name remains available beside it.
 
 ## Carrying a project, and getting it back
 
@@ -117,11 +116,11 @@ file, byte by byte, and mode by mode.
 ./run.sh roundtrip      # two suites, run back to back
 ```
 
-The first carries a *synthetic* tree built to contain the awkward cases — an executable
-entrypoint, an empty directory, a zero-byte file, non-ASCII and spaced filenames — through
-both profiles, checking 18 invariants including cross-profile nesting and byte-identical
-payload parity. The second carries a *real* external repository (the docxology
-`template_code_project`, 126 carried files across 13 directories) through all four emitted formats:
+The first carries a *synthetic* tree selected to contain awkward cases — an executable
+entrypoint, an empty directory, a zero-byte file, non-ASCII and spaced filenames —
+through both profiles, including cross-profile nesting and payload parity. The
+second carries the selected external `template_code_project` snapshot through
+the emitted surface/intelligence names; its inventory comes from its report:
 
 | Artefact | |
 | --- | --- |
@@ -130,12 +129,15 @@ payload parity. The second carries a *real* external repository (the docxology
 | `output/documents/template_code_project.odt` | surface name, ODF |
 | `output/documents/template_code_project.odtplus` | same bytes, intelligence name |
 
-Each is validated, read back *from that name*, and diffed against the original. A
-synthetic tree can be shaped to pass; a real one cannot, which is why both run.
+Each is read back *from that name* and compared against the captured source.
+Neither a synthetic fixture nor one external project is a general fidelity proof.
+Committed `output/` artifacts are historical evidence unless a source-bound fresh
+release receipt identifies the exact inputs and successful run that produced them.
 
-Those artefacts are committed. `output/` is tracked rather than ignored, because the
-documents and reports there are the evidence for the manuscript's claims — a reader
-should be able to clone and inspect them instead of taking the numbers on trust.
+Capture uses retained source descriptors and bounded reads, not a global snapshot:
+quiesce the tree if cross-file consistency matters. Extraction validates first and
+publishes a fresh private 0700 root into an absent/empty destination. Platforms
+without descriptor-relative no-follow directory support refuse safe project I/O.
 
 The harness also covers what a single round trip cannot: the same tree packing to
 *byte-identical* payloads in both containers, and a signed `.docx` nested inside a
@@ -151,12 +153,15 @@ organising rule, not an optimisation.
   and `verify_cosigners([keys])` enforce a signing policy — author AND institution.
   Authenticity always requires the caller to pin the key they trust: the key inside
   the manifest is self-asserted, so an unpinned check proves self-consistency only.
-- **Reproduction attestation.** A `project` module can bind its source to a
-  deterministic output digest, so a reader can trust results *follow from the code*.
-  `verify_reproduction(slot)` is cryptographic and executes nothing;
-  `reproduce(slot, dest, allow_execution=True)` is the opt-in path that re-runs the
-  attested command in a best-effort hermetic sandbox and compares digests. A digest
-  match attests process, never that the science is sound.
+- **Reproduction attestation.** A `project` module binds carried bytes to a signed
+  claim about a recipe, toolchain and output digest, not proof of execution.
+  `verify_reproduction(slot, expected_public_key=…)` authenticates that claim without
+  executing it; without pinning, only `self_consistent` may be true.
+  `reproduce(slot, dest, allow_execution=True)` explicitly runs the recipe under
+  available confinement and compares digests. Missing confinement refuses execution.
+  Readable host files remain exposed; use a disposable isolated environment for
+  untrusted code. The living example hashes selected source; it does not rerun the
+  full test/figure/manuscript pipeline or prove scientific reproducibility.
 - **Transparency log.** Attestations chain into an append-only log with Merkle
   inclusion proofs. A chain alone proves only self-consistency, so authenticity
   rests on a **signed tree head** over `(log_size, root_hash)`;
@@ -168,15 +173,11 @@ organising rule, not an optimisation.
 
 ## Adversarial review
 
-Fourteen cycles of adversarial review ([`docs/redteam-audit.md`](docs/redteam-audit.md))
-have closed 88 confirmed findings, each pinned by a regression test. The record is
-kept in full, including the two occasions when an earlier fix turned out to be
-incomplete, and one negative result: a sample-pair steganalysis estimator that was
-built, measured, found mis-calibrated, and withdrawn rather than shipped.
-
-Those two counts are not typed by hand. `src/docxplus/manuscript_vars.py` derives them from
-the audit record itself, and `tests/test_docs.py` fails the build if this paragraph
-disagrees with the live value — the same rule the manuscript follows.
+[`docs/redteam-audit.md`](docs/redteam-audit.md) records confirmed findings,
+incomplete earlier mitigations, rejected findings and negative results. Counts
+generated by `src/docxplus/manuscript_vars.py` describe that record, not a fresh
+passing suite or a security proof. Current integration evidence and unavailable
+release/interoperability proof are distinguished there from historical results.
 
 ## Quick start
 
@@ -220,19 +221,46 @@ pipeline, renderer, real Rust backend, template roundtrips and installed-wheel
 smoke. No host bind/socket mounts, capabilities, inherited credentials or global
 security changes. Container-local `seccomp=unconfined` permits nested user
 namespaces; the other enforced controls and negative probes are mandatory.
-This is a separate qualified project workflow, not a way to disable production
+This is a separate qualification workflow, not a way to disable production
 sandboxing or turn capability absence into a passing release.
+
+Docker's default proc/kernel path masks remain required; if they prevent mounting
+private procfs, validation refuses rather than weakening the sandbox. Only within
+an operator-controlled isolated **Linux rootless VM**, validation can explicitly
+select `--allow-unmasked-procfs-for-daemon "$VERIFIED_DAEMON_ID"`. The ID must equal
+the currently verified, provision-bound daemon ID; it is not a context name.
+This container-only exception removes Docker's outer proc **and kernel-path**
+masking/read-only defenses (`systempaths=unconfined`), not production bubblewrap's
+private PID/proc or any other confinement control. There is no automatic fallback
+or host/global policy change. See the operator eligibility and evidence
+requirements in [`scripts/README.md`](scripts/README.md#release-validation);
+fresh actual denial/custody probes are required and do not certify arbitrary
+kernels or macOS detached-process custody.
+
+The Office gate renders actual installed-wheel DOCX/ODT exports, saves each through
+LibreOffice Writer, then renders the saved package again. Its
+`docxplus.release-office.v1` receipt records tool versions/hashes and original/saved
+document, PDF, extracted text and nonblank raster hashes/sizes. Visible sentinels
+must remain and hidden sentinels must not render. **Payload survival or signature
+validity after an Office edit is not asserted**: saving may strip or rewrite them.
+Qualification remains conditional until the release owner imports a successful
+receipt bound to the final sources; these gates are not a current pass claim.
 
 ## Security posture
 
 Payloads are encrypted at the *payload* level (AES-256-GCM, keyed by memory-hard
 **Scrypt** by default, with **Argon2id** available and PBKDF2-HMAC-SHA512 kept for
 compatibility — the MS-OFFCRYPTO agile lineage), **not** as whole-package OOXML
-encryption, so the document stays a valid, openable Office file. Readers cap
-attacker-supplied KDF work factors *and* the memory they imply, so a hostile
-envelope cannot turn opening a file into a denial-of-service. The manifest is
-Ed25519-signed for provenance. See `docs/security-model.md` for the full threat
-model, grounded in the USENIX 2022/2023 analyses the standards report cites.
+encryption, so the public surface is not credential-gated. Readers bound declared
+KDF work and memory, but those bounds are not a total-process resource guarantee.
+Format 3.0 is an authenticated breaking migration: format-2 manifests and simulated
+hybrid material are refused; rebuild and re-sign trusted inputs rather than editing
+a version field. Both profiles support Ed25519 or genuine Ed25519 + ML-DSA-65
+manifest/co-signing, and DXE2 classical or DXE3 all-hybrid recipient sealing through
+`cryptography >= 50`. Portable typed `DXHK` private keys distinguish signing from
+recipient suites and check derived public halves. Mixed recipient families and
+ambiguous keys refuse; pin the entire composite public identity. Component standards
+do not certify this product. See [`docs/security-model.md`](docs/security-model.md).
 
 ## Layout
 
@@ -243,7 +271,7 @@ human or agent — editing it.
 | Directory | What lives there | Guides |
 | --- | --- | --- |
 | [`src/`](src/README.md) | the import root; holds no modules of its own | [README](src/README.md) · [AGENTS](src/AGENTS.md) |
-| [`src/docxplus/`](src/docxplus/README.md) | the 22 tested domain modules plus `channels/`; all business logic | [README](src/docxplus/README.md) · [AGENTS](src/docxplus/AGENTS.md) |
+| [`src/docxplus/`](src/docxplus/README.md) | domain modules plus `channels/`; all business logic | [README](src/docxplus/README.md) · [AGENTS](src/docxplus/AGENTS.md) |
 | [`src/docxplus/channels/`](src/docxplus/channels/README.md) | the five side-channels behind one `Channel` protocol | [README](src/docxplus/channels/README.md) · [AGENTS](src/docxplus/channels/AGENTS.md) |
 | [`scripts/`](scripts/README.md) | thin pipeline and isolated-release orchestrators | [README](scripts/README.md) · [AGENTS](scripts/AGENTS.md) |
 | [`tests/`](tests/README.md) | the real-data, no-mocks suite behind the 90% gate | [README](tests/README.md) · [AGENTS](tests/AGENTS.md) |
@@ -254,15 +282,14 @@ human or agent — editing it.
 | [`.github/`](.github/README.md) | the CI gates, in the order they fail | [README](.github/README.md) · [AGENTS](.github/AGENTS.md) |
 | [`.agents/`](.agents/README.md) | the project-scoped agent skill | [README](.agents/README.md) · [AGENTS](.agents/AGENTS.md) |
 
-Top-level files: `src/docxplus/cli.py` (the CLI, 19 subcommands — see
+Top-level files: `src/docxplus/cli.py` (the CLI — see
 [`docs/cli.md`](docs/cli.md)), `run.sh` (the pipeline driver, `./run.sh help` for the
 stages), `pyproject.toml`, `CHANGELOG.md`, and the citation metadata
 (`CITATION.cff`, `codemeta.json`, `.zenodo.json`).
 
 The CLI's own surface is not restated here — it drifted once by omitting `verify`,
 the authenticity verb, which is the worst possible command to leave out of a summary.
-`docs/cli.md` is the contract, and `tests/test_docs.py` fails if a subcommand exists
-without an entry there.
+`docs/cli.md` is the contract; update it alongside actual CLI behavior.
 
 ## Documentation
 
@@ -276,7 +303,7 @@ without an entry there.
 | [`docs/design-rationale.md`](docs/design-rationale.md) | first-principles decomposition |
 | [`docs/security-model.md`](docs/security-model.md) | defenses, non-defenses, residual risks |
 | [`docs/reproduction-design.md`](docs/reproduction-design.md) | the four-lens reproduction design |
-| [`docs/cookbook.md`](docs/cookbook.md) | 12 buildable document kinds |
+| [`docs/cookbook.md`](docs/cookbook.md) | buildable document kinds |
 | [`docs/manuscript-pipeline.md`](docs/manuscript-pipeline.md) | how the paper is built: tokens, automatic numbering, the diagnostic gate |
 | [`docs/redteam-audit.md`](docs/redteam-audit.md) | every adversarial finding and its fix |
 | [`docs/opc-signatures.md`](docs/opc-signatures.md) | whole-package OPC signature integration assessment |

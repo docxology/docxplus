@@ -43,15 +43,9 @@ from docxplus.validate import validate_bytes, validate_odt_bytes
 
 
 def recipe_json() -> str:
-    """Pin the interpreter rather than trusting PATH.
-
-    The sandbox scrubs the environment, and a bare ``python3`` can resolve to a
-    developer-tools shim that refuses to run without Xcode. A reproduction recipe
-    that names its interpreter is both more portable and more honest about what it
-    actually ran.
-    """
+    """Author a portable explicit Python command, attested exactly as authored."""
     return json.dumps(
-        {"command": [sys.executable, "compute.py"], "outputs": ["result.json"], "timeout": 60},
+        {"command": ["python3", "compute.py"], "outputs": ["result.json"], "timeout": 60},
         indent=2,
     )
 
@@ -171,7 +165,8 @@ def carried_junk(restored: dict, excluded: tuple[str, ...]) -> list[str]:
 def main() -> int:
     dirs = ensure_output_dirs()
     workdir = Path(tempfile.mkdtemp(prefix="docxplus-roundtrip-"))
-    report: dict = {"profiles": {}, "cross_profile": {}, "checks": []}
+    report: dict = {"profiles": {}, "cross_profile": {}, "checks": [],
+                    "authored_command": json.loads(recipe_json())["command"]}
     failures: list[str] = []
 
     def check(name: str, ok: bool, detail: str = "") -> None:

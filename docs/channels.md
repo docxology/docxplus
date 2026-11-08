@@ -32,7 +32,8 @@ Base64 in `customXml/itemN.xml`, registered via `customXml/itemPropsN.xml` and
 referenced from the main document part. Layout engines ignore these parts entirely
 while they remain valid against the OOXML custom XML mapping schemas.
 
-**Capacity** unbounded. **Visibility** none. **Cost** base64 inflates by a third.
+**Capacity** has no channel-local limit; package entry/total/count budgets apply.
+**Visibility** none. **Cost** base64 inflates by a third.
 
 ---
 
@@ -41,10 +42,11 @@ while they remain valid against the OOXML custom XML mapping schemas.
 Raw bytes at `intelligence/payloadN.dxp` under a declared content type, referenced by
 a package-level relationship. The default and the workhorse.
 
-**Capacity** unbounded. **Visibility** none. **Cost** none — no encoding overhead.
+**Capacity** has no channel-local limit; package entry/total/count budgets apply.
+**Visibility** none. **Cost** none — no encoding overhead.
 
-This is the only channel the ODF profile implements, where it writes ODF package
-entries declared in `META-INF/manifest.xml` and is recorded as `odt_package_part`.
+The ODF profile records this package-entry channel as `odt_package_part`, declared
+in `META-INF/manifest.xml`; ODT also supports displayed-image `stego_media`.
 
 **Note.** A payload above 1 MiB that compresses extremely well is stored uncompressed,
 because deflating it would trip the reader's own inflate-ratio guard and produce a
@@ -75,18 +77,38 @@ the visible body (`<w:drawing>` or `<draw:frame>` respectively) so the carrier i
 figure the document actually renders. That is the point: an image nothing renders is a
 conspicuously spare part, not cover.
 
-**Capacity** scales with carrier pixels: roughly `(w·h·3)/8 − 8` bytes.
+**Capacity** is backend-specific: Python DXL1 uses `floor(w·h·3/8) − 8` when
+framing fits; Rust capacity comes from its actual CLI, not that Python formula.
 **Visibility** the figure is visible; the payload is not.
 
 Two backends, recorded in `location.backend`:
 
 * `python_lsb` — pure Python, needs only the imaging library. The zero-setup default.
-* `steganographer` — the docxology/steganographer Rust CLI, adding BLAKE3 hashing,
-  Ed25519 payload signatures, and Reed–Solomon error correction.
+* `steganographer` — the Rust generic-packet CLI with BLAKE3 integrity.
+  Default bridge packets are unsigned/non-ECC. An explicit `signing_key` adds
+  Ed25519 signing; packet identity pinning is separate. No ECC option is exposed.
 
-The optional backend uses steganographer 0.8's generic-packet encode/decode CLI.
-Select a built binary with `STEGANOGRAPHER_BIN`; no Rust backend is required for
-`python_lsb`. `steg_bridge.analyze_carrier` consumes the
+The bridge calls the real `capacity` command with actual RGB carrier units, one
+bit per unit, stable `payload.bin` filename and `application/octet-stream` MIME
+type, using the identical metadata/signing policy for encode. It reports the
+maximum legal payload including locator/envelope/signature overhead; a carrier
+too small for framing refuses rather than advertising a usable empty payload.
+DXL1 likewise refuses truncated/overlength frames and uint32 overflow.
+
+For example, the bridge's unsigned RGB sizing call is:
+
+```bash
+steganographer capacity --carrier-units N --stego-type lsb_video --bits 1 \
+    --filename payload.bin --mime-type application/octet-stream --format json
+```
+
+Add the same `--signing-key FILE` policy to sizing and encode when signing.
+
+The optional backend must provide the generic-packet and capacity CLI contracts;
+steganographer 0.9 is the version this release is exercised against. Select a
+built binary with `STEGANOGRAPHER_BIN` or PATH. Discovery never searches
+implicit sibling checkouts or builds Cargo; invalid explicit configuration fails.
+No Rust backend is required for `python_lsb`. `steg_bridge.analyze_carrier` consumes the
 `steganographer.cli/v1` success envelope and returns only its analysis `result`
 (including `detected` and `analysis_type`).
 `steganalysis_report()["external_analysis"]` exposes that same dictionary.
@@ -100,14 +122,14 @@ losing all but one; extraction returns the replica whose bytes match the module 
 which is why the chi-squared detector ships in-tree (`docxplus analyze-carrier`). Treat
 a concealed module as hidden from casual inspection, never as undiscoverable.
 
-**What the shipped detector does not find.** The chi-squared attack keys on the
-pairs-of-values flattening that a *uniform* bit stream causes. A sealed module is
-ciphertext and so is maximally detectable — a full carrier reports p ≈ 1. An unsealed
-low-entropy payload is not detected at any fill rate: plaintext, a constant fill, or a
-structured record reports p ≈ 0, the same as a clean carrier. So a clean verdict is
-evidence about this attack and not about the carrier. Sealing a module makes it *more*
-detectable by this test and less recoverable by everything else, which is the trade the
-channel actually offers.
+**Detector limits.** The Pearson adjacent-pair statistic reports `p_value`, an
+upper-tail probability under pair equality, not an embedding posterior. Each
+populated pair contributes a degree of freedom. Sparse/insufficient histograms
+return `available=False`, `p_value=None`, not evidence of absence. Balanced untouched
+covers can flag. Prefix sweeps reuse samples and are not independently calibrated.
+Neither a flag nor a clean result proves presence or absence; no general
+sensitivity/false-positive rate or reliable payload-size estimate is established.
+RGB/LSB processing has a shared pixel cap, not a total-process memory guarantee.
 
 ---
 
@@ -118,7 +140,8 @@ Payload inside `<mc:Choice Requires="dxm">` within an `<mc:AlternateContent>` bl
 `<mc:Fallback/>`. A consumer that does not recognise the namespace discards the Choice
 branch and renders the fallback, with no warning and no error.
 
-**Capacity** unbounded in principle; base64 inside the main story part in practice.
+**Capacity** has no channel-local bound; XML/base64 and package entry/total/count
+budgets apply.
 **Visibility** none — the empty fallback means concealing a module adds no paragraph.
 
 **Placement matters.** `CT_Body` is `(EG_BlockLevelElts*, sectPr?)`, so the block is
@@ -146,9 +169,9 @@ Implement `embed` / `extract` / `capacity` in `src/docxplus/channels/`, register
 channel id; a reader that does not recognise an id fails that module explicitly rather
 than silently. Two invariants any new channel must hold:
 
-1. **Surface validity is invariant.** Adding, sealing, or concealing a module must
-   leave the package conforming. Test it by validating a built package, not by
-   inspection.
+1. **Preserve profile obligations.** Channel updates must maintain required indexes,
+   authority, namespace and markup order. Structural validation checks selected
+   invariants; complete schema validation and native application evidence are separate.
 2. **The stored digest binds what travels.** Return a `ChannelRecord` whose `digest`
    and `size` describe the bytes actually placed, so the manifest signature covers
    exactly them.

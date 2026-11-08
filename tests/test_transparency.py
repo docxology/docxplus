@@ -42,9 +42,9 @@ def test_transparency_log_tamper_detection():
     log.append({"output_digest": "orig1", "toolchain": {}})
     log.append({"output_digest": "orig2", "toolchain": {}})
 
-    serialized = log.to_json()
-    # Tamper with the first entry's attestation_digest
-    tampered_json = serialized.replace("orig1", "tampered1")
+    serialized = json.loads(log.to_json())
+    serialized[0]["attestation_digest"] = "0" * 64
+    tampered_json = json.dumps(serialized)
 
     with pytest.raises(ValueError, match="chain integrity"):
         TransparencyLog.from_json(tampered_json)
@@ -275,3 +275,61 @@ def test_proof_does_not_commit_to_a_future_size():
     proof = _log(3).consistency_proof()
     assert "new_size" not in proof
     assert proof["old_size"] == 3
+
+
+def test_signed_tree_head_uses_the_portable_hybrid_identity():
+    """An STH made with a portable key requires the full pinned hybrid signer."""
+    from docxplus import crypto
+
+    log = _log_with(3)
+    key = crypto.generate_hybrid_signing_key()
+    loaded = crypto.HybridKeyPair.from_private_bytes(key.private_bytes)
+    sth = log.signed_tree_head(loaded.private_bytes, timestamp=123)
+    sth = json.loads(json.dumps(sth))
+    assert bytes.fromhex(sth["public_key"]) == key.public_bytes
+    assert log.verify_signed_tree_head(sth, expected_public_key=key.public_bytes)
+    assert not log.verify_signed_tree_head(sth, expected_public_key=key.classical_pub)
+    other = crypto.generate_hybrid_signing_key()
+    assert not log.verify_signed_tree_head(sth, expected_public_key=other.public_bytes)
+    # A valid classical half cannot launder a damaged ML-DSA signature.
+    signature = bytearray.fromhex(sth["signature"])
+    signature[68] ^= 1
+    assert not log.verify_signed_tree_head(
+        {**sth, "signature": signature.hex()}, expected_public_key=key.public_bytes
+    )
+    assert not log.verify_signed_tree_head({**sth, "timestamp": 124}, expected_public_key=key.public_bytes)
+    assert not log.verify_signed_tree_head(
+        {**sth, "public_key": (key.public_bytes + b"x").hex()},
+        expected_public_key=key.public_bytes,
+    )
+
+
+def test_tree_head_refuses_recipient_or_legacy_simulated_private_keys():
+    """Signing never synthesizes an identity from a wrong-family key file."""
+    from docxplus import crypto
+
+    log = _log_with(1)
+    recipient = crypto.generate_hybrid_recipient_key()
+    with pytest.raises(ValueError):
+        log.signed_tree_head(recipient.private_bytes, timestamp=1)
+    with pytest.raises(ValueError):
+        log.signed_tree_head(recipient.classical_priv + b"x" * 32, timestamp=1)
+
+
+def test_log_commits_the_complete_recipe_and_source_not_only_its_output():
+    """An unchanged result cannot launder a different recipe under an old signed head."""
+    from docxplus import crypto
+
+    claim = {"output_digest": "same-output", "command": ["{python}", "original.py"],
+             "source_digest": "original-source", "outputs": ["result"], "toolchain": {}}
+    original = TransparencyLog()
+    original.append(claim, timestamp=1)
+    private, public = crypto.generate_signing_key()
+    head = original.signed_tree_head(private, timestamp=2)
+    for altered in ({**claim, "command": ["{python}", "other.py"]},
+                    {**claim, "source_digest": "other-source"}):
+        replacement = TransparencyLog()
+        replacement.append(altered, timestamp=1)
+        assert not replacement.verify_signed_tree_head(head, expected_public_key=public)
+    reordered = dict(reversed(list(claim.items())))
+    assert transparency_module.attestation_digest(reordered) == transparency_module.attestation_digest(claim)

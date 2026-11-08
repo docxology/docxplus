@@ -4,12 +4,12 @@
 
 Strip away convention and a docxplus is five irreducible primitives:
 
-1. **Container** — a byte-addressable set of named parts with a reachability graph
-   (OPC/ZIP). *Hard constraint*: to stay an openable `.docx`, the surface must be a
-   conforming OPC package. Everything else is free.
-2. **Channel** — a placement of bytes into the container that a word processor
-   ignores. *Soft constraint*: which spec affordance (custom XML, extra part,
-   property, media LSB). New channels are pure additions.
+1. **Container** — named parts with profile-specific authority (OPC relationships
+   or ODF manifest entries). Preserving those rules is an obligation; the structural
+   checker is not complete schema validation or a universal openability proof.
+2. **Channel** — a placement through documented extension points (custom XML,
+   auxiliary parts, metadata, media LSB or MCE). Each channel has its own
+   construction/consumer assumptions; adding one is not automatically harmless.
 3. **Codec** — a reversible transform on a payload before placement (identity,
    compress, encrypt, secret-share, stego-frame). *Assumption to challenge*: "one
    password, one payload." Nothing forces single-recipient or single-secret.
@@ -38,22 +38,22 @@ password." Rebuilt from the primitives, complexity grows on **five independent
 axes**, each composable with the others:
 
 - **Payload richness** — a typed payload registry: `bytes`, `text`, `json`,
-  `project` (a whole reproducible repo packed to a deterministic tar), `docxplus`
-  (a nested container). Recursion is free once payloads are typed.
-- **Cryptographic depth** — from one-password AES-GCM to X25519 **multi-recipient**
-  hybrid sealing (one document, many key-holders) and Shamir **k-of-n threshold**
-  (no single holder can open it).
+  `project` (a selected tree packed to a deterministic tar), `docxplus`
+  (a nested container). Carrying source does not imply its results reproduce.
+- **Cryptographic depth** — password AES-GCM, homogeneous classical X25519 or genuine
+  X25519 + ML-KEM-768 recipients, and Shamir **k-of-n threshold** with signed
+  issued-share commitments. Standalone share checksums are not VSS.
 - **Composition** — nesting: a docxplus inside a module of another docxplus. Matryoshka
   sealing, each layer with its own recipients.
 - **Provenance** — a **Merkle root** over all module digests, signed, with an
   append-only tip seal, so the *set* of modules is bound, not just each module (an
   attacker cannot drop or add a module without breaking the root).
-- **Covert depth** — redundant media carriers and decoy payloads (two secrets, two
-  passwords) for plausible deniability.
+- **Covert depth** — redundant media and two common-policy padded password frames
+  for chaff or a cover story; neither robust watermarking nor universal deniability.
 
 ## Key insight
 
 The limiting assumption was that a docxplus *contains data*. It contains **typed,
 independently-sealed, provenance-bound objects** — and one of those object types is
-"a whole signed, encrypted, reproducible project," so a document can literally carry
-the software that produced it.
+"a selected signed, encrypted project tree," so a document can carry software
+alongside its narrative. Recipe claims and actual local reproduction are separate.

@@ -32,10 +32,10 @@ The file-by-file map is in [`README.md`](README.md).
 security-relevant path — sealing, unsealing, verification, intake, execution — add the
 test that shows what the branch prevents, not just one that reaches it.
 
-## The doc tests are load-bearing
+## Documentation checks exercise reader-visible failures
 
-`test_docs.py`, `test_manuscript_vars.py`, and `test_numbering.py` turn documentation
-into a checked surface: a new module, channel, subcommand, `run.sh` stage, or directory
-fails the build until it is documented, and a hand-typed drift-prone number fails it
-immediately. If a change to those tests would make them easier to pass, that is the
-signal to check whether it also makes them stop catching anything.
+`test_docs.py` checks relative navigation targets. `test_manuscript_vars.py`
+renders the actual manuscript sources with live variables. `test_numbering.py`
+checks unresolved/duplicate references and fatal renderer diagnostics.
+Do not pin prose, source text, inventories, incidental defaults or test counts.
+The real release pipeline must still render the manuscript and retain its coverage floor.

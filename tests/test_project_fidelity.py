@@ -9,6 +9,7 @@ whatever they pointed at.
 
 from __future__ import annotations
 
+import gzip
 import io
 import os
 import stat
@@ -23,7 +24,7 @@ def _tree(root):
     (root / "src").mkdir(parents=True)
     (root / "empty").mkdir()
     (root / "src" / "core.py").write_text("X = 1\n")
-    (root / "src" / "__init__.py").write_text("")            # zero bytes
+    (root / "src" / "__init__.py").write_text("")  # zero bytes
     (root / "notes with spaces.txt").write_text("spaced\n")
     (root / "ünïcödé.txt").write_text("nön-ascii ✓\n")
     run = root / "run.sh"
@@ -84,9 +85,9 @@ def test_gzip_wrapper_carries_no_timestamp(tmp_path):
     """
     root = _tree(tmp_path / "proj")
     blob = payloads.pack_project(root)
-    assert blob[:2] == b"\x1f\x8b"                       # gzip magic
-    assert int.from_bytes(blob[4:8], "little") == 0       # MTIME field
-    assert blob[3] & 0x08 == 0                            # no embedded filename
+    assert blob[:2] == b"\x1f\x8b"  # gzip magic
+    assert int.from_bytes(blob[4:8], "little") == 0  # MTIME field
+    assert blob[3] & 0x08 == 0  # no embedded filename
 
 
 def test_packing_is_deterministic_across_a_time_boundary(tmp_path, monkeypatch):
@@ -101,16 +102,18 @@ def test_packing_is_deterministic_across_a_time_boundary(tmp_path, monkeypatch):
 
 
 def test_pack_project_size_cap(tmp_path):
-    """A tree over max_uncompressed is refused at pack time, naming the heaviest members.
+    """A tree over max_uncompressed is refused at pack time, naming the offending member.
 
     Both halves matter: the refusal fires at authoring time (so an over-cap tree
     can never seal into an unextractable document), and the message says what to
     shrink rather than merely that something failed.
     """
     root = _tree(tmp_path / "proj")
-    with pytest.raises(payloads.ProjectPackError, match="over the 10-byte decompression cap") as info:
+    with pytest.raises(
+        payloads.ProjectPackError, match="over the 10-byte decompression cap"
+    ) as info:
         payloads.pack_project(root, max_uncompressed=10)
-    assert "largest members" in str(info.value)
+    assert "run.sh" in str(info.value)
 
 
 def test_junk_directories_are_excluded(tmp_path):
@@ -162,11 +165,23 @@ def test_dereferencing_requires_an_explicit_opt_in(tmp_path):
 @pytest.mark.parametrize(
     "kind,setup",
     [
-        ("symlink", lambda i: (setattr(i, "type", tarfile.SYMTYPE), setattr(i, "linkname", "/etc/passwd"))),
-        ("hard link", lambda i: (setattr(i, "type", tarfile.LNKTYPE), setattr(i, "linkname", "/etc/passwd"))),
+        (
+            "symlink",
+            lambda i: (setattr(i, "type", tarfile.SYMTYPE), setattr(i, "linkname", "/etc/passwd")),
+        ),
+        (
+            "hard link",
+            lambda i: (setattr(i, "type", tarfile.LNKTYPE), setattr(i, "linkname", "/etc/passwd")),
+        ),
         ("FIFO", lambda i: setattr(i, "type", tarfile.FIFOTYPE)),
-        ("character device", lambda i: (setattr(i, "type", tarfile.CHRTYPE), setattr(i, "devmajor", 1))),
-        ("block device", lambda i: (setattr(i, "type", tarfile.BLKTYPE), setattr(i, "devmajor", 8))),
+        (
+            "character device",
+            lambda i: (setattr(i, "type", tarfile.CHRTYPE), setattr(i, "devmajor", 1)),
+        ),
+        (
+            "block device",
+            lambda i: (setattr(i, "type", tarfile.BLKTYPE), setattr(i, "devmajor", 8)),
+        ),
     ],
 )
 def test_unpack_refuses_every_member_that_is_not_a_file_or_directory(tmp_path, kind, setup):
@@ -181,7 +196,7 @@ def test_unpack_refuses_every_member_that_is_not_a_file_or_directory(tmp_path, k
         info = tarfile.TarInfo("evil")
         setup(info)
         tar.addfile(info)
-    with pytest.raises(ValueError, match="only plain files and directories"):
+    with pytest.raises(ValueError):
         payloads.unpack_project(raw.getvalue(), tmp_path / "out")
 
 
@@ -223,9 +238,8 @@ def test_the_same_tree_packs_identically_for_both_profiles(tmp_path):
     root = _tree(tmp_path / "proj")
     docx = DocxPlusBuilder(paragraphs=["c"]).add_project("s", root).build()
     odt = OdtPlusBuilder(paragraphs=["c"]).add_project("s", root).build()
-    assert (
-        DocxPlusReader.from_bytes(docx).extract("s")
-        == OdtPlusReader.from_bytes(odt).extract("s")
+    assert DocxPlusReader.from_bytes(docx).extract("s") == OdtPlusReader.from_bytes(odt).extract(
+        "s"
     )
 
 
@@ -243,7 +257,7 @@ def test_open_document_rejects_a_non_package(tmp_path):
     from docxplus.container import ContainerError
     from docxplus.odt_container import open_document
 
-    with pytest.raises(ContainerError, match="not a readable document package"):
+    with pytest.raises(ContainerError):
         open_document(b"definitely not a zip")
 
 
@@ -283,7 +297,9 @@ def test_odt_carries_and_verifies_a_reproduction_attestation(tmp_path):
     root.mkdir()
     (root / "compute.py").write_text("from pathlib import Path\nPath('out.txt').write_text('42')\n")
     (root / ".docxplus-reproduce.json").write_text(
-        json.dumps({"command": [sys.executable, "compute.py"], "outputs": ["out.txt"], "timeout": 60})
+        json.dumps(
+            {"command": [sys.executable, "compute.py"], "outputs": ["out.txt"], "timeout": 60}
+        )
     )
 
     priv, pub = crypto.generate_signing_key()
@@ -404,8 +420,7 @@ def test_the_template_roundtrip_report_records_a_real_external_project():
         assert len(info["paths"]) == 2  # surface + plus name
     # Every emitted name must have been opened through the profile detector.
     dispatched = {c["name"] for c in report["checks"] if c["name"].startswith("dispatch.")}
-    assert dispatched == {"dispatch.docx", "dispatch.docxplus",
-                          "dispatch.odt", "dispatch.odtplus"}
+    assert dispatched == {"dispatch.docx", "dispatch.docxplus", "dispatch.odt", "dispatch.odtplus"}
 
 
 def test_add_project_refuses_oversized_tree_at_authoring_time_both_profiles(tmp_path):
@@ -436,5 +451,430 @@ def test_add_project_refuses_oversized_tree_at_authoring_time_both_profiles(tmp_
         raised.add_project("p", proj, max_uncompressed=2000)
         extracted_dir = tmp_path / f"out_{builder_cls.__name__}"
         extracted_dir.mkdir()
-        reader_cls.from_bytes(raised.build()).extract_project("p", extracted_dir)
+        reader = reader_cls.from_bytes(raised.build())
+        with pytest.raises(ValueError, match="decompression cap"):
+            reader.extract_project("p", extracted_dir, max_uncompressed=500)
+        reader.extract_project("p", extracted_dir, max_uncompressed=2000)
         assert (extracted_dir / "blob.bin").read_bytes() == b"\0" * 1000
+
+
+def _project_archive(entries):
+    raw = io.BytesIO()
+    with tarfile.open(fileobj=raw, mode="w:gz", format=tarfile.PAX_FORMAT) as archive:
+        for name, content in entries:
+            info = tarfile.TarInfo(name)
+            info.size = len(content)
+            archive.addfile(info, io.BytesIO(content))
+    return raw.getvalue()
+
+
+def test_extraction_refuses_nonempty_destination_without_touching_hardlinks(tmp_path):
+    """Project recovery never merges into a tree containing outside inode aliases."""
+    outside = tmp_path / "outside"
+    outside.write_bytes(b"preserved outside data")
+    dest = tmp_path / "out"
+    dest.mkdir()
+    os.link(outside, dest / "file")
+    blob = _project_archive([("file", b"new private contents")])
+    with pytest.raises(FileExistsError, match="nonempty"):
+        payloads.unpack_project(blob, dest)
+    assert outside.read_bytes() == (dest / "file").read_bytes() == b"preserved outside data"
+    assert set(tmp_path.iterdir()) == {outside, dest}
+
+
+def test_empty_destination_is_replaced_by_private_faithful_tree(tmp_path):
+    """An existing empty directory is supported, but no old inode becomes the tree."""
+    root = _tree(tmp_path / "source")
+    dest = tmp_path / "out"
+    dest.mkdir(mode=0o755)
+    previous_inode = dest.stat().st_ino
+    payloads.unpack_project(payloads.pack_project(root), dest)
+    assert dest.stat().st_ino != previous_inode
+    assert dest.stat().st_mode & 0o777 == 0o700
+    assert (dest / "empty").is_dir()
+    assert (dest / "run.sh").stat().st_mode & stat.S_IXUSR
+    assert (dest / "src" / "core.py").read_bytes() == b"X = 1\n"
+
+
+def test_project_destination_symlink_is_never_followed(tmp_path):
+    """A destination alias must not direct project writes outside the fresh tree."""
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "file").write_bytes(b"sentinel")
+    dest = tmp_path / "out"
+    dest.symlink_to(outside, target_is_directory=True)
+    with pytest.raises(FileExistsError):
+        payloads.unpack_project(_project_archive([("file", b"replacement")]), dest)
+    assert (outside / "file").read_bytes() == b"sentinel"
+    assert dest.is_symlink()
+
+
+@pytest.mark.parametrize(
+    "entries",
+    [
+        [("first", b"would otherwise be written"), ("../outside", b"escape")],
+        [("same", b"first"), ("same", b"second")],
+        [("dir/child", b"child"), ("dir", b"conflicting file")],
+        [("dir", b"conflicting file"), ("dir/child", b"child")],
+    ],
+)
+def test_entire_project_is_validated_before_any_destination_publication(tmp_path, entries):
+    """Late traversal/duplicate/type conflicts cannot leave a partial recovered tree."""
+    dest = tmp_path / "out"
+    with pytest.raises(ValueError):
+        payloads.unpack_project(_project_archive(entries), dest)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_project_zero_length_member_count_is_bounded_before_writing(tmp_path):
+    """Empty files do not consume content budget, but must consume member budget."""
+    blob = _project_archive([("one", b""), ("two", b"")])
+    with pytest.raises(ValueError):
+        payloads.unpack_project(blob, tmp_path / "out", max_uncompressed=0, max_members=1)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_implicit_directories_consume_the_project_node_budget(tmp_path):
+    """A single deeply named file cannot create unaccounted filesystem objects."""
+    blob = _project_archive([("one/two/three", b"")])
+    with pytest.raises(ValueError, match="node count"):
+        payloads.unpack_project(blob, tmp_path / "out", max_members=2)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_project_tar_header_metadata_is_bounded_before_writing(tmp_path):
+    """Header bytes count independently from zero-length file contents."""
+    blob = _project_archive([("one", b"")])
+    with pytest.raises(ValueError):
+        payloads.unpack_project(blob, tmp_path / "out", max_uncompressed=0, max_metadata=511)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_project_pax_metadata_has_an_individual_preparse_bound(tmp_path):
+    """A small gzip with oversized PAX text refuses before tarfile materializes it."""
+    raw = io.BytesIO()
+    with tarfile.open(fileobj=raw, mode="w:gz", format=tarfile.PAX_FORMAT) as archive:
+        info = tarfile.TarInfo("file")
+        info.pax_headers = {"path": "x" * (payloads.MAX_PROJECT_PAX + 1)}
+        archive.addfile(info)
+    with pytest.raises(ValueError):
+        payloads.unpack_project(raw.getvalue(), tmp_path / "out")
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_project_pax_size_override_cannot_bypass_raw_tar_accounting(tmp_path):
+    """Only supported inert PAX metadata is admitted; content sizing is not delegated."""
+    raw = io.BytesIO()
+    with tarfile.open(fileobj=raw, mode="w:gz", format=tarfile.PAX_FORMAT) as archive:
+        info = tarfile.TarInfo("file")
+        info.pax_headers = {"size": "999999999"}
+        archive.addfile(info)
+    with pytest.raises(ValueError):
+        payloads.unpack_project(raw.getvalue(), tmp_path / "out")
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_project_compressed_bytes_have_a_separate_budget(tmp_path):
+    blob = _project_archive([("file", b"data")])
+    with pytest.raises(ValueError, match="compressed project"):
+        payloads.unpack_project(blob, tmp_path / "out", max_compressed=len(blob) - 1)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_decompressed_tar_padding_is_bounded_even_without_members(tmp_path):
+    """All decompressed bytes count, including metadata and trailing zero padding."""
+    blob = gzip.compress(b"\0" * 10241, mtime=0)
+    with pytest.raises(ValueError):
+        payloads.unpack_project(
+            blob,
+            tmp_path / "out",
+            max_uncompressed=0,
+            max_members=0,
+            max_metadata=0,
+        )
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_pack_enforces_member_and_compressed_budgets(tmp_path):
+    root = tmp_path / "source"
+    root.mkdir()
+    (root / "one").write_bytes(b"")
+    (root / "two").write_bytes(b"")
+    with pytest.raises(payloads.ProjectPackError, match="member count"):
+        payloads.pack_project(root, max_members=1)
+    with pytest.raises(payloads.ProjectPackError, match="compressed project"):
+        payloads.pack_project(root, max_compressed=1)
+
+
+def test_packing_refuses_symlinked_source_ancestors(tmp_path):
+    """No-follow capture applies to directory traversal, not only the leaf file."""
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret").write_bytes(b"outside sentinel")
+    alias = tmp_path / "alias"
+    alias.symlink_to(outside, target_is_directory=True)
+    with pytest.raises(OSError):
+        payloads.pack_project(alias)
+
+
+def test_pax_extension_chains_are_bounded_before_recursive_tar_parsing(tmp_path):
+    """A bounded byte stream must not imply an unbounded parser recursion chain."""
+    extension = tarfile.TarInfo("pax")
+    extension.type = tarfile.XHDTYPE
+    file = tarfile.TarInfo("file")
+    blob = gzip.compress(extension.tobuf() * 3 + file.tobuf() + b"\0" * 1024, mtime=0)
+    with pytest.raises(ValueError):
+        payloads.unpack_project(blob, tmp_path / "out")
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_project_parent_symlink_cannot_create_outside_directories(tmp_path):
+    """Even creating missing destination ancestors must remain descriptor-relative."""
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    alias = tmp_path / "alias"
+    alias.symlink_to(outside, target_is_directory=True)
+    with pytest.raises(OSError):
+        payloads.unpack_project(_project_archive([("file", b"new")]), alias / "new" / "out")
+    assert list(outside.iterdir()) == []
+
+
+def test_portable_literal_colon_filenames_survive(tmp_path):
+    """An embedded colon is not a drive prefix and remains an ordinary filename."""
+    root = tmp_path / "source"
+    root.mkdir()
+    name = "part:name.txt"
+    (root / name).write_text(name)
+    out = payloads.unpack_project(payloads.pack_project(root), tmp_path / "out")
+    assert (out / name).read_text() == name
+
+
+def test_private_tree_retains_fidelity_under_a_restrictive_umask(tmp_path):
+    """The root is private while carried execute/plain/directory modes stay normalized."""
+    root = _tree(tmp_path / "source")
+    blob = payloads.pack_project(root)
+    previous = os.umask(0o077)
+    try:
+        dest = payloads.unpack_project(blob, tmp_path / "out")
+    finally:
+        os.umask(previous)
+    assert dest.stat().st_mode & 0o777 == 0o700
+    assert (dest / "empty").stat().st_mode & 0o777 == 0o755
+    assert (dest / "src" / "core.py").stat().st_mode & 0o777 == 0o644
+    assert (dest / "run.sh").stat().st_mode & 0o777 == 0o755
+
+
+@pytest.mark.parametrize(
+    "name", [r"literal\filename.txt", "C:relative.txt", "bad\nname", "bad\x7fname"]
+)
+def test_pack_refuses_names_the_portable_reader_cannot_accept(tmp_path, name):
+    """Authoring must not emit an archive rejected by the reader's path policy."""
+    root = tmp_path / "source"
+    root.mkdir()
+    (root / name).write_bytes(b"contents")
+    with pytest.raises(payloads.ProjectPackError, match="unsafe path"):
+        payloads.pack_project(root)
+
+
+def test_pack_prunes_excluded_subtrees_before_symlink_admission(tmp_path):
+    """Excluded caches neither expose linked host files nor consume carried nodes."""
+    root = tmp_path / "source"
+    root.mkdir()
+    cache = root / "__pycache__"
+    cache.mkdir()
+    (cache / "secret").symlink_to(tmp_path / "outside")
+    (root / "kept").write_bytes(b"content")
+    blob = payloads.pack_project(root, max_members=1)
+    out = payloads.unpack_project(blob, tmp_path / "out", max_members=1)
+    assert [path.name for path in out.iterdir()] == ["kept"]
+
+
+def test_invalid_physical_tar_header_is_a_controlled_refusal(tmp_path):
+    """Malformed untrusted headers must not escape as tarfile parser exceptions."""
+    header = bytearray(tarfile.TarInfo("file").tobuf())
+    header[0] ^= 1  # Invalidate the physical header checksum.
+    blob = gzip.compress(bytes(header) + b"\0" * 1024, mtime=0)
+    destination = tmp_path / "out"
+    with pytest.raises(ValueError):
+        payloads.unpack_project(blob, destination)
+    assert not destination.exists()
+
+
+def _physical_member(kind=tarfile.REGTYPE, content=b""):
+    info = tarfile.TarInfo("file")
+    info.type = kind
+    info.size = len(content)
+    return info.tobuf() + content + b"\0" * (-len(content) % 512)
+
+
+def _pax_record(key, value):
+    body = key + b"=" + value + b"\n"
+    length = len(body) + 2
+    while True:
+        record = str(length).encode("ascii") + b" " + body
+        if len(record) == length:
+            return record
+        length = len(record)
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        "missing_end",
+        "partial_end",
+        "unaligned",
+        "nonzero_tail",
+        "orphan",
+        "global_pax",
+        "stacked_pax",
+        "stacked_pathnames",
+        "duplicate_pax",
+        "size_override",
+        "sparse_override",
+        "malformed_pax",
+        "directory_content",
+    ],
+)
+def test_all_tar_consumers_share_physical_admission(tmp_path, case):
+    """Project and release intake refuse the same physical parser ambiguities."""
+    from docxplus.archive_limits import ArchiveLimitError, bounded_tar, validate_plain_tar
+    from scripts import validate_release as release
+
+    file = _physical_member()
+    pax = _physical_member(tarfile.XHDTYPE)
+    end = b"\0" * 1024
+    cases = {
+        "missing_end": file,
+        "partial_end": file + end[:512],
+        "unaligned": file + end + b"\0",
+        "nonzero_tail": file + end + b"x" * 512,
+        "orphan": pax + end,
+        "global_pax": _physical_member(tarfile.XGLTYPE) + file + end,
+        "stacked_pax": pax + pax + file + end,
+        "stacked_pathnames": pax
+        + _physical_member(tarfile.GNUTYPE_LONGNAME, b"name\0")
+        + file
+        + end,
+        "duplicate_pax": _physical_member(
+            tarfile.XHDTYPE,
+            _pax_record(b"path", b"first") + _pax_record(b"path", b"second"),
+        )
+        + file
+        + end,
+        "size_override": _physical_member(tarfile.XHDTYPE, _pax_record(b"size", b"1")) + file + end,
+        "sparse_override": _physical_member(
+            tarfile.XHDTYPE,
+            _pax_record(b"GNU.sparse.map", b"0,1"),
+        )
+        + file
+        + end,
+        "malformed_pax": _physical_member(tarfile.XHDTYPE, b"99 path=x\n") + file + end,
+        "directory_content": _physical_member(tarfile.DIRTYPE, b"unexpected") + end,
+    }
+    plain = cases[case]
+    encoded = gzip.compress(plain, mtime=0)
+    with pytest.raises(ArchiveLimitError):
+        validate_plain_tar(io.BytesIO(plain), max_data_bytes=1024, max_members=4)
+    with (
+        pytest.raises(ArchiveLimitError),
+        bounded_tar(io.BytesIO(encoded), max_data_bytes=1024, max_members=4),
+    ):
+        pytest.fail("malformed physical TAR was admitted")
+    with pytest.raises(ValueError):
+        payloads.unpack_project(encoded, tmp_path / "out")
+    assert not (tmp_path / "out").exists()
+    archive = tmp_path / "evidence.tar.gz"
+    archive.write_bytes(encoded)
+    with pytest.raises(release.Refusal), release.bounded_tar(archive, 1024, 4):
+        pytest.fail("release importer admitted malformed physical TAR")
+
+
+@pytest.mark.parametrize("suffix", [b"trailing", gzip.compress(b"", mtime=0)])
+def test_project_and_release_refuse_gzip_suffixes(tmp_path, suffix):
+    """Gzip convenience-reader concatenation must not bypass the single-member rule."""
+    from scripts import validate_release as release
+
+    encoded = _project_archive([("file", b"content")]) + suffix
+    with pytest.raises(ValueError):
+        payloads.unpack_project(encoded, tmp_path / "out")
+    assert not (tmp_path / "out").exists()
+    archive = tmp_path / "evidence.tar.gz"
+    archive.write_bytes(encoded)
+    with pytest.raises(release.Refusal), release.bounded_tar(archive, 1024, 4):
+        pytest.fail("release importer admitted a gzip suffix")
+
+
+def test_shared_tar_budgets_bound_headers_content_and_encoded_bytes(tmp_path):
+    """Each explicit budget refuses independently before returning an admitted TAR."""
+    from docxplus.archive_limits import ArchiveLimitError, bounded_tar, validate_plain_tar
+
+    plain = _physical_member(content=b"ab") + _physical_member(content=b"cd") + b"\0" * 1024
+    encoded = gzip.compress(plain, mtime=0)
+    budgets = [
+        {"max_data_bytes": 3, "max_members": 2},
+        {"max_data_bytes": 4, "max_members": 1},
+        {"max_data_bytes": 4, "max_members": 2, "max_metadata_bytes": 1023},
+    ]
+    for budget in budgets:
+        with pytest.raises(ArchiveLimitError):
+            validate_plain_tar(io.BytesIO(plain), **budget)
+        with pytest.raises(ArchiveLimitError), bounded_tar(io.BytesIO(encoded), **budget):
+            pytest.fail("archive exceeded an explicit resource budget")
+    with (
+        pytest.raises(ArchiveLimitError),
+        bounded_tar(
+            io.BytesIO(encoded),
+            max_data_bytes=4,
+            max_members=2,
+            max_encoded_bytes=len(encoded) - 1,
+        ),
+    ):
+        pytest.fail("encoded archive exceeded its independent byte budget")
+    with bounded_tar(
+        io.BytesIO(encoded),
+        max_data_bytes=4,
+        max_members=2,
+        max_metadata_bytes=1024,
+        max_encoded_bytes=len(encoded),
+    ) as admitted:
+        assert admitted.read() == plain
+
+
+def test_author_and_reader_share_exact_header_metadata_budget(tmp_path):
+    """A zero-byte file still needs one physical header on both sides of authoring."""
+    root = tmp_path / "source"
+    root.mkdir()
+    (root / "empty").write_bytes(b"")
+    with pytest.raises(payloads.ProjectPackError):
+        payloads.pack_project(root, max_uncompressed=0, max_metadata=511)
+    encoded = payloads.pack_project(root, max_uncompressed=0, max_metadata=512)
+    out = payloads.unpack_project(
+        encoded,
+        tmp_path / "out",
+        max_uncompressed=0,
+        max_metadata=512,
+    )
+    assert (out / "empty").read_bytes() == b""
+
+
+@pytest.mark.parametrize("kind", [tarfile.XHDTYPE, tarfile.GNUTYPE_LONGNAME])
+def test_single_local_pathname_extension_retains_content(tmp_path, kind):
+    """One supported local extension remains usable without global parser state."""
+    from docxplus.archive_limits import bounded_tar, validate_plain_tar
+    from scripts import validate_release as release
+
+    name = "long-" + "n" * 120
+    metadata = (
+        _pax_record(b"path", name.encode()) if kind == tarfile.XHDTYPE else name.encode() + b"\0"
+    )
+    plain = _physical_member(kind, metadata) + _physical_member(content=b"contents") + b"\0" * 1024
+    validate_plain_tar(io.BytesIO(plain), max_data_bytes=8, max_members=1)
+    encoded = gzip.compress(plain, mtime=0)
+    with bounded_tar(io.BytesIO(encoded), max_data_bytes=8, max_members=1) as admitted:
+        assert admitted.read() == plain
+    out = payloads.unpack_project(encoded, tmp_path / "out", max_uncompressed=8)
+    assert (out / name).read_bytes() == b"contents"
+    archive = tmp_path / "evidence.tar.gz"
+    archive.write_bytes(encoded)
+    release.extract_archive(archive, tmp_path / "evidence", limit=8, count_limit=1)
+    assert (tmp_path / "evidence" / name).read_bytes() == b"contents"

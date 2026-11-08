@@ -21,7 +21,7 @@
       "ok": true
     },
     {
-      "detail": "{\"files_compared\": 136, \"missing\": [], \"unexpected\": [], \"content_mismatches\": [], \"executable_bit_mismatches\": [], \"identical\": true}",
+      "detail": "{\"files_compared\": 136, \"missing\": [], \"unexpected\": [], \"content_mismatches\": [], \"executable_bit_mismatches\": [], \"directories_compared\": 19, \"missing_directories\": [], \"unexpected_directories\": [], \"identical\": true}",
       "name": "docxplus.roundtrip_identical",
       "ok": true
     },
@@ -46,7 +46,7 @@
       "ok": true
     },
     {
-      "detail": "{\"files_compared\": 136, \"missing\": [], \"unexpected\": [], \"content_mismatches\": [], \"executable_bit_mismatches\": [], \"identical\": true}",
+      "detail": "{\"files_compared\": 136, \"missing\": [], \"unexpected\": [], \"content_mismatches\": [], \"executable_bit_mismatches\": [], \"directories_compared\": 19, \"missing_directories\": [], \"unexpected_directories\": [], \"identical\": true}",
       "name": "odtplus.roundtrip_identical",
       "ok": true
     },
@@ -79,14 +79,17 @@
   "failures": [],
   "formats": {
     "docx": {
-      "bytes": 233750,
+      "bytes": 526907,
       "comparison": {
         "content_mismatches": [],
+        "directories_compared": 19,
         "executable_bit_mismatches": [],
         "files_compared": 136,
         "identical": true,
         "missing": [],
-        "unexpected": []
+        "missing_directories": [],
+        "unexpected": [],
+        "unexpected_directories": []
       },
       "paths": [
         "/source/docxplus/output/documents/template_code_project.docx",
@@ -94,14 +97,17 @@
       ]
     },
     "odt": {
-      "bytes": 233401,
+      "bytes": 526514,
       "comparison": {
         "content_mismatches": [],
+        "directories_compared": 19,
         "executable_bit_mismatches": [],
         "files_compared": 136,
         "identical": true,
         "missing": [],
-        "unexpected": []
+        "missing_directories": [],
+        "unexpected": [],
+        "unexpected_directories": []
       },
       "paths": [
         "/source/docxplus/output/documents/template_code_project.odt",

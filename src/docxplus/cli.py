@@ -18,95 +18,233 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import os
 import sys
+import tempfile
 from pathlib import Path
 
-from . import crypto
-from .container import DocxPlusBuilder, DocxPlusReader
-from .fileext import write_document
+from . import crypto, payloads, shamir
+from .container import ContainerError, DocxPlusBuilder, DocxPlusReader
+from .fileext import document_paths, preflight_document, write_document
+from .reproduce import ReproError
 from .secure_io import SecretExistsError, write_secret
 from .validate import validate_bytes
 
 
-def _cmd_build(args: argparse.Namespace) -> int:
-    builder = DocxPlusBuilder(paragraphs=[args.text], title=args.title)
+def _read_key(filename: str, label: str) -> bytes:
+    path = Path(filename)
+    if not path.is_file():
+        raise ValueError(f"{label} file not found: {filename!r}")
+    try:
+        return bytes.fromhex(path.read_text(encoding="utf-8").strip())
+    except (ValueError, UnicodeError) as exc:
+        raise ValueError(f"invalid hex {label} in {filename!r}: {exc}") from exc
+
+
+def _preflight_file(path: Path, *, exclusive: bool) -> None:
+    if exclusive and (path.exists() or path.is_symlink()):
+        raise SecretExistsError(f"refusing to overwrite existing secret material at {path}")
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise ValueError(f"output is not a regular file: {path}")
+    for parent in path.parents:
+        if parent.exists() and not parent.is_dir():
+            raise ValueError(f"output parent is not a directory: {parent}")
+
+
+def _distinct_outputs(outputs: list[Path], inputs: list[Path] | tuple[Path, ...] = ()) -> None:
+    """Refuse pathname, ancestor and existing-inode collisions before publication."""
+    resolved = [p.resolve() for p in outputs]
+    for i, path in enumerate(outputs):
+        for j, other in enumerate(outputs[:i]):
+            if (resolved[i] == resolved[j] or resolved[i] in resolved[j].parents
+                    or resolved[j] in resolved[i].parents
+                    or (path.exists() and other.exists() and path.samefile(other))):
+                raise ValueError(f"output paths collide: {path} and {other}")
+        for source in inputs:
+            if (resolved[i] == source.resolve()
+                    or (source.is_dir() and source.resolve() in resolved[i].parents)
+                    or (path.exists() and source.exists() and path.samefile(source))):
+                raise ValueError(f"output collides with input: {path} and {source}")
+
+
+def _stage_secrets(files: list[tuple[Path, bytes | str]]) -> list[tuple[Path, Path]]:
+    """Complete private sibling staging before any related output is published."""
+    staged = []
+    try:
+        for target, content in files:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            directory = Path(tempfile.mkdtemp(prefix=f".{target.name}.", dir=target.parent))
+            temporary = directory / "content"
+            staged.append((temporary, target))
+            write_secret(temporary, content)
+        return staged
+    except BaseException:
+        for temporary, _ in staged:
+            temporary.unlink(missing_ok=True)
+            temporary.parent.rmdir()
+        raise
+
+
+def _publish_secrets(staged: list[tuple[Path, Path]]) -> None:
+    # Each no-clobber directory-entry publication is atomic, not the whole set.
+    published = []
+    try:
+        for temporary, target in staged:
+            os.link(temporary, target)
+            published.append((temporary, target))
+    except BaseException:
+        for temporary, target in reversed(published):
+            if target.exists() and not target.is_symlink() and target.samefile(temporary):
+                target.unlink()
+        raise
+
+
+def _payload_file(path: Path, payload_type: str) -> object:
+    if payload_type == "project":
+        raise ValueError("--payload-type project is not a file codec; use build --project SLOT:DIR")
+    if payload_type == "docxplus":
+        raise ValueError("--payload-type docxplus requires the add_nested builder API")
+    if payload_type not in ("bytes", "text", "json"):
+        raise ValueError(f"unsupported CLI payload type: {payload_type!r}")
+    raw = path.read_bytes()
+    if payload_type == "text":
+        return raw.decode("utf-8")
+    if payload_type == "json":
+        def reject_constant(value: str) -> None:
+            raise ValueError(f"invalid JSON constant: {value}")
+
+        def finite_float(value: str) -> float:
+            number = float(value)
+            if not math.isfinite(number):
+                raise ValueError(f"JSON number is outside the supported finite range: {value}")
+            return number
+
+        return json.loads(raw.decode("utf-8"), parse_constant=reject_constant,
+                          parse_float=finite_float)
+    return raw
+
+
+def _build(args: argparse.Namespace, *, odt: bool = False) -> int:
+    if odt:
+        from .odt_container import OdtPlusBuilder
+
+        builder = OdtPlusBuilder(paragraphs=[args.text], title=args.title)
+    else:
+        builder = DocxPlusBuilder(paragraphs=[args.text], title=args.title)
     recipients = [bytes.fromhex(h) for h in (args.recipient or [])]
-    threshold = tuple(int(x) for x in args.threshold.split(":")) if args.threshold else None
-    seal = {}
-    if args.password:
+    threshold = None
+    if args.threshold is not None:
+        try:
+            k, n = (int(x) for x in args.threshold.split(":"))
+        except ValueError as exc:
+            raise ValueError("--threshold requires K:N") from exc
+        if not 1 <= k <= n <= shamir.MAX_X:
+            raise ValueError(f"--threshold requires 1 <= K <= N <= {shamir.MAX_X}")
+        threshold = (k, n)
+    if sum((args.password is not None, bool(recipients), threshold is not None)) > 1:
+        raise ValueError("choose at most one of --password/--recipient/--threshold")
+    if args.pad_recipients and not recipients:
+        raise ValueError("--pad-recipients requires --recipient")
+    if args.pad_recipients < 0:
+        raise ValueError("--pad-recipients cannot be negative")
+    if args.pad_recipients and args.pad_recipients < len(recipients):
+        raise ValueError("--pad-recipients cannot discard recipients")
+    if args.shares_dir and threshold is None:
+        raise ValueError("--shares-dir requires --threshold")
+    seal = {"kdf": args.kdf}
+    if args.password is not None:
         seal["password"] = args.password
     elif recipients:
-        seal["recipients"] = recipients
-        if getattr(args, "pad_recipients", 0):
-            seal["recipient_padding"] = args.pad_recipients
+        seal.update(recipients=recipients, recipient_padding=args.pad_recipients)
+    elif threshold is not None:
+        seal["threshold"] = threshold
 
+    # Parse every input and validate every signing identity before publication.
+    inputs = []
+    slots = []
+    modules = []
     for spec in args.module or []:
-        parts = spec.split(":", 2)
-        if len(parts) != 3:
-            sys.stderr.write(
-                f"error: invalid --module format {spec!r}; expected SLOT:CHANNEL:FILE\n"
-            )
-            return 2
-        slot, channel, src = parts
-        src_path = Path(src)
-        if not src_path.is_file():
-            sys.stderr.write(f"error: module file not found: {src!r}\n")
-            return 2
-        payload = src_path.read_bytes()
-        if threshold:
-            builder.add_threshold(slot, payload, k=threshold[0], n=threshold[1], channel_id=channel)
-        else:
-            builder.add_module(slot, channel, payload, payload_type=args.payload_type,
-                               kdf=args.kdf, **seal)
-
+        parts = spec.split(":", 1 if odt else 2)
+        if len(parts) != (2 if odt else 3):
+            expected = "SLOT:FILE" if odt else "SLOT:CHANNEL:FILE"
+            raise ValueError(f"invalid --module format {spec!r}; expected {expected}")
+        slot, src = parts[0], parts[-1]
+        channel = "odt_package_part" if odt else parts[1]
+        path = Path(src)
+        if not path.is_file():
+            raise ValueError(f"module file not found: {src!r}")
+        inputs.append(path)
+        slots.append(slot)
+        modules.append((slot, channel, _payload_file(path, args.payload_type)))
+    projects = []
     for spec in args.project or []:
-        parts = spec.split(":")
+        parts = spec.split(":", 1)
         if len(parts) != 2:
-            sys.stderr.write(
-                f"error: invalid --project format {spec!r}; expected SLOT:DIR\n"
-            )
-            return 2
-        slot, path = parts
-        if not Path(path).is_dir():
-            sys.stderr.write(f"error: project directory not found: {path!r}\n")
-            return 2
-        # A project ships its own .docxplus-reproduce.json when --attest is set.
-        builder.add_project(slot, path, reproduce=args.attest or None, kdf=args.kdf, **seal)
+            raise ValueError(f"invalid --project format {spec!r}; expected SLOT:DIR")
+        slot, source = parts
+        if not Path(source).is_dir():
+            raise ValueError(f"project directory not found: {source!r}")
+        inputs.append(Path(source))
+        slots.append(slot)
+        projects.append((slot, source))
+    if len(set(slots)) != len(slots) or any(not slot for slot in slots):
+        raise ValueError("module slots must be nonempty and unique")
+    signing = _read_key(args.signing_key, "signing key") if args.signing_key else None
+    cosigners = [_read_key(p, "cosigner key") for p in args.cosign or []]
+    for key in ([signing] if signing is not None else []) + cosigners:
+        crypto.signing_public_key(key)
+    for filename in [args.signing_key, *(args.cosign or [])]:
+        if filename:
+            inputs.extend([Path(filename), Path(filename + ".pub")])
 
-    if args.signing_key:
-        key_path = Path(args.signing_key)
-        if not key_path.is_file():
-            sys.stderr.write(f"error: signing key file not found: {args.signing_key!r}\n")
-            return 2
-        try:
-            builder.sign(bytes.fromhex(key_path.read_text().strip()))
-        except ValueError as exc:
-            sys.stderr.write(f"error: invalid hex signing key in {args.signing_key!r}: {exc}\n")
-            return 2
-    for keyfile in args.cosign or []:
-        kf_path = Path(keyfile)
-        if not kf_path.is_file():
-            sys.stderr.write(f"error: cosigner key file not found: {keyfile!r}\n")
-            return 2
-        try:
-            builder.add_cosigner(bytes.fromhex(kf_path.read_text().strip()))
-        except ValueError as exc:
-            sys.stderr.write(f"error: invalid hex cosigner key in {keyfile!r}: {exc}\n")
-            return 2
+    documents = document_paths(args.output)
+    shares = []
+    if threshold is not None:
+        for slot in slots:
+            if slot in (".", "..") or "/" in slot or "\\" in slot or "\x00" in slot:
+                raise ValueError("threshold slots must be safe share filename components")
+            shares.extend(Path(args.shares_dir or "shares") / f"{slot}.share{i}.bin"
+                          for i in range(1, threshold[1] + 1))
+    _distinct_outputs(documents + shares, inputs)
+    preflight_document(args.output)
+    for path in shares:
+        _preflight_file(path, exclusive=True)
 
-    data = builder.build()
-    written = write_document(data, args.output)
-    if threshold and builder.threshold_shares:
-        share_dir = Path(args.shares_dir or "shares")
-        share_dir.mkdir(parents=True, exist_ok=True)
-        for slot, shares in builder.threshold_shares.items():
-            for i, sh in enumerate(shares, 1):
-                write_secret(share_dir / f"{slot}.share{i}.bin", sh)
-        print(f"wrote {' and '.join(str(w) for w in written)} plus "
-              f"{sum(len(s) for s in builder.threshold_shares.values())} shares in {share_dir}")
-    else:
-        print(f"wrote {' and '.join(str(w) for w in written)}")
+    for slot, channel, obj in modules:
+        if odt:
+            builder.add_module(slot, obj, payload_type=args.payload_type,
+                               channel_id=channel, **seal)
+        else:
+            builder.add_module(slot, channel, obj, payload_type=args.payload_type, **seal)
+    for slot, source in projects:
+        builder.add_project(slot, source, reproduce=args.attest or None,
+                            max_uncompressed=args.max_uncompressed, **seal)
+    if signing is not None:
+        builder.sign(signing)
+    for key in cosigners:
+        builder.add_cosigner(key)
+    data = builder.build()  # validates recipient key families before any output write
+    share_files = [
+        (Path(args.shares_dir or "shares") / f"{slot}.share{i}.bin", share)
+        for slot, values in builder.threshold_shares.items()
+        for i, share in enumerate(values, 1)
+    ]
+    staged = _stage_secrets(share_files)
+    try:
+        written = write_document(data, args.output)
+        _publish_secrets(staged)
+    finally:
+        for temporary, _ in staged:
+            temporary.unlink(missing_ok=True)
+            temporary.parent.rmdir()
+    print(f"wrote {' and '.join(str(w) for w in written)}"
+          + (f" plus {len(share_files)} shares" if share_files else ""))
     return 0
+
+
+def _cmd_build(args: argparse.Namespace) -> int:
+    return _build(args)
 
 
 def _cmd_inspect(args: argparse.Namespace) -> int:
@@ -130,34 +268,37 @@ def _cmd_graph(args: argparse.Namespace) -> int:
     return 0
 
 
+def _extraction_credentials(args: argparse.Namespace) -> dict:
+    creds = {}
+    if args.password is not None:
+        creds["password"] = args.password
+    if args.private_key:
+        creds["private_key"] = _read_key(args.private_key, "private key")
+    if args.share:
+        creds["shares"] = [Path(p).read_bytes() for p in args.share]
+    return creds
+
+
+def _extraction_inputs(args: argparse.Namespace, document: str) -> list[Path]:
+    return [*document_paths(document), *(Path(p) for p in args.share or []),
+            *([Path(args.private_key), Path(args.private_key + ".pub")] if args.private_key else [])]
+
+
+def _preflight_extraction(args: argparse.Namespace, document: str) -> None:
+    if args.out:
+        target = Path(args.out)
+        _distinct_outputs([target], _extraction_inputs(args, document))
+        _preflight_file(target, exclusive=False)
+
+
 def _cmd_extract(args: argparse.Namespace) -> int:
     try:
         reader = DocxPlusReader.from_bytes(Path(args.docx).read_bytes())
     except Exception as exc:  # noqa: BLE001 — CLI boundary: report any failure cleanly
         sys.stderr.write(f"error: failed to open document {args.docx!r}: {exc}\n")
         return 1
-    creds = {}
-    if args.password:
-        creds["password"] = args.password
-    if args.private_key:
-        pk_path = Path(args.private_key)
-        if not pk_path.is_file():
-            sys.stderr.write(f"error: private key file not found: {args.private_key!r}\n")
-            return 2
-        try:
-            creds["private_key"] = bytes.fromhex(pk_path.read_text().strip())
-        except ValueError as exc:
-            sys.stderr.write(f"error: invalid hex private key in {args.private_key!r}: {exc}\n")
-            return 2
-    if args.share:
-        shares = []
-        for p in args.share:
-            sh_path = Path(p)
-            if not sh_path.is_file():
-                sys.stderr.write(f"error: share file not found: {p!r}\n")
-                return 2
-            shares.append(sh_path.read_bytes())
-        creds["shares"] = shares
+    _preflight_extraction(args, args.docx)
+    creds = _extraction_credentials(args)
     try:
         data = reader.extract(args.slot, **creds)
     except Exception as exc:  # noqa: BLE001 — CLI boundary: report any failure cleanly
@@ -172,21 +313,31 @@ def _cmd_extract(args: argparse.Namespace) -> int:
 
 
 def _cmd_unpack_project(args: argparse.Namespace) -> int:
-    reader = DocxPlusReader.from_bytes(Path(args.docx).read_bytes())
-    creds = {"password": args.password} if args.password else {}
-    dest = reader.extract_project(args.slot, args.dest, **creds)
+    from .odt_container import open_document
+
+    _distinct_outputs([Path(args.dest)], _extraction_inputs(args, args.docx))
+    reader = open_document(Path(args.docx).read_bytes())
+    creds = _extraction_credentials(args)
+    dest = reader.extract_project(args.slot, args.dest,
+                                  max_uncompressed=args.max_uncompressed, **creds)
     print(f"extracted project to {dest}")
     return 0
 
 
 def _cmd_verify_reproduction(args: argparse.Namespace) -> int:
-    reader = DocxPlusReader.from_bytes(Path(args.docx).read_bytes())
-    expected = bytes.fromhex(Path(args.expected_key).read_text().strip()) if args.expected_key else None
+    from .odt_container import open_document
+
+    reader = open_document(Path(args.docx).read_bytes())
+    expected = _read_key(args.expected_key, "expected key") if args.expected_key else None
     info = reader.verify_reproduction(args.slot, expected_public_key=expected)
     if expected is None:
-        info["_warning"] = f"signer {reader.signer()[:16]}… is self-asserted; pass --expected-key to authenticate"
+        info["_warning"] = (
+            f"signer {(reader.signer() or '')[:16]}… is self-asserted; "
+            "self-consistency is not authenticity; pass --expected-key to authenticate"
+        )
     print(json.dumps(info, indent=2))
-    return 0 if info.get("attested") and info.get("verified") else 1
+    status = "verified" if expected is not None else "self_consistent"
+    return 0 if info.get("attested") and info.get(status) else 1
 
 
 def _cmd_reproduce(args: argparse.Namespace) -> int:
@@ -196,9 +347,13 @@ def _cmd_reproduce(args: argparse.Namespace) -> int:
             "--allow-execution, and only in a sandbox you trust.\n"
         )
         return 2
-    reader = DocxPlusReader.from_bytes(Path(args.docx).read_bytes())
-    creds = {"password": args.password} if args.password else {}
-    result = reader.reproduce(args.slot, args.dest, allow_execution=True, **creds)
+    from .odt_container import open_document
+
+    _distinct_outputs([Path(args.dest)], _extraction_inputs(args, args.docx))
+    reader = open_document(Path(args.docx).read_bytes())
+    creds = _extraction_credentials(args)
+    result = reader.reproduce(args.slot, args.dest, allow_execution=True,
+                              max_uncompressed=args.max_uncompressed, **creds)
     print(json.dumps(result, indent=2))
     return 0 if result["match"] else 1
 
@@ -262,7 +417,12 @@ def _cmd_verify_transparency(args: argparse.Namespace) -> int:
         ok = ok and consistent
 
     if args.emit_proof:
-        Path(args.emit_proof).write_text(json.dumps(log.consistency_proof(), indent=2))
+        target = Path(args.emit_proof)
+        inputs = [Path(p) for p in
+                  (args.log, args.sth, args.expected_key, args.consistent_with) if p]
+        _distinct_outputs([target], inputs)
+        _preflight_file(target, exclusive=False)
+        write_secret(target, json.dumps(log.consistency_proof(), indent=2), overwrite=True)
         report["proof_written"] = args.emit_proof
 
     if args.prove is not None:
@@ -286,69 +446,8 @@ def _cmd_verify_transparency(args: argparse.Namespace) -> int:
 
 
 def _cmd_odt_build(args: argparse.Namespace) -> int:
-    """Build an .odt carrying the same signed intelligence layer as the .docx profile."""
-    from .odt_container import OdtPlusBuilder
-
-    builder = OdtPlusBuilder(paragraphs=[args.text], title=args.title)
-    recipients = [bytes.fromhex(h) for h in (args.recipient or [])]
-    threshold = tuple(int(x) for x in args.threshold.split(":")) if args.threshold else None
-    seal = {}
-    if args.password:
-        seal["password"] = args.password
-    elif recipients:
-        seal["recipients"] = recipients
-        if getattr(args, "pad_recipients", 0):
-            seal["recipient_padding"] = args.pad_recipients
-
-    for spec in args.module or []:
-        parts = spec.split(":")
-        if len(parts) != 2:
-            sys.stderr.write(
-                f"error: invalid --module format {spec!r}; expected SLOT:FILE\n"
-            )
-            return 2
-        slot, src = parts
-        src_path = Path(src)
-        if not src_path.is_file():
-            sys.stderr.write(f"error: module file not found: {src!r}\n")
-            return 2
-        payload = src_path.read_bytes()
-        if threshold:
-            builder.add_threshold(slot, payload, k=threshold[0], n=threshold[1])
-        else:
-            builder.add_module(slot, payload, payload_type=args.payload_type,
-                               kdf=args.kdf, **seal)
-
-    if args.signing_key:
-        key_path = Path(args.signing_key)
-        if not key_path.is_file():
-            sys.stderr.write(f"error: signing key file not found: {args.signing_key!r}\n")
-            return 2
-        try:
-            builder.sign(bytes.fromhex(key_path.read_text().strip()))
-        except ValueError as exc:
-            sys.stderr.write(f"error: invalid hex signing key in {args.signing_key!r}: {exc}\n")
-            return 2
-    for keyfile in args.cosign or []:
-        kf_path = Path(keyfile)
-        if not kf_path.is_file():
-            sys.stderr.write(f"error: cosigner key file not found: {keyfile!r}\n")
-            return 2
-        try:
-            builder.add_cosigner(bytes.fromhex(kf_path.read_text().strip()))
-        except ValueError as exc:
-            sys.stderr.write(f"error: invalid hex cosigner key in {keyfile!r}: {exc}\n")
-            return 2
-
-    written = write_document(builder.build(), args.output)
-    if threshold and builder.threshold_shares:
-        share_dir = Path(args.shares_dir or "shares")
-        share_dir.mkdir(parents=True, exist_ok=True)
-        for slot, shares in builder.threshold_shares.items():
-            for i, sh in enumerate(shares, 1):
-                write_secret(share_dir / f"{slot}.share{i}.bin", sh)
-    print(f"wrote {' and '.join(str(w) for w in written)}")
-    return 0
+    """Build ODT using the same authoring and publication policy as DOCX."""
+    return _build(args, odt=True)
 
 
 def _cmd_odt_inspect(args: argparse.Namespace) -> int:
@@ -372,28 +471,8 @@ def _cmd_odt_extract(args: argparse.Namespace) -> int:
     except Exception as exc:  # noqa: BLE001 — CLI boundary: report any failure cleanly
         sys.stderr.write(f"error: failed to open ODT document {args.odt!r}: {exc}\n")
         return 1
-    creds = {}
-    if args.password:
-        creds["password"] = args.password
-    if args.private_key:
-        pk_path = Path(args.private_key)
-        if not pk_path.is_file():
-            sys.stderr.write(f"error: private key file not found: {args.private_key!r}\n")
-            return 2
-        try:
-            creds["private_key"] = bytes.fromhex(pk_path.read_text().strip())
-        except ValueError as exc:
-            sys.stderr.write(f"error: invalid hex private key in {args.private_key!r}: {exc}\n")
-            return 2
-    if args.share:
-        shares = []
-        for p in args.share:
-            sh_path = Path(p)
-            if not sh_path.is_file():
-                sys.stderr.write(f"error: share file not found: {p!r}\n")
-                return 2
-            shares.append(sh_path.read_bytes())
-        creds["shares"] = shares
+    _preflight_extraction(args, args.odt)
+    creds = _extraction_credentials(args)
     try:
         data = reader.extract(args.slot, **creds)
     except Exception as exc:  # noqa: BLE001 — CLI boundary: report any failure cleanly
@@ -430,16 +509,14 @@ def _cmd_odt_scan(args: argparse.Namespace) -> int:
 
 
 def _cmd_analyze_carrier(args: argparse.Namespace) -> int:
-    """Measure how detectable a stego carrier is, using the in-tree statistics.
-
-    The security model tells readers to check their own carriers before an
-    adversary does; without a command that is advice with no way to follow it.
-    """
+    """Report pair-equality compatibility, not evidence of payload presence."""
     from . import steg_bridge
 
     report = steg_bridge.steganalysis_report(Path(args.image), steps=args.steps)
     print(json.dumps(report, indent=2))
-    # Exit 1 when the carrier looks embedded, so the check is usable in a script.
+    # Sparse/unsupported observations are inconclusive, not a negative result.
+    if not report["available"]:
+        return 2
     return 1 if report["suspicious"] else 0
 
 
@@ -457,19 +534,35 @@ def _cmd_transparency_append(args: argparse.Namespace) -> int:
     attestation = json.loads(Path(args.attestation).read_text()) if args.attestation else {}
     metadata = json.loads(args.metadata) if args.metadata else {}
     entry = log.append(attestation, metadata, timestamp=args.timestamp)
-    log_path.write_text(log.to_json())
 
     out = {"appended_index": entry.index, "entries": len(log.entries), "root": log.merkle_tree_root()}
+    files = [(log_path, log.to_json())]
+    inputs = [Path(args.attestation)] if args.attestation else []
     if args.signing_key:
-        priv = bytes.fromhex(Path(args.signing_key).read_text().strip())
+        priv = _read_key(args.signing_key, "signing key")
+        crypto.signing_public_key(priv)
         sth = log.signed_tree_head(priv, timestamp=args.timestamp)
-        Path(args.sth_out or "sth.json").write_text(json.dumps(sth, indent=2))
-        out["sth"] = args.sth_out or "sth.json"
+        sth_path = Path(args.sth_out or "sth.json")
+        files.append((sth_path, json.dumps(sth, indent=2)))
+        inputs.extend([Path(args.signing_key), Path(args.signing_key + ".pub")])
+        out["sth"] = str(sth_path)
     else:
         out["_warning"] = (
             "no --signing-key: the log is UNANCHORED, and an unanchored chain "
             "proves only self-consistency"
         )
+    _distinct_outputs([path for path, _ in files], inputs)
+    for path, _ in files:
+        _preflight_file(path, exclusive=False)
+    staged = _stage_secrets(files)
+    try:
+        for temporary, target in staged:
+            _preflight_file(target, exclusive=False)
+            os.replace(temporary, target)
+    finally:
+        for temporary, _ in staged:
+            temporary.unlink(missing_ok=True)
+            temporary.parent.rmdir()
     print(json.dumps(out, indent=2))
     return 0
 
@@ -541,23 +634,32 @@ def _cmd_scan(args: argparse.Namespace) -> int:
 
 
 def _cmd_keygen(args: argparse.Namespace) -> int:
+    private_path = Path(args.output)
+    public_path = Path(args.output + ".pub")
+    _distinct_outputs([private_path, public_path])
+    try:
+        for path in (private_path, public_path):
+            _preflight_file(path, exclusive=True)
+    except SecretExistsError as exc:
+        print(str(exc))
+        return 1
     if args.type == "x25519":
         priv, pub = crypto.generate_recipient_key()
     elif args.type == "hybrid-recipient":
         kp = crypto.generate_hybrid_recipient_key()
-        priv, pub = kp.classical_priv + kp.pq_priv, kp.public_bytes
+        priv, pub = kp.private_bytes, kp.public_bytes
     elif args.type == "hybrid-signing":
         kp = crypto.generate_hybrid_signing_key()
-        priv, pub = kp.classical_priv + kp.pq_priv, kp.public_bytes
+        priv, pub = kp.private_bytes, kp.public_bytes
     else:
         priv, pub = crypto.generate_signing_key()
+    staged = _stage_secrets([(private_path, priv.hex()), (public_path, pub.hex())])
     try:
-        write_secret(args.output, priv.hex())
-    except SecretExistsError as exc:
-        # Silently replacing a signing key destroys an identity irrecoverably.
-        print(str(exc))
-        return 1
-    Path(args.output + ".pub").write_text(pub.hex())  # public by definition
+        _publish_secrets(staged)
+    finally:
+        for temporary, _ in staged:
+            temporary.unlink(missing_ok=True)
+            temporary.parent.rmdir()
     print(f"wrote {args.output} (mode 0600) and {args.output}.pub ({args.type})")
     return 0
 
@@ -573,21 +675,26 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--module", action="append", metavar="SLOT:CHANNEL:FILE")
     b.add_argument("--project", action="append", metavar="SLOT:DIR", help="carry a whole directory")
     b.add_argument("--payload-type", default="bytes")
-    b.add_argument("--password", help="password-seal all modules")
+    b.add_argument("--max-uncompressed", type=int, default=payloads.MAX_PROJECT_UNCOMPRESSED,
+                   help="maximum carried project content bytes")
+    bp = b.add_mutually_exclusive_group()
+    bp.add_argument("--password", help="password-seal all modules and projects")
     b.add_argument("--kdf", choices=["scrypt", "argon2id", "pbkdf2"], default="scrypt",
                        help="password key-derivation function (default: scrypt)")
-    b.add_argument("--recipient", action="append", metavar="HEXPUB", help="X25519 recipient (repeatable)")
+    bp.add_argument("--recipient", action="append", metavar="HEXPUB",
+                    help="X25519 or typed hybrid recipient public key (repeatable)")
     b.add_argument("--pad-recipients", type=int, default=0,
                    help="pad the recipient slot count to N, hiding how many "
                         "recipients there really are")
-    b.add_argument("--threshold", metavar="K:N", help="Shamir k-of-n seal")
+    bp.add_argument("--threshold", metavar="K:N", help="Shamir k-of-n seal")
     b.add_argument("--shares-dir", help="where to write threshold shares")
-    b.add_argument("--signing-key", help="hex Ed25519 private key file")
+    b.add_argument("--signing-key", help="hex Ed25519 or typed hybrid signing key file")
     b.add_argument(
         "--attest", action="store_true",
         help="run each project's .docxplus-reproduce.json recipe and seal the attestation",
     )
-    b.add_argument("--cosign", action="append", metavar="KEYFILE", help="hex Ed25519 co-signer key (repeatable)")
+    b.add_argument("--cosign", action="append", metavar="KEYFILE",
+                   help="hex Ed25519 or typed hybrid co-signer key (repeatable)")
     b.set_defaults(func=_cmd_build)
 
     i = sub.add_parser("inspect", help="dump the manifest as JSON")
@@ -603,7 +710,7 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("slot")
     e.add_argument("--out")
     e.add_argument("--password")
-    e.add_argument("--private-key", help="hex X25519 private key file (multi-recipient)")
+    e.add_argument("--private-key", help="hex X25519 or typed hybrid recipient private key file")
     e.add_argument("--share", action="append", metavar="FILE", help="threshold share (repeatable)")
     e.set_defaults(func=_cmd_extract)
 
@@ -612,12 +719,16 @@ def main(argv: list[str] | None = None) -> int:
     up.add_argument("slot")
     up.add_argument("dest")
     up.add_argument("--password")
+    up.add_argument("--private-key", help="hex recipient private key file")
+    up.add_argument("--share", action="append", metavar="FILE")
+    up.add_argument("--max-uncompressed", type=int, default=payloads.MAX_PROJECT_UNCOMPRESSED,
+                    help="maximum extracted project content bytes")
     up.set_defaults(func=_cmd_unpack_project)
 
     vr = sub.add_parser("verify-reproduction", help="cryptographically verify a repro attestation (no execution)")
     vr.add_argument("docx")
     vr.add_argument("slot")
-    vr.add_argument("--expected-key", help="hex Ed25519 public key file to pin the signer (authenticate)")
+    vr.add_argument("--expected-key", help="hex Ed25519 or typed hybrid public key file to pin the signer")
     vr.set_defaults(func=_cmd_verify_reproduction)
 
     rp = sub.add_parser("reproduce", help="OPT-IN: re-run a carried project's attested command in a sandbox")
@@ -625,6 +736,10 @@ def main(argv: list[str] | None = None) -> int:
     rp.add_argument("slot")
     rp.add_argument("dest")
     rp.add_argument("--password")
+    rp.add_argument("--private-key", help="hex recipient private key file")
+    rp.add_argument("--share", action="append", metavar="FILE")
+    rp.add_argument("--max-uncompressed", type=int, default=payloads.MAX_PROJECT_UNCOMPRESSED,
+                    help="maximum extracted project content bytes")
     rp.add_argument("--allow-execution", action="store_true", help="required; executes carried code")
     rp.set_defaults(func=_cmd_reproduce)
 
@@ -635,7 +750,7 @@ def main(argv: list[str] | None = None) -> int:
     vt.add_argument("log", help="transparency log JSON (TransparencyLog.to_json output)")
     vt.add_argument("--expected-root", metavar="HEX", help="pin the expected Merkle root")
     vt.add_argument("--sth", metavar="FILE", help="signed tree head JSON to authenticate the log")
-    vt.add_argument("--expected-key", help="hex Ed25519 public key file pinning the STH signer")
+    vt.add_argument("--expected-key", help="hex Ed25519 or typed hybrid public key file pinning the STH signer")
     vt.add_argument(
         "--prove", type=int, metavar="INDEX", help="verify the Merkle inclusion proof for an entry"
     )
@@ -651,14 +766,20 @@ def main(argv: list[str] | None = None) -> int:
     ob.add_argument("--text", default="This is an ordinary document.")
     ob.add_argument("--title", default="Document")
     ob.add_argument("--module", action="append", metavar="SLOT:FILE")
+    ob.add_argument("--project", action="append", metavar="SLOT:DIR", help="carry a whole directory")
+    ob.add_argument("--attest", action="store_true",
+                    help="run each project's reproduction recipe and seal the attestation")
     ob.add_argument("--payload-type", default="bytes")
-    ob.add_argument("--password")
+    ob.add_argument("--max-uncompressed", type=int, default=payloads.MAX_PROJECT_UNCOMPRESSED,
+                    help="maximum carried project content bytes")
+    op = ob.add_mutually_exclusive_group()
+    op.add_argument("--password", help="password-seal all modules and projects")
     ob.add_argument("--kdf", choices=["scrypt", "argon2id", "pbkdf2"], default="scrypt",
                        help="password key-derivation function (default: scrypt)")
-    ob.add_argument("--recipient", action="append", metavar="HEXPUB")
+    op.add_argument("--recipient", action="append", metavar="HEXPUB")
     ob.add_argument("--pad-recipients", type=int, default=0,
                     help="pad the recipient slot count to N")
-    ob.add_argument("--threshold", metavar="K:N")
+    op.add_argument("--threshold", metavar="K:N")
     ob.add_argument("--shares-dir")
     ob.add_argument("--signing-key")
     ob.add_argument("--cosign", action="append", metavar="KEYFILE")
@@ -686,7 +807,7 @@ def main(argv: list[str] | None = None) -> int:
     os_.add_argument("--strict", action="store_true", help="exit nonzero / refuse on any threat")
     os_.set_defaults(func=_cmd_odt_scan)
 
-    ac = sub.add_parser("analyze-carrier", help="statistical steganalysis of a PNG carrier")
+    ac = sub.add_parser("analyze-carrier", help="PNG pair-equality compatibility (not payload detection)")
     ac.add_argument("image")
     ac.add_argument("--steps", type=int, default=10, help="prefix-sweep resolution")
     ac.set_defaults(func=_cmd_analyze_carrier)
@@ -696,7 +817,7 @@ def main(argv: list[str] | None = None) -> int:
     ta.add_argument("--attestation", metavar="FILE", help="attestation JSON to record")
     ta.add_argument("--metadata", metavar="JSON", help="inline JSON metadata for the entry")
     ta.add_argument("--timestamp", type=int, help="explicit timestamp (reproducible builds)")
-    ta.add_argument("--signing-key", help="hex Ed25519 key; emits a signed tree head")
+    ta.add_argument("--signing-key", help="hex Ed25519 or typed hybrid signing key; emits a signed tree head")
     ta.add_argument("--sth-out", help="where to write the signed tree head")
     ta.set_defaults(func=_cmd_transparency_append)
 
@@ -705,9 +826,9 @@ def main(argv: list[str] | None = None) -> int:
         help="verify AUTHENTICITY: signature + package binding under a pinned key",
     )
     vf.add_argument("document", help=".docx/.docxplus or .odt/.odtplus (profile is detected)")
-    vf.add_argument("--expected-key", help="hex Ed25519 public key file; required for a 0 exit")
+    vf.add_argument("--expected-key", help="hex Ed25519 or typed hybrid public key file; required for a 0 exit")
     vf.add_argument("--require-cosigner", action="append", metavar="KEYFILE",
-                    help="hex Ed25519 public key that must also have signed (repeatable)")
+                    help="hex Ed25519 or typed hybrid public key that must also have signed (repeatable)")
     vf.set_defaults(func=_cmd_verify)
 
     v = sub.add_parser("validate", help="validate OPC + intelligence conformance")
@@ -729,7 +850,14 @@ def main(argv: list[str] | None = None) -> int:
     k.set_defaults(func=_cmd_keygen)
 
     args = parser.parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except SecretExistsError as exc:
+        sys.stderr.write(f"error: {exc}\n")
+        return 1
+    except (ValueError, TypeError, OSError, ContainerError, ReproError, KeyError) as exc:
+        sys.stderr.write(f"error: {exc}\n")
+        return 2
 
 
 if __name__ == "__main__":
