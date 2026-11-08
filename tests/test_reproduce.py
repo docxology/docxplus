@@ -331,22 +331,22 @@ def test_portable_python_recipe_uses_the_recipient_interpreter(tmp_path):
 def test_successful_reproduction_does_not_leave_a_writing_descendant(tmp_path, new_session):
     """Both ordinary and setsid descendants are dead before output collection returns.
 
-    The child reports its own PID and then sleeps far beyond the leader's exit.
-    Once ``run_and_digest`` returns the namespace init has exited, so the kernel
-    must have killed the child: its ``/proc`` entry is absent or a zombie, and the
-    delayed write never lands. Liveness is checked instead of racing a short sleep
-    against the scheduler.
+    The leader records its private PID namespace. After ``run_and_digest`` returns
+    that namespace must contain no live member (a killed descendant may linger as a
+    zombie until reaped), and the 30-second child's delayed write never lands. The
+    child's *inner* PID is meaningless on the outer host, so liveness is observed
+    through the namespace the sandbox actually owns.
     """
     import time
 
     child = (
-        "import json,os,time; from pathlib import Path; "
-        "Path('child.json').write_text(json.dumps({'pid': os.getpid()})); "
+        "from pathlib import Path; import time; "
         "Path('ready').write_text('ready'); time.sleep(30); Path('late').write_text('escaped')"
     )
     command = (
-        "import subprocess,sys,time; from pathlib import Path; "
-        f"subprocess.Popen([sys.executable,'-c',{child!r}],start_new_session={new_session!r}); "
+        "import os,subprocess,sys,time; from pathlib import Path\n"
+        "Path('custody.json').write_text(os.readlink('/proc/self/ns/pid'))\n"
+        f"subprocess.Popen([sys.executable,'-c',{child!r}],start_new_session={new_session!r})\n"
         "deadline=time.monotonic()+3\n"
         "while not Path('ready').exists() and time.monotonic()<deadline: time.sleep(0.01)\n"
         "assert Path('ready').read_text()=='ready'\n"
@@ -354,11 +354,23 @@ def test_successful_reproduction_does_not_leave_a_writing_descendant(tmp_path, n
     )
     reproduce.run_and_digest(tmp_path, ReproSpec([PY, "-c", command], ["result"], timeout=10))
     assert (tmp_path / "result").read_text() == "computed"
-    pid = json.loads((tmp_path / "child.json").read_text())["pid"]
-    stat = Path(f"/proc/{pid}/stat")
-    if stat.exists():
-        state = stat.read_text().rsplit(")", 1)[1].split()[0]
-        assert state in {"Z", "X"}, f"descendant {pid} is still alive (state {state})"
+    identity = (tmp_path / "custody.json").read_text()
+    assert identity != Path("/proc/self/ns/pid").readlink()
+    live = []
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdecimal():
+            continue
+        try:
+            if Path(entry / "ns/pid").readlink() != identity:
+                continue
+            status = (entry / "status").read_text()
+            state = next(line.split()[1] for line in status.splitlines()
+                         if line.startswith("State:"))
+        except (FileNotFoundError, ProcessLookupError, PermissionError, StopIteration):
+            continue
+        if state not in {"Z", "X"}:
+            live.append((int(entry.name), state))
+    assert not live, f"live descendants remain in the private namespace: {live}"
     time.sleep(0.2)
     assert not (tmp_path / "late").exists()
 
