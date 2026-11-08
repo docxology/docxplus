@@ -27,7 +27,9 @@ name is how a hostile package steers extraction.
 1. New module in this directory, one class, a class-level `id` string.
 2. Register it in [`__init__.py`](__init__.py) — in `_PURE_CHANNELS` if it needs no
    optional toolchain, otherwise branched in `get_channel` the way `stego_media` is,
-   and included in `available_channels()`.
+   and included in `available_channels()`. A profile-specific id goes in
+   `_ODT_ONLY_CHANNELS` instead, so the other profile's authoring surface cannot
+   mint it.
 3. A real round-trip test in `tests/test_channels.py`: embed, serialise the package to
    bytes, read it back from bytes, extract, compare. Not an in-memory shortcut — the
    ZIP round trip is where part naming and content types actually get tested.
@@ -35,8 +37,10 @@ name is how a hostile package steers extraction.
    gate.
 5. Update `docs/channels.md` **and** `docs/format-spec.md` with actual capacity,
    placement, intake and authentication contracts, not source-text tests.
-6. State whether it crosses to ODF. `custom_xml`/`mce` are OOXML-only and
-   `metadata` has no implemented ODF analogue; silence must not imply parity.
+6. State whether it crosses to ODF. `custom_xml`/`mce` are OOXML-only; `metadata`
+   crosses as the profile-specific `odt_metadata` id, which lives in
+   `_ODT_ONLY_CHANNELS` so OOXML authoring cannot mint it. Silence must not imply
+   parity.
 
 An unknown channel id must fail explicitly on read. Do not add a permissive fallback.
 

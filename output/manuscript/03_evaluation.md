@@ -32,7 +32,7 @@ The generated dossier table specifies the fixture's intended extraction/verifica
 - **Project extraction.** The dossier source slot is extracted but is not reproduction-attested.
   Living/synthetic suites own their recipe claims and separate local execution evidence.
 
-The source inventory comprises 699 test functions under a 90% coverage policy,
+The source inventory comprises 705 test functions under a 90% coverage policy,
 not that many freshly passed cases. Tests use real primitives, files and subprocesses; optional compiled-backend
 and native-application cases require their capabilities and cannot count a skip as an exercised result.
 
@@ -72,7 +72,7 @@ files, execute bits and empty directories.
 
 The available report records a 14-file, 9-directory selected synthetic tree and
 18 of 18 checks, with 12 compared files. Those tokens describe the report,
-not a fresh run. It reports package sizes of 5,390 bytes (DOCX) and 4,551 bytes (ODT),
+not a fresh run. It reports package sizes of 5,393 bytes (DOCX) and 4,549 bytes (ODT),
 plus cross-profile packed-payload parity. Shared packing makes consistent behavior plausible, but does not
 replace independent end-to-end evidence for either profile or imply arbitrary-project fidelity.
 
@@ -110,8 +110,8 @@ Capacity is channel- and backend-specific; no channel-local limit removes packag
 [@Fig:capacity] plots the spread on a log scale, distinguishing the channels with a real format ceiling
 from those that simply have none:
 
-- **`metadata`** is deliberately small, bounded at 8000 bytes in `docProps/custom.xml`:
-  routing headers, identifiers, status flags, key shares.
+- **`metadata`** is deliberately small, bounded at 8000 bytes in `docProps/custom.xml`
+  (and the ODF `odt_metadata` field in `meta.xml`): routing headers, identifiers, status flags, key shares.
 - **`custom_xml`, `package_part`, and `mce`** have no channel-local ceiling, but XML/base64, part, archive
   metadata, count and total-size limits still apply.
 - **`python_lsb` media** uses DXL1 framing: a $256\times 256$ RGB PNG holds 24568 bytes and a

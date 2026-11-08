@@ -422,6 +422,9 @@ def _parse_content_types(pkg: OpcPackage, blob: bytes) -> None:
     root = _safe_fromstring(blob)
     if root.tag != f"{{{NS_CONTENT_TYPES}}}Types" or root.attrib:
         raise OpcError("invalid content-types index namespace or attributes")
+    # One casefolded index, maintained as declarations are admitted: rescanning
+    # every prior Override per child made untrusted intake O(declarations²).
+    folded_overrides = {name.casefold() for name in pkg.override_types}
     for child in root:
         if child.tag == f"{{{NS_CONTENT_TYPES}}}Default":
             if set(child.attrib) != {"Extension", "ContentType"} or len(child):
@@ -438,8 +441,10 @@ def _parse_content_types(pkg: OpcPackage, blob: bytes) -> None:
                 raise OpcError("Override PartName must be package-absolute")
             _reject_noncanonical_entry_name(name[1:])
             part = name[1:]
-            if any(p.casefold() == part.casefold() for p in pkg.override_types):
+            folded = part.casefold()
+            if folded in folded_overrides:
                 raise OpcError(f"duplicate Override part: {part!r}")
+            folded_overrides.add(folded)
             pkg.override_types[part] = child.attrib["ContentType"]
         else:
             raise OpcError("unknown content-types index element or namespace")

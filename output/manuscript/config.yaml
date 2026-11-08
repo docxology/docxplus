@@ -1,7 +1,7 @@
 paper:
   title: "docxplus: An Intelligent Document Container over OOXML and ODF Package Extension Points"
   subtitle: "Carrying signed, encrypted, modular payloads inside ordinary DOCX and ODT files"
-  version: "2.0.0"
+  version: "2.1.0"
   date: "2026-11-07"
 
 authors:

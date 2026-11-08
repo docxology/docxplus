@@ -80,7 +80,8 @@ obligation rather than a description. The supported channels comprise:
   OOXML custom XML mapping schemas [@iso29500].
 - **`package_part`** — Raw binary payloads in `intelligence/payloadN.dxp` under a declared content type. The
   high-throughput channel: large datasets, code archives, and ciphertext envelopes.
-- **`metadata`** — String-encoded payloads in custom document properties within `docProps/custom.xml`.
+- **`metadata`** — String-encoded payloads in custom document properties within `docProps/custom.xml`;
+  the ODF profile carries the same bounded contract as `odt_metadata` in `meta.xml` user-defined fields.
   Bounded at {{METADATA_MAX_BYTES}} bytes, which suits routing tags, identifiers, and key shares rather than
   content.
 - **`stego_media`** — Payloads in the least-significant bits of RGB image parts such as
@@ -117,8 +118,9 @@ against an ODF package would pass vacuously, which is worse than not scanning, b
 
 Two channels do not cross over, and saying which is part of the claim. ODF has no custom XML datastore part
 and no Markup Compatibility element, so `custom_xml` and `mce` are OOXML-only. ODT offers
-package-entry payloads within archive budgets and visible PNG `stego_media` carriers. The metadata analogue
-is not implemented. The emitted ODF surface targets the version declared by the builder, not every ODF edition.
+package-entry payloads within archive budgets, visible PNG `stego_media` carriers, and the metadata contract
+as `odt_metadata` user-defined fields in `meta.xml`. The emitted ODF surface targets the version declared by
+the builder, not every ODF edition.
 
 The sibling profile is a second front door into the same container, which is why it enforces the same intake
 ceilings as the OPC reader — entry count, decompression ratio, and rejection of traversal or absolute entry

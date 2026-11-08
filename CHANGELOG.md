@@ -5,7 +5,37 @@ versioning is [semantic](https://semver.org/).
 
 Findings referenced by number are recorded in full in [`docs/redteam-audit.md`](docs/redteam-audit.md).
 
-## [Unreleased]
+## [2.1.0] — 2026-11-08
+
+### Security
+
+- The `media` extra now requires Pillow >= 13.0.0, and the locked development and
+  CI environment moves from 12.3.0. Pillow 13.0.0 fixes the open decoder
+  memory-safety advisories (including critical heap overflows reachable from a
+  crafted image), which matters because the media channel opens carriers carried
+  by untrusted documents. Installations pinned to an older Pillow must upgrade.
+
+### Added
+
+- ODF `metadata` channel (`odt_metadata`): base64 in a `meta:user-defined` field
+  named `dxplus_<slot>` in `meta.xml`. It preserves pre-existing user-defined
+  fields and refuses a name collision, shares the OOXML ceiling and sealing
+  composition, and is wired through `OdtPlusBuilder`, `OdtPlusReader`, the
+  manifest dispatcher, the validator and the profile-aware registry. Round-trip,
+  capacity, collision, signature and tamper tests cover it.
+
+### Changed
+
+- Untrusted content-types intake keeps one casefolded Override index instead of
+  rescanning every prior declaration, removing a quadratic admission path.
+  Reproduction output transcripts resolve the project root once, and DXE2/DXE3
+  envelope construction no longer copies the encrypted body through a temporary.
+  Public intake and reader boundaries gained return/package annotations.
+- The Linux descendant-custody regression now checks process liveness instead of
+  racing a sleep, and secret publication has real filesystem failure-path tests
+  (read-only staging directory, failed `os.replace` onto a directory).
+
+## [2.0.0] — 2026-11-08
 
 - Linux reproduction runs the command as private PID 1 and pins bubblewrap's
   reported init with a pidfd, so success, timeout and cleanup destroy the

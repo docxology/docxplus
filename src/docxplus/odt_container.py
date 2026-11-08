@@ -27,11 +27,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from . import crypto, payloads
 from .channels.base import ChannelRecord
+from .channels.metadata import OdtMetadataChannel
 from .channels.stego_media import OdtStegMediaChannel
 from .container import ContainerError, _cosigner_descriptors, _Pending, seal_module
+
+if TYPE_CHECKING:
+    from .container import DocxPlusReader
 from .container import DocxPlusReader as DocxPlusReaderDepth
 from .manifest import Manifest
 from .odt import MIMETYPE_ODT, OdtPackage, new_base_odt
@@ -114,7 +119,7 @@ class OdtPlusBuilder:
         ``recipient_padding`` raises the apparent recipient count to a fixed bucket;
         0 leaves it unpadded. It may add recipient slots but cannot remove any.
         """
-        if channel_id not in ("odt_package_part", "stego_media"):
+        if channel_id not in ("odt_package_part", "stego_media", "odt_metadata"):
             raise ContainerError(f"unknown channel: {channel_id}")
         if any(m.slot == slot for m in self._pending):
             raise ContainerError(f"duplicate slot: {slot}")
@@ -185,7 +190,7 @@ class OdtPlusBuilder:
                 self._pending[-1].reproduction = _repro.attest(clean, spec)
         return self
 
-    def add_nested(self, slot: str, inner_document: bytes, **seal) -> OdtPlusBuilder:
+    def add_nested(self, slot: str, inner_document: bytes, **seal: object) -> OdtPlusBuilder:
         """Carry a whole docxplus document (either profile) as a nested module."""
         return self.add_module(slot, inner_document, payload_type="docxplus", **seal)
 
@@ -212,6 +217,9 @@ class OdtPlusBuilder:
                 # Concealment channel: the payload travels inside the carrier's
                 # pixels, so no intelligence/payloadN.dxp part is written.
                 record = OdtStegMediaChannel(**m.channel_kwargs).embed(pkg, sealed, slot=m.slot)
+            elif m.channel_id == "odt_metadata":
+                # Short-string transport in meta.xml; still sealed before placement.
+                record = OdtMetadataChannel(**m.channel_kwargs).embed(pkg, sealed, slot=m.slot)
             else:
                 payload_index += 1
                 part = f"intelligence/payload{payload_index}.dxp"
@@ -270,7 +278,7 @@ class OdtPlusReader:
         blob = pkg.parts.get(ODT_MANIFEST_PART)
         manifest = Manifest.from_bytes(blob) if blob else Manifest()
         for record in manifest.records:
-            if record.channel not in ("odt_package_part", "stego_media"):
+            if record.channel not in ("odt_package_part", "stego_media", "odt_metadata"):
                 raise ContainerError(f"unknown ODT channel: {record.channel}")
         return cls(package=pkg, manifest=manifest)
 
@@ -321,7 +329,7 @@ class OdtPlusReader:
 
     def extract_project(
         self, slot: str, dest: str | Path, *,
-        max_uncompressed: int = payloads.MAX_PROJECT_UNCOMPRESSED, **creds,
+        max_uncompressed: int = payloads.MAX_PROJECT_UNCOMPRESSED, **creds: object,
     ) -> Path:
         """Extract a project under an explicit budget independent of credentials."""
         record = self._record(slot)
@@ -339,6 +347,8 @@ class OdtPlusReader:
         """
         if record.channel == "stego_media":
             return OdtStegMediaChannel().extract(self.package, record)
+        if record.channel == "odt_metadata":
+            return OdtMetadataChannel().extract(self.package, record)
         if record.channel != "odt_package_part":
             raise ContainerError(f"unknown ODT channel: {record.channel}")
         part = record.location.get("part")
@@ -353,13 +363,17 @@ class OdtPlusReader:
 
         return DocxPlusReader.verify_reproduction(self, slot, expected_public_key)
 
-    def reproduce(self, slot: str, dest: str | Path, *, allow_execution: bool = False, **creds) -> dict:
+    def reproduce(
+        self, slot: str, dest: str | Path, *, allow_execution: bool = False, **creds: object,
+    ) -> dict[str, object]:
         """OPT-IN: re-run the attested command in a sandbox and compare digests."""
         from .container import DocxPlusReader
 
         return DocxPlusReader.reproduce(self, slot, dest, allow_execution=allow_execution, **creds)
 
-    def open_nested(self, slot: str, **creds):
+    def open_nested(
+        self, slot: str, **creds: object,
+    ) -> DocxPlusReader | OdtPlusReader:
         """Open a carried docxplus document, dispatching on which profile it is.
 
         A nested module may be either an OPC or an ODF package — matryoshka nesting

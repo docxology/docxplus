@@ -326,10 +326,11 @@ def _check_odt_intelligence(pkg, report: ValidationReport) -> None:
     manifest = Manifest.from_bytes(blob)
     report.notes.append(f"intelligence modules: {len(manifest.records)}")
 
+    from .channels.metadata import OdtMetadataChannel
     from .channels.stego_media import OdtStegMediaChannel
 
     for record in manifest.records:
-        if record.channel not in ("odt_package_part", "stego_media"):
+        if record.channel not in ("odt_package_part", "stego_media", "odt_metadata"):
             report.fail(report.intelligence_errors, f"{record.slot}: unsupported ODT channel: {record.channel}")
             continue
         if record.channel == "stego_media":
@@ -341,6 +342,17 @@ def _check_odt_intelligence(pkg, report: ValidationReport) -> None:
                 OdtStegMediaChannel(backend=backend).extract(pkg, record)
             except Exception as exc:  # noqa: BLE001 - reported, not raised
                 report.fail(report.intelligence_errors, f"{record.slot}: {exc}")
+            continue
+        if record.channel == "odt_metadata":
+            # A user-defined meta.xml field; the record digest binds the stored
+            # (possibly sealed) bytes exactly as the package-part path does.
+            try:
+                raw = OdtMetadataChannel().extract(pkg, record)
+            except Exception as exc:  # noqa: BLE001 - reported, not raised
+                report.fail(report.intelligence_errors, f"{record.slot}: {exc}")
+                continue
+            if _digest(raw) != record.digest:
+                report.fail(report.intelligence_errors, f"{record.slot}: digest mismatch")
             continue
         part = record.location.get("part")
         raw = pkg.parts.get(part)

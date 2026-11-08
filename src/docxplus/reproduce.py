@@ -309,13 +309,14 @@ def _digest_outputs(project_dir: Path, outputs: list[str], before: dict[str, tup
     """Hash the v3 sorted path/size/per-file-digest transcript; reject unchanged inputs."""
     deadline = deadline if deadline is not None else time.monotonic() + MAX_REPRO_SECONDS
     files = _output_hashes(project_dir, outputs, deadline, require_matches=True)
+    resolved_root = Path(project_dir).resolve()
     h = hashlib.blake2b(digest_size=32)
     h.update(OUTPUT_DIGEST_DOMAIN)
     h.update(len(files).to_bytes(8, "big"))
     for name, (size, digest) in sorted(files.items()):
         if before.get(name) == (size, digest):
             raise ReproError(f"declared output {name!r} is a carried file unchanged by the run")
-        relative = Path(name).relative_to(Path(project_dir).resolve()).as_posix().encode("utf-8")
+        relative = Path(name).relative_to(resolved_root).as_posix().encode("utf-8")
         h.update(len(relative).to_bytes(8, "big"))
         h.update(relative)
         h.update(size.to_bytes(8, "big"))

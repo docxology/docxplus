@@ -4,7 +4,7 @@
     "/source/docxplus/output/documents/living_manuscript.docx",
     "/source/docxplus/output/documents/living_manuscript.docxplus"
   ],
-  "size_bytes": 2100654,
+  "size_bytes": 2100652,
   "opc_valid": true,
   "verify_reproduction": {
     "attested": true,
@@ -18,12 +18,12 @@
         "-c",
         "import hashlib,pathlib,os\nroot=pathlib.Path('.')\nh=hashlib.blake2b(digest_size=16)\nfor p in sorted(root.rglob('*.py')):\n    h.update(p.relative_to(root).as_posix().encode()); h.update(b'\\0'); h.update(p.read_bytes())\nos.makedirs('output',exist_ok=True)\nopen('output/repro.txt','w').write(h.hexdigest())\n"
       ],
-      "output_digest": "e960fb8eee3859412c414bda8956f4af3ae510b22a007a8cc39be69ae51145f5",
+      "output_digest": "49a146e96ccac978cb52af2edb0cffa456e52cad123325d784156e340a4ea2a1",
       "output_digest_scheme": "docxplus-output-tree-v3-blake2b-256",
       "outputs": [
         "output/repro.txt"
       ],
-      "source_digest": "82392262fbd594c93991bb9685ed3709f23cc921a62504b6525d105ddd764016",
+      "source_digest": "6eab5ecb8349f955ba7f32c66f09c5150a497c2301eb45ef80758b9c4cd5565d",
       "timeout": 300,
       "toolchain": {
         "implementation": "CPython",
@@ -37,12 +37,12 @@
     "-c",
     "import hashlib,pathlib,os\nroot=pathlib.Path('.')\nh=hashlib.blake2b(digest_size=16)\nfor p in sorted(root.rglob('*.py')):\n    h.update(p.relative_to(root).as_posix().encode()); h.update(b'\\0'); h.update(p.read_bytes())\nos.makedirs('output',exist_ok=True)\nopen('output/repro.txt','w').write(h.hexdigest())\n"
   ],
-  "attested_output_digest": "e960fb8eee385941\u2026",
+  "attested_output_digest": "49a146e96ccac978\u2026",
   "reproduced_match": true,
   "reproduction": {
     "output_digest_scheme": "docxplus-output-tree-v3-blake2b-256",
-    "expected": "e960fb8eee3859412c414bda8956f4af3ae510b22a007a8cc39be69ae51145f5",
-    "actual": "e960fb8eee3859412c414bda8956f4af3ae510b22a007a8cc39be69ae51145f5",
+    "expected": "49a146e96ccac978cb52af2edb0cffa456e52cad123325d784156e340a4ea2a1",
+    "actual": "49a146e96ccac978cb52af2edb0cffa456e52cad123325d784156e340a4ea2a1",
     "match": true,
     "source_match": true,
     "toolchain_match": true,

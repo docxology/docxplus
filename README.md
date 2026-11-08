@@ -6,7 +6,7 @@
 > intelligence layer through documented package extension points. Structural
 > validation is not a universal Office-application interoperability guarantee.
 
-**v2.0.0** · MIT · Python >= 3.11 · [CHANGELOG](CHANGELOG.md) ·
+**v2.1.0** · MIT · Python >= 3.11 · [CHANGELOG](CHANGELOG.md) ·
 [docs index](docs/README.md) · [CLI reference](docs/cli.md)
 
 docxplus is a standards-first reference implementation. Every channel it uses is
@@ -81,7 +81,8 @@ uv run docxplus odt-extract report.odt brief --password s3cret
 
 Two OOXML channels have no ODF analogue and do not cross over: `custom_xml` (no
 custom XML datastore part) and `mce` (no Markup Compatibility element). ODT payloads
-ride as ODF package entries, bounded by archive intake limits.
+ride as ODF package entries, bounded by archive intake limits, or as `odt_metadata`
+user-defined fields in `meta.xml` for short strings.
 
 ## Two names, one file
 

@@ -74,8 +74,7 @@ of the thing it appeared to attest. The validator therefore already rejects any 
 reference set omits a manifest-named part, written before the signing code precisely so the feature cannot
 ship without it.
 
-Beyond that: an ODF analogue of the metadata channel, so the two profiles differ only where the
-standards genuinely do; calibrating sample-pair analysis against natural-image carriers, so the withdrawn
+Beyond that: calibrating sample-pair analysis against natural-image carriers, so the withdrawn
 estimator of [@sec:threat-audit] can return with the accuracy its name implies; validating produced documents
 against Office-o-tron and the ODF Toolkit in continuous integration; establishing formal arguments for
 container parsing (none are claimed here); and selective attribute disclosure via zero-knowledge proofs,

@@ -15,8 +15,10 @@ Active engineering and research backlog.
     derived public halves; both profiles and CLI use them. No simulated shim,
     stateful-hash suite or classical fallback is implemented.
 - [x] MCE handling and ODT package collision safeguards.
-- [ ] ODT custom metadata channel (`meta.xml` user-defined fields): not implemented;
-      package-entry and displayed-image transports are the supported ODF channels.
+- [x] ODT custom metadata channel (`meta.xml` user-defined fields), via
+      `OdtMetadataChannel` (`odt_metadata`): base64 in a named `meta:user-defined`
+      field, preserving existing fields and refusing collisions. Round-trip,
+      capacity, sealing, signature and tamper tests; docs and format spec updated.
 
 ## Major Improvements
 - [x] Shamir k-of-n confidentiality and issued-share integrity:
@@ -56,7 +58,8 @@ Active engineering and research backlog.
 - [x] ODT `stego_media` channel analogue (`Pictures/` carriers), via
       `OdtStegMediaChannel` — a subclass of the OOXML channel sharing the decode path.
       Real round-trip tests in `tests/test_odt_container.py` (`-k stego`); parity figure
-      and caption updated (one unbuilt analogue remains: `metadata`).
+      and caption updated (all ODF analogues built; `custom_xml`/`mce` remain
+      OOXML-only by design).
 - [ ] Validate produced documents against Office-o-tron and the ODF Toolkit
       validator in CI (standards-report §11.6). External services; needs an owner
       decision on hosting (neither offers a stable public API today).

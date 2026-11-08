@@ -225,3 +225,26 @@ def test_a_manifest_declaring_an_algorithm_we_do_not_implement_is_refused():
     doc["signature"]["algorithm"] = "rsa-4096"
     assert not Manifest.from_bytes(json.dumps(doc).encode()).verify_signature()
 
+
+
+def test_replacement_failure_before_publication_preserves_the_old_file(tmp_path):
+    """A read-only directory stops staging; the previous secret is untouched."""
+    path = write_secret(tmp_path / "recovered", b"previous")
+    tmp_path.chmod(0o500)
+    try:
+        with pytest.raises(PermissionError):
+            write_secret(path, b"replacement", overwrite=True)
+    finally:
+        tmp_path.chmod(0o700)
+    assert path.read_bytes() == b"previous"
+    assert set(tmp_path.iterdir()) == {path}
+
+
+def test_replacement_failure_at_publication_removes_the_staged_temporary(tmp_path):
+    """os.replace onto a directory fails; the private staging file is removed."""
+    destination = tmp_path / "recovered"
+    destination.mkdir()
+    with pytest.raises((IsADirectoryError, NotADirectoryError)):
+        write_secret(destination, b"replacement", overwrite=True)
+    assert destination.is_dir()
+    assert set(tmp_path.iterdir()) == {destination}

@@ -635,3 +635,85 @@ def test_odf_authority_declarations_are_surface_authenticated(declaration):
     else:
         reader.package.media_types["intelligence/manifest.json"] = "text/plain"
     assert not reader.verify_provenance(expected_public_key=public)
+
+
+# -- the metadata channel over ODF --------------------------------------------
+
+
+def test_odt_metadata_round_trip_preserves_existing_fields():
+    """A meta.xml user-defined field carries the payload and keeps other fields."""
+    from docxplus.channels.metadata import MAX_PAYLOAD
+    from docxplus.odt import new_base_odt
+
+    payload = b"routing-tag:q4"
+    base = new_base_odt(custom_properties={"existing": "kept"})
+    data = (
+        OdtPlusBuilder(base_package=base)
+        .add_module("tag", payload, channel_id="odt_metadata")
+        .build()
+    )
+    assert validate_odt_bytes(data).ok
+    reader = OdtPlusReader.from_bytes(data)
+    assert reader.extract("tag") == payload
+    meta = reader.package.parts["meta.xml"]
+    assert b"dxplus_tag" in meta and b"existing" in meta
+    assert len(payload) <= MAX_PAYLOAD
+
+
+def test_odt_metadata_refuses_oversized_and_colliding_fields():
+    from docxplus.channels.metadata import MAX_PAYLOAD
+    from docxplus.odt import new_base_odt
+
+    with pytest.raises(ValueError, match="at most"):
+        OdtPlusBuilder().add_module(
+            "big", b"x" * (MAX_PAYLOAD + 1), channel_id="odt_metadata"
+        ).build()
+    base = new_base_odt(custom_properties={"dxplus_tag": "already"})
+    with pytest.raises(ValueError, match="collision"):
+        OdtPlusBuilder(base_package=base).add_module(
+            "tag", b"payload", channel_id="odt_metadata"
+        ).build()
+
+
+def test_odt_metadata_composes_with_sealing_signature_and_tamper_detection():
+    import re
+
+    from docxplus.odt import OdtPackage
+
+    private, public = crypto.generate_signing_key()
+    payload = b"sealed short string" * 4
+    data = (
+        OdtPlusBuilder()
+        .add_module("secret", payload, channel_id="odt_metadata", password="pw")
+        .sign(private)
+        .build()
+    )
+    reader = OdtPlusReader.from_bytes(data)
+    assert reader.extract("secret", password="pw") == payload
+    with pytest.raises(ContainerError):
+        reader.extract("secret", password="wrong")
+    assert reader.verify_provenance(expected_public_key=public)
+    assert validate_odt_bytes(data).ok
+
+    package = OdtPackage.from_bytes(data)
+    raw = package.parts["meta.xml"]
+    match = re.search(rb"(<meta:user-defined[^>]*>)([^<]+)(</meta:user-defined>)", raw)
+    assert match is not None
+    value = bytearray(match.group(2))
+    value[-1] = ord("A") if value[-1] != ord("A") else ord("B")
+    package.parts["meta.xml"] = raw[: match.start(2)] + bytes(value) + raw[match.end(2):]
+    tampered = OdtPlusReader(package=package, manifest=reader.manifest)
+    with pytest.raises(ContainerError, match="digest mismatch"):
+        tampered.extract("secret", password="pw")
+    assert not validate_odt_bytes(package.to_bytes()).ok
+
+
+def test_odf_metadata_channel_is_registered_but_not_offered_to_ooxml():
+    """Profile separation is explicit: OOXML authoring cannot mint an ODF-only id."""
+    from docxplus import channels
+    from docxplus.container import DocxPlusBuilder
+
+    assert channels.get_channel("odt_metadata").id == "odt_metadata"
+    assert "odt_metadata" not in channels.available_channels()
+    with pytest.raises(ContainerError, match="unknown channel"):
+        DocxPlusBuilder().add_module("m", "odt_metadata", b"x")

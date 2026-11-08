@@ -17,6 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
+from ..odt import OdtPackage
 from ..opc import OpcPackage
 
 
@@ -89,11 +90,13 @@ class Channel(Protocol):
 
     id: str
 
-    def embed(self, pkg: OpcPackage, payload: bytes, *, slot: str) -> ChannelRecord: ...
+    def embed(
+        self, pkg: OpcPackage | OdtPackage, payload: bytes, *, slot: str
+    ) -> ChannelRecord: ...
 
-    def extract(self, pkg: OpcPackage, record: ChannelRecord) -> bytes: ...
+    def extract(self, pkg: OpcPackage | OdtPackage, record: ChannelRecord) -> bytes: ...
 
-    def capacity(self, pkg: OpcPackage) -> int | None:
+    def capacity(self, pkg: OpcPackage | OdtPackage) -> int | None:
         """Channel capacity in ``pkg``; ``None`` means no channel-local limit.
 
         Package entry/total/count and intake budgets still apply.

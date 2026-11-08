@@ -46,7 +46,8 @@ a package-level relationship. The default and the workhorse.
 **Visibility** none. **Cost** none — no encoding overhead.
 
 The ODF profile records this package-entry channel as `odt_package_part`, declared
-in `META-INF/manifest.xml`; ODT also supports displayed-image `stego_media`.
+in `META-INF/manifest.xml`; ODT also supports the `odt_metadata` field channel and
+displayed-image `stego_media`.
 
 **Note.** A payload above 1 MiB that compresses extremely well is stored uncompressed,
 because deflating it would trip the reader's own inflate-ratio guard and produce a
@@ -54,10 +55,13 @@ package this tool would refuse to open. A writer must never emit what it would r
 
 ---
 
-## `metadata` — OOXML only
+## `metadata` — both profiles
 
 Base64 into a named custom document property (`dxplus_<slot>`) in
-`docProps/custom.xml`.
+`docProps/custom.xml`. The ODF profile records the same contract as `odt_metadata`:
+base64 in a `meta:user-defined` field named `dxplus_<slot>` in `meta.xml`, preserving
+every pre-existing user-defined field. The ceiling, collision refusal and sealing
+composition are shared; only the container location differs.
 
 **Capacity** bounded — see `channels.metadata.MAX_PAYLOAD`, cited in the manuscript as
 a token rather than repeated here. **Visibility** the property name is listed in

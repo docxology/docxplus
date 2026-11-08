@@ -22,6 +22,7 @@ from __future__ import annotations
 import posixpath
 import re
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 from urllib.parse import unquote, urlsplit
 from xml.etree.ElementTree import ParseError
 
@@ -30,6 +31,11 @@ from defusedxml.ElementTree import fromstring as _safe_fromstring
 
 from .manifest import read_manifest
 from .opc import OpcPackage, read_package
+
+if TYPE_CHECKING:
+    from .container import DocxPlusReader
+    from .odt import OdtPackage
+    from .odt_container import OdtPlusReader
 
 _MACRO_MARKERS = ("vbaproject.bin",)  # compared case-folded
 _MACRO_CT_HINTS = ("macroenabled", "ms-word.vbaproject", "ms-office.vbaproject")
@@ -141,7 +147,9 @@ def _has_altchunk(root) -> bool:
     return root.tag == _ALTCHUNK_TAG or any(el.tag == _ALTCHUNK_TAG for el in root.iter())
 
 
-def safe_open(data: bytes, *, policy: IntakePolicy = DEFAULT_POLICY):
+def safe_open(
+    data: bytes, *, policy: IntakePolicy = DEFAULT_POLICY,
+) -> tuple[ThreatReport, DocxPlusReader | None]:
     """Open untrusted `.docx` bytes under ``policy``; return ``(report, reader|None)``.
 
     ``read_package`` applies the zip-bomb / size / duplicate caps. Under a strict
@@ -176,7 +184,7 @@ _XLINK_HREF = "{http://www.w3.org/1999/xlink}href"
 _ODF_OBJECT_HINTS = ("object", "ole")
 
 
-def scan_odt(pkg, policy: IntakePolicy = DEFAULT_POLICY) -> ThreatReport:
+def scan_odt(pkg: OdtPackage, policy: IntakePolicy = DEFAULT_POLICY) -> ThreatReport:
     """Threat-scan a parsed ODF package. Executes nothing.
 
     Reuses :class:`ThreatReport` so a caller triaging documents of both kinds reads
@@ -264,7 +272,9 @@ def _odf_declares_scripts(root) -> bool:
     )
 
 
-def safe_open_odt(data: bytes, *, policy: IntakePolicy = DEFAULT_POLICY):
+def safe_open_odt(
+    data: bytes, *, policy: IntakePolicy = DEFAULT_POLICY,
+) -> tuple[ThreatReport, OdtPlusReader | None]:
     """Open untrusted `.odt` bytes under ``policy``; return ``(report, reader|None)``.
 
     The ODF counterpart of :func:`safe_open`. The reader is returned only when the

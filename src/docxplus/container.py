@@ -351,7 +351,7 @@ class DocxPlusReader:
     def list_modules(self) -> list[str]:
         return [r.slot for r in self.manifest.records]
 
-    def describe(self, slot: str) -> dict:
+    def describe(self, slot: str) -> dict[str, object]:
         return self.manifest.slot(slot).to_dict()
 
     def has_intelligence(self) -> bool:
@@ -427,7 +427,7 @@ class DocxPlusReader:
 
     def extract_project(
         self, slot: str, dest: str | Path, *,
-        max_uncompressed: int = payloads.MAX_PROJECT_UNCOMPRESSED, **creds,
+        max_uncompressed: int = payloads.MAX_PROJECT_UNCOMPRESSED, **creds: object,
     ) -> Path:
         """Recover a ``project`` module and unpack it into ``dest``."""
         record = self._record(slot)
@@ -489,7 +489,9 @@ class DocxPlusReader:
         result[key] = dict(att)
         return result
 
-    def reproduce(self, slot: str, dest: str | Path, *, allow_execution: bool = False, **creds) -> dict:
+    def reproduce(
+        self, slot: str, dest: str | Path, *, allow_execution: bool = False, **creds: object,
+    ) -> dict[str, object]:
         """OPT-IN, EXECUTES CARRIED CODE. Recover the project and re-run its attested
         command in a best-effort sandbox, comparing output digests.
 
@@ -512,7 +514,7 @@ class DocxPlusReader:
 
         return _repro.reproduce_and_compare(project_dir, att)
 
-    def open_nested(self, slot: str, **creds) -> DocxPlusReader | OdtPlusReader:
+    def open_nested(self, slot: str, **creds: object) -> DocxPlusReader | OdtPlusReader:
         """Recover a nested ``docxplus`` module and return a reader over it.
 
         Depth is tracked across the chain so a hostile deeply-nested document

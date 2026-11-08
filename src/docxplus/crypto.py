@@ -528,7 +528,8 @@ def seal_hybrid(
 
     content_key = os.urandom(KEY_BYTES)
     body = encrypt_with_key(plaintext, content_key, aad=aad)
-    out = bytearray(b"DXE3" + len(body).to_bytes(4, "big") + body)
+    out = bytearray(b"DXE3" + len(body).to_bytes(4, "big"))
+    out.extend(body)
     out += len(slots).to_bytes(2, "big")
     _SYSTEM_RANDOM.shuffle(slots)
     for pub in slots:
@@ -670,7 +671,8 @@ def seal_multi(
 
     content_key = os.urandom(KEY_BYTES)
     body = encrypt_with_key(plaintext, content_key, aad=aad)
-    out = bytearray(b"DXE2" + len(body).to_bytes(4, "big") + body)
+    out = bytearray(b"DXE2" + len(body).to_bytes(4, "big"))
+    out.extend(body)
     out += len(slots).to_bytes(2, "big")
     # Shuffle so a padded slot cannot be identified by position: appending decoys
     # would put every real recipient first and defeat the point.

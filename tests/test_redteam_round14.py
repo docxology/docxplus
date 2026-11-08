@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import gzip
 import io
-import statistics
 import sys
 import tarfile
 import time
@@ -159,13 +158,19 @@ def test_captured_stderr_is_bounded(tmp_path):
 # -- Finding 3: deniability has to survive a clock ----------------------------
 
 
-def _median_open_seconds(reader: DocxPlusReader, slot: str, password: str, runs: int = 5) -> float:
-    samples = []
+def _min_open_seconds(reader: DocxPlusReader, slot: str, password: str, runs: int = 7) -> float:
+    """Fastest of several opens: the least-preempted run estimates true cost.
+
+    A median still moves when a scheduling spike covers most samples, and this
+    assertion exists to detect a *structural* factor of two, not scheduler noise.
+    The minimum is the standard robust estimator for that comparison.
+    """
+    best = float("inf")
     for _ in range(runs):
         start = time.perf_counter()
         reader.extract(slot, password=password)
-        samples.append(time.perf_counter() - start)
-    return statistics.median(samples)
+        best = min(best, time.perf_counter() - start)
+    return best
 
 
 def test_the_real_and_decoy_passwords_take_the_same_time():
@@ -189,8 +194,8 @@ def test_the_real_and_decoy_passwords_take_the_same_time():
     )
     reader = DocxPlusReader.from_bytes(builder.build())
 
-    real = _median_open_seconds(reader, "s", "real-pw")
-    decoy = _median_open_seconds(reader, "s", "decoy-pw")
+    real = _min_open_seconds(reader, "s", "real-pw")
+    decoy = _min_open_seconds(reader, "s", "decoy-pw")
     ratio = max(real, decoy) / max(1e-9, min(real, decoy))
     assert ratio < 1.35, (
         f"real={real*1000:.0f}ms decoy={decoy*1000:.0f}ms ratio={ratio:.2f} — the "
@@ -228,7 +233,7 @@ def test_an_ordinary_sealed_module_costs_the_same_as_a_decoy():
                          decoy=b"cover", decoy_password="decoy-pw")
     decoy_reader = DocxPlusReader.from_bytes(with_decoy.build())
 
-    plain = _median_open_seconds(plain_reader, "s", "only-pw")
-    hidden = _median_open_seconds(decoy_reader, "s", "real-pw")
+    plain = _min_open_seconds(plain_reader, "s", "only-pw")
+    hidden = _min_open_seconds(decoy_reader, "s", "real-pw")
     ratio = max(plain, hidden) / max(1e-9, min(plain, hidden))
     assert ratio < 1.35, f"plain={plain*1000:.0f}ms decoy={hidden*1000:.0f}ms ratio={ratio:.2f}"

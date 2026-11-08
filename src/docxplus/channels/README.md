@@ -30,8 +30,9 @@ with consumer-visible channel behavior.
 
 **Not every channel crosses to ODF.** `custom_xml` has no ODF analogue (there is no
 custom XML datastore part) and neither does `mce` (there is no Markup Compatibility
-element). ODT supports budgeted package entries and displayed-image `stego_media`;
-`metadata` has no implemented ODF analogue. A `custom_xml` recipe does not port directly.
+element). ODT supports budgeted package entries, displayed-image `stego_media`, and
+`metadata` as `odt_metadata` (`meta.xml` user-defined fields). A `custom_xml` recipe
+does not port directly.
 
 **`stego_media` is the only one with an optional dependency.** It needs Pillow, and
 optionally the steganographer Rust CLI for the premium backend. `available_channels()`

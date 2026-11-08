@@ -104,8 +104,8 @@ Capacity is channel- and backend-specific; no channel-local limit removes packag
 [@Fig:capacity] plots the spread on a log scale, distinguishing the channels with a real format ceiling
 from those that simply have none:
 
-- **`metadata`** is deliberately small, bounded at {{METADATA_MAX_BYTES}} bytes in `docProps/custom.xml`:
-  routing headers, identifiers, status flags, key shares.
+- **`metadata`** is deliberately small, bounded at {{METADATA_MAX_BYTES}} bytes in `docProps/custom.xml`
+  (and the ODF `odt_metadata` field in `meta.xml`): routing headers, identifiers, status flags, key shares.
 - **`custom_xml`, `package_part`, and `mce`** have no channel-local ceiling, but XML/base64, part, archive
   metadata, count and total-size limits still apply.
 - **`python_lsb` media** uses DXL1 framing: a $256\times 256$ RGB PNG holds {{MEDIA_CAP_256}} bytes and a

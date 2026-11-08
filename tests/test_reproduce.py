@@ -329,10 +329,21 @@ def test_portable_python_recipe_uses_the_recipient_interpreter(tmp_path):
 @pytest.mark.skipif(sys.platform != "linux", reason="private reproduction PID namespace is Linux-only")
 @pytest.mark.parametrize("new_session", [False, True])
 def test_successful_reproduction_does_not_leave_a_writing_descendant(tmp_path, new_session):
-    """Both ordinary and setsid descendants must die before output collection returns."""
+    """Both ordinary and setsid descendants are dead before output collection returns.
+
+    The child reports its own PID and then sleeps far beyond the leader's exit.
+    Once ``run_and_digest`` returns the namespace init has exited, so the kernel
+    must have killed the child: its ``/proc`` entry is absent or a zombie, and the
+    delayed write never lands. Liveness is checked instead of racing a short sleep
+    against the scheduler.
+    """
     import time
 
-    child = "from pathlib import Path; import time; Path('ready').write_text('ready'); time.sleep(0.5); Path('late').write_text('escaped')"
+    child = (
+        "import json,os,time; from pathlib import Path; "
+        "Path('child.json').write_text(json.dumps({'pid': os.getpid()})); "
+        "Path('ready').write_text('ready'); time.sleep(30); Path('late').write_text('escaped')"
+    )
     command = (
         "import subprocess,sys,time; from pathlib import Path; "
         f"subprocess.Popen([sys.executable,'-c',{child!r}],start_new_session={new_session!r}); "
@@ -343,7 +354,12 @@ def test_successful_reproduction_does_not_leave_a_writing_descendant(tmp_path, n
     )
     reproduce.run_and_digest(tmp_path, ReproSpec([PY, "-c", command], ["result"], timeout=10))
     assert (tmp_path / "result").read_text() == "computed"
-    time.sleep(0.7)
+    pid = json.loads((tmp_path / "child.json").read_text())["pid"]
+    stat = Path(f"/proc/{pid}/stat")
+    if stat.exists():
+        state = stat.read_text().rsplit(")", 1)[1].split()[0]
+        assert state in {"Z", "X"}, f"descendant {pid} is still alive (state {state})"
+    time.sleep(0.2)
     assert not (tmp_path / "late").exists()
 
 

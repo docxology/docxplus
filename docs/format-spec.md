@@ -92,8 +92,10 @@ The natural home for sealed blobs. Package entry/total/count budgets still apply
 
 ### 3.3 `metadata`
 Payload is base64-encoded into a named custom document property
-(`dxplus_<slot>`) in `docProps/custom.xml`. A short-string channel (≤ 8000 bytes),
-suited to routing tags and identifiers.
+(`dxplus_<slot>`) in `docProps/custom.xml`. The ODF profile records the same
+contract as `odt_metadata`: base64 in a `meta:user-defined` field named
+`dxplus_<slot>` in `meta.xml`, preserving pre-existing fields. A short-string
+channel (8000 bytes), suited to routing tags and identifiers.
 
 ### 3.4 `stego_media`
 Payload is hidden in the least-significant bits of a PNG the document visibly displays:
@@ -463,8 +465,9 @@ The intelligence layer is implemented in `src/docxplus/odt_container.py`
 
 **Channels that do not cross over.** ODF has no custom XML datastore part and no
 Markup Compatibility `<mc:AlternateContent>` element, so the `custom_xml` and `mce`
-channels are OOXML-only. `metadata` has a plausible ODF analogue (`meta.xml`
-user-defined fields) that is not yet implemented. `stego_media` crosses over: the ODT
+channels are OOXML-only. `metadata` crosses over as `odt_metadata`: base64 in a
+`meta:user-defined` field named `dxplus_<slot>` in `meta.xml`, with the same ceiling,
+collision refusal and sealing composition. `stego_media` crosses over: the ODT
 profile offers budgeted package entries and the LSB media channel at
 `Pictures/figureN.png`, and shares the sealing, digest, and signature machinery with
 the OOXML profile.

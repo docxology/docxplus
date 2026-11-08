@@ -75,7 +75,8 @@ refuses platforms without descriptor-relative no-follow directory support.
 ## Authoring — OpenDocument (`.odt` / `.odtplus`)
 
 The ODF profile carries the same signed intelligence layer. Two OOXML channels have no
-ODF analogue, so payloads ride as ODF package entries; see [`channels.md`](channels.md).
+ODF analogue; ODT payloads ride as package entries or the `odt_metadata` field
+channel; see [`channels.md`](channels.md).
 
 ### `odt-build`
 
