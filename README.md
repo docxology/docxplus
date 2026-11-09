@@ -6,7 +6,7 @@
 > intelligence layer through documented package extension points. Structural
 > validation is not a universal Office-application interoperability guarantee.
 
-**v2.2.1** · MIT · Python >= 3.11 · [CHANGELOG](CHANGELOG.md) ·
+[Latest release](https://github.com/docxology/docxplus/releases/latest) · MIT · Python >= 3.11 · [CHANGELOG](CHANGELOG.md) ·
 [docs index](docs/README.md) · [CLI reference](docs/cli.md)
 
 docxplus is a standards-first reference implementation. Every channel it uses is
@@ -194,12 +194,12 @@ uv run docxplus extract report.docx brief --password s3cret --out brief.json
 uv run docxplus validate report.docx
 ```
 
-Three extras, and what each one buys: `dev` is pytest and the coverage gate, `media`
+The extras, and what each one buys: `dev` is pytest and the coverage gate, `media`
 is Pillow for the LSB stego channel, `figures` is matplotlib for the manuscript
-plates. Install all three. `scripts/build_figures.py` *skips* when matplotlib is
+plates. Install all of them. `scripts/build_figures.py` *skips* when matplotlib is
 absent rather than failing, so a render on a `dev,media`-only environment silently
 reuses whatever figures are already committed — green, and not what you measured.
-CI installs all three for exactly that reason.
+CI installs all of them for exactly that reason.
 
 ### Isolated Linux release validation
 
