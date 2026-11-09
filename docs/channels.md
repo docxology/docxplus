@@ -115,6 +115,9 @@ The optional backend must provide the generic-packet and capacity CLI contracts;
 steganographer 0.9 is the version this release is exercised against. Select a
 built binary with `STEGANOGRAPHER_BIN` or PATH. Discovery never searches
 implicit sibling checkouts or builds Cargo; invalid explicit configuration fails.
+Version 0.8 has no `capacity` command: its `info` packet bound is not a logical
+payload bound. It cannot qualify the complete current backend contract; do not
+replace executable sizing with guessed serialization overhead.
 No Rust backend is required for `python_lsb`. `steg_bridge.analyze_carrier` consumes the
 `steganographer.cli/v1` success envelope and returns only its analysis `result`
 (including `detected` and `analysis_type`).

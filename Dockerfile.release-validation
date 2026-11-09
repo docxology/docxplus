@@ -71,7 +71,7 @@ RUN cp -a /source/docxplus /tmp/docxplus-install \
     && (cd /tmp/docxplus-install && \
         uv sync --locked --all-extras --no-editable --python /usr/local/bin/python3) \
     && uv pip install --python /opt/venv/bin/python --no-deps \
-       setuptools==84.1.0 wheel==0.45.1 \
+       setuptools==84.1.0 \
     && rm -rf /tmp/docxplus-install \
     && ln -s /opt/venv .venv \
     && cp -a output /inputs/docxplus-output \

@@ -33,15 +33,16 @@ nothing, or re-runs by explicit opt-in under available confinement. Missing conf
 readable host files remain exposed. A pinned signed transparency head authenticates inclusion of the complete
 claim, not independent execution, trustworthy time, or pre-compromise ordering.
 The output-tree-v3 digest scheme is a clean cutover: missing/old schemes refuse before execution,
-and local `match` requires both `source_match` and selected-output equality. Linux private PID/proc/session
-custody is stronger than macOS process-group cleanup of detached descendants; both require actual platform evidence.
+and local `match` requires both `source_match` and selected-output equality. Linux supplies private
+PID/proc/session custody. macOS requests fork denial rather than private PID/proc isolation;
+recipes needing subprocesses require Linux, and macOS enforcement still needs platform evidence.
 
-We implement and evaluate 5 spec-sanctioned transport channels: custom XML parts, auxiliary
+The OOXML profile provides 5 spec-sanctioned transport channels: custom XML parts, auxiliary
 package parts, custom document properties, Markup Compatibility and Extensibility (MCE) choice blocks, and
 least-significant-bit steganography in a carrier image the document visibly displays. A chi-squared heuristic
 [@westfeld2000] and prefix sweep inspect selected carriers; neither calibrated detection probabilities nor
-general false-positive/sensitivity claims are established. The source inventory contains 717
-mock-free test functions under a 90% coverage policy; these are not executed-pass counts.
+general false-positive/sensitivity claims are established. The source inventory contains 721
+test functions under a 90% coverage policy; these are not executed-pass counts.
 Historical reports and 14 recorded review cycles with 88
 confirmed findings describe selected fixtures and past evidence, not fresh software-release qualification.
 The living manuscript demonstrates a dependency-free source hash, not whole-project scientific reproduction.

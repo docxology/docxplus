@@ -136,8 +136,10 @@ Deterministic selected outputs make repeated digest comparison useful [@reproduc
 establish scientific validity. `reproduce.py` runs carried recipes only after explicit opt-in, refusing when
 the required platform confinement is absent. The signed output-tree-v3 scheme refuses legacy/missing schemes
 before execution. Local `match` requires `source_match` and output digest equality; toolchain equality is
-reported separately. Linux private PID/proc/network namespaces, a new session and retained-group reaping
-own detached descendants; macOS group cleanup is weaker and needs external supervision for those descendants.
+reported separately. Linux private PID/proc/network namespaces and a pinned namespace-init pidfd
+provide detached-descendant custody: cleanup waits for init exit readiness before monitor reaping
+or collection, and a failed bounded join refuses collection. macOS requests process-fork denial,
+not private PID/proc custody; recipes needing subprocesses require Linux. Native macOS enforcement remains unqualified here.
 Per-process limits are not aggregate quotas. Private scratch does not hide the readable host root or credentials.
 Use disposable isolation for untrusted code; the living example does not execute the full pipeline.
 

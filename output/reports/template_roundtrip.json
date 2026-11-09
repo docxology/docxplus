@@ -21,7 +21,7 @@
       "ok": true
     },
     {
-      "detail": "{\"files_compared\": 136, \"missing\": [], \"unexpected\": [], \"content_mismatches\": [], \"executable_bit_mismatches\": [], \"directories_compared\": 19, \"missing_directories\": [], \"unexpected_directories\": [], \"identical\": true}",
+      "detail": "{\"files_compared\": 136, \"missing\": [], \"unexpected\": [], \"content_mismatches\": [], \"executable_bit_mismatches\": [], \"directories_compared\": 18, \"missing_directories\": [], \"unexpected_directories\": [], \"identical\": true}",
       "name": "docxplus.roundtrip_identical",
       "ok": true
     },
@@ -46,7 +46,7 @@
       "ok": true
     },
     {
-      "detail": "{\"files_compared\": 136, \"missing\": [], \"unexpected\": [], \"content_mismatches\": [], \"executable_bit_mismatches\": [], \"directories_compared\": 19, \"missing_directories\": [], \"unexpected_directories\": [], \"identical\": true}",
+      "detail": "{\"files_compared\": 136, \"missing\": [], \"unexpected\": [], \"content_mismatches\": [], \"executable_bit_mismatches\": [], \"directories_compared\": 18, \"missing_directories\": [], \"unexpected_directories\": [], \"identical\": true}",
       "name": "odtplus.roundtrip_identical",
       "ok": true
     },
@@ -79,10 +79,10 @@
   "failures": [],
   "formats": {
     "docx": {
-      "bytes": 526907,
+      "bytes": 526906,
       "comparison": {
         "content_mismatches": [],
-        "directories_compared": 19,
+        "directories_compared": 18,
         "executable_bit_mismatches": [],
         "files_compared": 136,
         "identical": true,
@@ -97,10 +97,10 @@
       ]
     },
     "odt": {
-      "bytes": 526514,
+      "bytes": 526513,
       "comparison": {
         "content_mismatches": [],
-        "directories_compared": 19,
+        "directories_compared": 18,
         "executable_bit_mismatches": [],
         "files_compared": 136,
         "identical": true,
@@ -117,10 +117,10 @@
   },
   "ok": true,
   "project": {
-    "directories": 19,
+    "directories": 18,
     "files_carried": 136,
     "has_executable": true
   },
-  "project_payload_digest": "8273832bdca810d6439ca568c3fdd568d16e42d6c0b77d49f3b0cf7bea78b851",
+  "project_payload_digest": "1bda3ae0bd40dc760cdf2f3398b605931fe32e40d08b683e3e52819a256ad2ce",
   "source": "/inputs/template"
 }

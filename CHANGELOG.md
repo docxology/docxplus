@@ -5,6 +5,41 @@ versioning is [semantic](https://semver.org/).
 
 Findings referenced by number are recorded in full in [`docs/redteam-audit.md`](docs/redteam-audit.md).
 
+## [2.2.2] — Unreleased
+
+### Fixed
+
+- Release admission rejects conflicting package, lock, citation, CodeMeta, Zenodo
+  and skill versions before creating provisioning output or contacting Docker.
+  Version inspection parses literal metadata/source without importing the snapshot.
+- CodeMeta and the repository skill follow the authoritative package version.
+- Manuscript payload-flow figures keep channel headings and KDF details inside
+  their boxes, distinguish hybrid recipients from classical-only examples, and
+  keep the evidence note inside the rendered page margins.
+- Manuscript figures and captions report the shipped ODT metadata transport,
+  distinguish optional/new document parts from required parts, and label the
+  metadata ceiling as implementation policy rather than an Office-format limit.
+  The Python LSB capacity curve stops at the supported decoded-pixel budget.
+- Source test-function inventory is not labelled mock-free or treated as passed
+  cases. macOS execution prose states the actual fork-denial policy and limits.
+
+### Security
+
+- Remove the unused standalone `wheel==0.45.1` CLI from the release image
+  ([GHSA-8rrh-rw8j-w5fx](https://osv.dev/vulnerability/GHSA-8rrh-rw8j-w5fx)).
+  The pinned Setuptools backend provides wheel building without that dependency.
+- Linux reproduction joins its pinned namespace init before killing/reaping the
+  bubblewrap monitor. SIGKILL delivery alone could return from timeout cleanup
+  while a descendant was still live; a bounded failed join now refuses collection.
+  Real Linux regressions acknowledge a live project writer, assert immediate FIFO
+  resource release and namespace liveness, and cover ordinary/setsid children,
+  grandchildren, nonzero exits and threaded-init timeouts without timer-based proof.
+
+### Changed
+
+- Express the unchanged MIT license as SPDX metadata and require Setuptools 77+
+  so builds do not rely on the deprecated TOML license-table representation.
+
 ## [2.2.1] — 2026-11-09
 
 ### Fixed

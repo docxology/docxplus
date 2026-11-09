@@ -38,7 +38,7 @@ L6  orchestration src/docxplus/cli.py • scripts/*
 | `steg_bridge.py` | L1 | pair-equality `p_value` statistics and optional Rust encode/decode/analyze/exact-capacity CLI contracts |
 | `channels/` | L1 | side-channels (base protocol + custom_xml, package_part, metadata, stego_media, mce) |
 | `manifest.py` | L2 | format-3 canonical body binds module root/surface, primary algorithm and declared co-signer identities/algorithms |
-| `reproduce.py` | L2 | output-tree-v3 claims/source_match; opt-in private-scratch execution, Linux PID/proc/session custody and weaker macOS detached cleanup |
+| `reproduce.py` | L2 | output-tree-v3 claims/source_match; opt-in private-scratch execution, Linux private-init pidfd exit barrier; macOS profile requests fork denial |
 | `intake.py` | L2 | hardened untrusted-input threat scan for both profiles (no execution): OOXML macros/external rels/altChunk, ODF scripts/Basic/off-package xlink |
 | `container.py` | L3 | `DocxPlusBuilder` / `DocxPlusReader` — compose + read back; `seal_module` is the format-independent sealing step |
 | `odt_container.py` | L3 | the intelligence layer over an ODT package; reuses `container`'s sealing and unsealing rather than duplicating them |
@@ -80,8 +80,8 @@ manifest ─[sign + co-sign over canonical body]─► write_manifest ─► pkg
 ```
 reader.reproduce(slot, allow_execution=True)
   ─► scheme admission ─► extract_project ─► reproduce.run_and_digest (private scratch,
-      network/write confinement, Linux PID/proc/session custody; weaker macOS
-      detached cleanup) ─► source_match + output-tree-v3 comparison
+      network/write confinement, Linux private-init pidfd exit barrier;
+      macOS profile requests fork denial) ─► source_match + output-tree-v3 comparison
 ```
 
 ## The documentation pipeline (no hard-coded values)

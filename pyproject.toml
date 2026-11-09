@@ -2,13 +2,13 @@
 # Standalone research project following the docxology/template_code_project paradigm.
 
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=77.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "docxplus"
-version = "2.2.1"
-license = { text = "MIT" }
+version = "2.2.2"
+license = "MIT"
 description = "docxplus — DOCX and ODT containers with modular, signed and payload-encrypted intelligence layers through standards-defined package extension points."
 authors = [
     { name = "Daniel Ari Friedman", email = "daniel@activeinference.institute" },

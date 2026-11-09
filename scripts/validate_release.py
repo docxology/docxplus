@@ -9,6 +9,7 @@ The guest streams its tmpfs outputs before PID 1 exits; stopped tmpfs is not evi
 from __future__ import annotations
 
 import argparse
+import ast
 import base64
 import gzip
 import hashlib
@@ -24,6 +25,7 @@ import subprocess
 import sys
 import tarfile
 import time
+import tomllib
 import uuid
 import xml.etree.ElementTree as ET
 from contextlib import contextmanager
@@ -196,6 +198,64 @@ def inventory(root):
     return files, sorted(dirs)
 
 
+def _literal_metadata_version(text, label):
+    matches = re.findall(
+        r"^version:[ \t]+(.*?)[ \t]*$", "\n".join(text.splitlines()), re.MULTILINE)
+    require(len(matches) == 1, f"Exactly one literal version is required: {label}")
+    value = re.fullmatch(
+        r"(?:([\"'])([^\"'\s#]+)\1|([^\"'\s#]+))(?:[ \t]+#.*)?", matches[0])
+    require(value is not None, f"Invalid literal version: {label}")
+    return value.group(2) or value.group(3)
+
+
+def verify_release_versions(root):
+    """Bind release identities to pyproject without importing snapshot code."""
+    project = tomllib.loads(read_regular(root / "pyproject.toml").decode())["project"]
+    expected = project["version"]
+    require(project.get("name") == "docxplus" and isinstance(expected, str) and expected,
+            "Invalid authoritative project version")
+    observed = {}
+    for name in ("codemeta.json", ".zenodo.json"):
+        metadata = load_json(read_regular(root / name))
+        require(isinstance(metadata, dict), f"Invalid release metadata: {name}")
+        observed[name] = metadata.get("version")
+    observed["CITATION.cff"] = _literal_metadata_version(
+        read_regular(root / "CITATION.cff").decode(), "CITATION.cff")
+    skill_name = ".agents/skills/docxplus/SKILL.md"
+    skill = read_regular(root / skill_name).decode().splitlines()
+    require(skill and skill[0] == "---" and "---" in skill[1:], "Missing skill frontmatter")
+    observed[skill_name] = _literal_metadata_version(
+        "\n".join(skill[1:skill.index("---", 1)]), skill_name)
+    init_name = "src/docxplus/__init__.py"
+    try:
+        statements = ast.parse(read_regular(root / init_name).decode()).body
+    except SyntaxError as exc:
+        raise Refusal("Invalid package version source") from exc
+    versions = []
+    for statement in statements:
+        if isinstance(statement, ast.Assign):
+            targets = statement.targets
+        elif isinstance(statement, ast.AnnAssign):
+            targets = [statement.target]
+        else:
+            continue
+        if any(isinstance(target, ast.Name) and target.id == "__version__" for target in targets):
+            versions.append(statement.value)
+    require(len(versions) == 1 and isinstance(versions[0], ast.Constant)
+            and isinstance(versions[0].value, str), "Package version must be one literal string")
+    observed[init_name] = versions[0].value
+    packages = tomllib.loads(read_regular(root / "uv.lock").decode()).get("package")
+    require(isinstance(packages, list), "Missing locked project version")
+    locked = [item.get("version") for item in packages
+              if isinstance(item, dict) and item.get("name") == "docxplus"]
+    require(len(locked) == 1, "Exactly one locked project version is required")
+    observed["uv.lock"] = locked[0]
+    for name, version in observed.items():
+        require(isinstance(version, str) and version == expected,
+                f"Release version disagrees with pyproject.toml: {name}")
+    return expected
+
+
 def verify_inputs(manifest):
     require(isinstance(manifest, dict) and manifest.get("schema") == INPUT_SCHEMA,
             "Unsupported input schema")
@@ -243,6 +303,7 @@ def verify_inputs(manifest):
         actual_files, actual_dirs = inventory(root)
         require(actual_files == files and actual_dirs == sorted(dirs),
                 f"Snapshot drift: {name}")
+    verify_release_versions(Path(sources["docxplus"]["root"]))
     return sources
 
 

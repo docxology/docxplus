@@ -28,6 +28,7 @@ import hashlib
 import json
 import os
 import platform
+import select
 import shutil
 import signal
 import stat
@@ -57,6 +58,7 @@ OUTPUT_DIGEST_DOMAIN = b"docxplus/reproduction-outputs/v3\0"
 _CHUNK = 1 << 16
 #: bubblewrap's status object is one short JSON line; never read an unbounded file.
 _STATUS_LIMIT = 4096
+_INIT_EXIT_TIMEOUT_MS = 5000
 
 
 @dataclass
@@ -115,7 +117,7 @@ def _sandbox_wrap(argv: list[str], project_dir: Path, temp_dir: Path,
                   *, status_fd: int | None = None) -> list[str]:
     """Confine ``argv``: deny network AND writes outside the project + temp dirs.
 
-    macOS: Seatbelt denies fork, writes outside admitted paths, and network use,
+    macOS: the Seatbelt profile requests fork, network and out-of-path write denial,
     but does not provide Linux's private PID/proc view. Linux: bubblewrap with
     private user, PID and network namespaces, isolated procfs, and read-only root.
     Readable host files are not secret-isolated. Missing confinement refuses
@@ -336,10 +338,10 @@ def run_and_digest(project_dir: Path, spec: ReproSpec) -> str:
     Snapshots outputs before running (so a carried input cannot masquerade as a
     product), closes stdin, and retains the launch process-group identity before
     waiting. Linux bubblewrap runs the command as private PID 1 and reports it,
-    so cleanup kills namespace init itself and the kernel reaps every detached
-    descendant before collection (a killed member may linger as a zombie until its
-    adopter reaps it, which cannot execute or write). macOS Seatbelt denies process
-    creation, so a recipe that needs subprocesses must run on the Linux backend.
+    so cleanup kills namespace init itself and joins its pidfd before reaping the
+    monitor or collecting outputs. A killed member may linger as a zombie until
+    its adopter reaps it, which cannot execute or write. The macOS Seatbelt profile
+    requests process-fork denial; subprocess recipes require the Linux backend.
     """
     project_dir = Path(project_dir).resolve()
     deadline = time.monotonic() + max(1, min(spec.timeout, MAX_REPRO_SECONDS))
@@ -499,15 +501,23 @@ def _pin_sandbox_init(pid: int, monitor_pid: int) -> int | None:
 
 
 def _terminate_sandbox_init(descriptor: int | None) -> None:
-    """Kill the private namespace leader; the kernel then kills every member."""
+    """Kill and join namespace init before its monitor can be killed/reaped."""
     if descriptor is None:
         return
     try:
-        signal.pidfd_send_signal(descriptor, signal.SIGKILL, None, 0)
-    except ProcessLookupError:
-        pass  # It exited on its own; the pinned instance is already gone.
+        try:
+            signal.pidfd_send_signal(descriptor, signal.SIGKILL, None, 0)
+        except ProcessLookupError:
+            pass  # Still join the pinned instance; delivery alone is not completion.
+        # Init's exit notification follows kernel teardown of its PID namespace.
+        # Killing only the monitor can otherwise return while members still run.
+        poller = select.poll()
+        poller.register(descriptor, select.POLLIN)
+        events = poller.poll(_INIT_EXIT_TIMEOUT_MS)
+        if not events or not events[0][1] & select.POLLIN:
+            raise ReproError("sandbox init did not complete namespace cleanup")
     except OSError as exc:
-        raise ReproError("could not terminate the sandbox init") from exc
+        raise ReproError("could not terminate and join the sandbox init") from exc
     finally:
         os.close(descriptor)
 

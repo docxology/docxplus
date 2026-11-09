@@ -9,8 +9,8 @@
 
 ## Evidence status
 
-Software 2.0.0 uses authenticated format 3.0 for DOCX and ODT. Report-derived tokens
-remain intact, but token hydration is not evidence freshness. Rendered artifacts
+DOCX and ODT use authenticated format 3.0. Report-derived tokens remain intact,
+but token hydration is not evidence freshness. Rendered artifacts
 require a source-bound release receipt identifying the exact successful run.
 Fresh full-suite/coverage, PDF/render, installed-wheel, real-backend and LibreOffice
 evidence belongs in those receipts, not this editorial status file. Microsoft Word,

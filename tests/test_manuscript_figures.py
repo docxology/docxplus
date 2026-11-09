@@ -155,7 +155,6 @@ def test_crypto_artifact_reports_shipped_lineages_and_work_factors(tmp_path, v):
     assert int(re.search(r"Argon2id (\d+) MiB", text)[1]) * 1024 == crypto.ARGON2_MEMORY_COST_KIB
     assert int(re.search(r"Scrypt 2\^(\d+)", text)[1]) == crypto.SCRYPT_N_LOG2
     assert int(re.search(r"PBKDF2 ([\d,]+)", text)[1].replace(",", "")) == crypto.PBKDF2_ITERATIONS
-    assert int(re.search(r"capped at (\d+) MiB", text)[1]) * 1024**2 == crypto.MAX_SCRYPT_MEMORY_BYTES
     # Password work factors must not visually become dependencies of recipient or
     # threshold sealing: the KDF is below the password lane, not in another lane.
     password_y = _xy(_text(svg, "password"))[1]
@@ -190,15 +189,16 @@ def test_fidelity_artifact_refuses_absent_or_failed_measurements(tmp_path, v):
         assert _xy(_text(measured, category))[1] > preserved_y
 
 
-def test_parity_artifact_includes_both_real_odf_transports(tmp_path, v):
+def test_parity_artifact_reports_the_exercised_odf_transports(tmp_path, v):
     from docxplus import channels
     from docxplus.odt_container import OdtPlusBuilder, OdtPlusReader
 
     builder = OdtPlusBuilder()
-    payloads = {"entry": b"package payload", "image": b"concealed payload"}
+    payloads = {"entry": b"package payload", "image": b"concealed payload", "properties": b"metadata payload"}
     builder.add_module("entry", payloads["entry"])
     builder.add_module("image", payloads["image"], channel_id="stego_media",
                        backend="python_lsb", carrier_size=(32, 32))
+    builder.add_module("properties", payloads["properties"], channel_id="odt_metadata")
     reader = OdtPlusReader.from_bytes(builder.build())
     assert {slot: reader.extract(slot) for slot in payloads} == payloads
     carried = {reader.manifest.slot(slot).channel for slot in payloads}
@@ -211,7 +211,7 @@ def test_parity_artifact_includes_both_real_odf_transports(tmp_path, v):
     ]
     assert {t.text for t in native_labels if _xy(t)[0] > core_x} == carried
     assert {t.text for t in native_labels if _xy(t)[0] < core_x} == (
-        set(channels.available_channels()) - {"package_part", "stego_media"}
+        set(channels.available_channels()) - {"package_part", "metadata", "stego_media"}
     )
 
 

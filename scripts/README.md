@@ -83,6 +83,19 @@ object with exactly `docxplus`, `steganographer` and `template`. Each entry has:
 - `identity`, `base_commit` and `dirty`: honest source provenance; a dirty
   snapshot's base commit is not the identity of its actual source bytes.
 
+Before creating output or configuring Docker, admission checks the docxplus
+snapshot's release identities against `pyproject.toml`: the package version,
+`uv.lock`, `CITATION.cff`, CodeMeta, Zenodo metadata and skill frontmatter must
+agree. Citation/frontmatter versions must be single top-level literal scalars;
+the package version must be a single literal assignment. Inspection never imports
+snapshot package code. Hash-valid snapshots with conflicting identities still
+refuse. Re-capture the inventory after synchronizing metadata; do not rewrite an
+old qualification receipt to advertise a new version.
+
+The release image uses Setuptools 84.1.0 for wheel/sdist building; no standalone
+`wheel` CLI is needed. A successful distribution build is not full Linux,
+confinement, Office or manuscript qualification.
+
 Capture each source under its repository manager's native short source lease,
 verify it has not drifted, then release the lease before provisioning/compute.
 The template input is the actual `projects/templates/template_code_project`

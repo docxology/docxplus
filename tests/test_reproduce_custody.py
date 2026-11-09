@@ -38,37 +38,87 @@ def _namespace_members(identity: str) -> list[tuple[int, str]]:
     return members
 
 
-@pytest.mark.parametrize("new_session", [False, True])
-@pytest.mark.parametrize("timeout", [False, True])
-def test_production_backend_joins_descendant_namespace(tmp_path, new_session, timeout):
-    """DEL3: success and timeout retain ordinary and setsid descendant custody."""
+@pytest.mark.parametrize("new_session", [False, True], ids=["ordinary", "setsid"])
+@pytest.mark.parametrize("termination", ["success", "timeout", "failure", "threaded-timeout"])
+@pytest.mark.parametrize("grandchild", [False, True], ids=["child", "grandchild"])
+def test_production_backend_joins_descendant_namespace(tmp_path, new_session, termination, grandchild):
+    """A ready writer releases its resources before success or failure returns.
+
+    A FIFO with one acknowledged writer witnesses resource release immediately;
+    the outer gate stays open so that writer cannot exit voluntarily from EOF.
+    Namespace liveness is checked separately, without sleeps or assertion retries.
+    """
     project = tmp_path / "project"
     project.mkdir()
-    child = "from pathlib import Path; import time; time.sleep(5); Path('late').write_text('escaped')"
-    # The leader records the namespace before spawning, so the identity is
-    # available even when the run itself is killed by its deadline.
+    os.mkfifo(project / "lifetime", 0o600)
+    os.mkfifo(project / "gate", 0o600)
+    lifetime = os.open(project / "lifetime", os.O_RDONLY | os.O_NONBLOCK)
+    gate = os.open(project / "gate", os.O_RDWR | os.O_NONBLOCK)
+    child = (
+        "import json,os,sys\n"
+        f"if {grandchild!r} and os.fork(): os._exit(0)\n"
+        "writer=os.open('lifetime',os.O_WRONLY)\n"
+        "held=os.open('held-output',os.O_WRONLY|os.O_CREAT,0o600)\n"
+        "os.write(held,b'acknowledged')\n"
+        "gate=os.open('gate',os.O_RDONLY)\n"
+        "ready=json.dumps({'pid':os.getpid(),'sid':os.getsid(0)}).encode()\n"
+        "os.write(int(sys.argv[1]),ready); os.close(int(sys.argv[1]))\n"
+        "os.read(gate,1)\n"
+        "os.write(held,b'escaped')\n"
+    )
+    terminal = {
+        "success": "",
+        "timeout": "os.read(os.open('gate',os.O_RDONLY),1)\n",
+        "failure": "sys.exit(7)\n",
+        "threaded-timeout": (
+            "import threading\n"
+            "threading.Thread(target=lambda: threading.Event().wait()).start()\n"
+            "sys.exit(0)\n"
+        ),
+    }[termination]
     command = (
-        "import os,subprocess,sys,time; from pathlib import Path\n"
-        "Path('custody.json').write_text(os.readlink('/proc/self/ns/pid'))\n"
-        f"subprocess.Popen([sys.executable,'-c',{child!r}],start_new_session={new_session!r})\n"
+        "import json,os,select,subprocess,sys; from pathlib import Path\n"
+        "reader,writer=os.pipe()\n"
+        f"child=subprocess.Popen([sys.executable,'-c',{child!r},str(writer)],"
+        f"pass_fds=(writer,),start_new_session={new_session!r})\n"
+        "os.close(writer)\n"
+        "ready=select.poll(); ready.register(reader,select.POLLIN)\n"
+        "assert ready.poll(3000), 'descendant did not acknowledge readiness'\n"
+        "witness=json.loads(os.read(reader,4096)); os.close(reader)\n"
+        "witness.update(namespace=os.readlink('/proc/self/ns/pid'),leader=os.getpid(),"
+        "leader_sid=os.getsid(0),direct_child=child.pid)\n"
+        "Path('custody.json').write_text(json.dumps(witness))\n"
         "Path('result').write_text('computed')\n"
-        + ("time.sleep(30)\n" if timeout else "")
+        + terminal
     )
-    spec = ReproSpec([sys.executable, "-c", command], ["result"], timeout=2 if timeout else 10)
-    if timeout:
-        with pytest.raises(reproduce.ReproError):
+    spec = ReproSpec([sys.executable, "-c", command], ["result"],
+                     timeout=5 if "timeout" in termination else 10)
+    try:
+        if "timeout" in termination:
+            with pytest.raises(reproduce.ReproError, match="timed out"):
+                reproduce.run_and_digest(project, spec)
+        elif termination == "failure":
+            with pytest.raises(reproduce.ReproError, match="exit 7"):
+                reproduce.run_and_digest(project, spec)
+        else:
             reproduce.run_and_digest(project, spec)
-    else:
-        reproduce.run_and_digest(project, spec)
-    identity = (project / "custody.json").read_text()
-    assert identity != os.readlink("/proc/self/ns/pid")
-    members = _namespace_members(identity)
-    assert [member for member in members if member[1] != "Z"] == [], (
-        f"live processes remain in the owned namespace: {members}"
-    )
-    # Liveness is asserted here; the dedicated
-    # test_successful_reproduction_does_not_leave_a_writing_descendant proves the
-    # killed descendant cannot keep writing after the leader exits.
+        # EOF is immediate only after the acknowledged sole writer closed; a live
+        # writer produces EAGAIN, which must fail rather than becoming a grace wait.
+        assert os.read(lifetime, 1) == b""
+        witness = json.loads((project / "custody.json").read_text())
+        assert witness["leader"] == 1
+        assert witness["namespace"] != os.readlink("/proc/self/ns/pid")
+        assert (witness["sid"] != witness["leader_sid"]) == new_session
+        assert (witness["pid"] != witness["direct_child"]) == grandchild
+        assert (project / "result").read_text() == "computed"
+        assert (project / "held-output").read_bytes() == b"acknowledged"
+        members = _namespace_members(witness["namespace"])
+        assert [member for member in members if member[1] != "Z"] == [], (
+            f"live processes remain in the owned namespace: {members}"
+        )
+    finally:
+        os.close(gate)
+        os.close(lifetime)
 
 
 def test_missing_pidfd_support_refuses_before_execution(tmp_path, monkeypatch):

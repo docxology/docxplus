@@ -111,9 +111,10 @@ class OdtPlusBuilder:
         """Queue a typed payload under manifest ``slot``.
 
         ``channel_id`` selects the transport. The default ``odt_package_part`` rides
-        as an ordinary intelligence package entry; ``stego_media`` instead conceals
-        the payload in the LSBs of a PNG the document visibly displays (see
-        :mod:`channels.stego_media`). Unknown channel ids fail here, at authoring
+        as an ordinary intelligence package entry; ``odt_metadata`` uses bounded
+        user-defined fields in ``meta.xml``; ``stego_media`` conceals the payload in
+        the LSBs of a visibly displayed PNG (see :mod:`channels.stego_media`).
+        Unknown channel ids fail here, at authoring
         time, not when some reader meets them.
 
         ``recipient_padding`` raises the apparent recipient count to a fixed bucket;

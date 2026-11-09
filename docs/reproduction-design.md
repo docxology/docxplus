@@ -68,16 +68,19 @@ reproduction claim needs an actual full-project recipe and source-bound run evid
    a new session, and `--` ends bubblewrap's own options so the carried command
    cannot inject `--share-net`, `--bind` or similar. The command runs as private
    PID 1 and bubblewrap's reported init is pinned with a pidfd: killing it, or its
-   own exit, makes the kernel terminate every member, so `setsid` descendants die
-   before collection instead of orphaning a reaper to the caller. A killed member
-   may linger as a zombie until its adopter reaps it; a zombie cannot execute or
-   write. Without pidfd support Linux execution refuses. CPU, address-space and
+   own exit, makes the kernel terminate every member. Cleanup waits up to five
+   additional seconds for pidfd exit readiness before reaping the monitor or
+   collecting outputs; sending SIGKILL alone is not completion. If that join
+   fails, reproduction raises instead of certifying an output digest. A killed
+   member may linger as a zombie until its adopter reaps it; a zombie cannot
+   execute or write. Without pidfd support Linux execution refuses. CPU, address-space and
    file-size limits are per-process controls, not aggregate quotas, and no UID-wide
    process cap is applied because it would refuse namespace creation on a busy
-   desktop. macOS Seatbelt confines writes and network and denies process creation,
-   so a recipe that needs subprocesses must run on the Linux backend. Capability
-   and production custody qualification need actual platform receipts, not a
-   source-code inference.
+   desktop. The macOS Seatbelt profile requests write/network confinement and
+   process-fork denial, so subprocess recipes require Linux. Native macOS enforcement
+   remains unqualified here; capability and production custody qualification need
+   actual platform receipts, not source-code inference. A failed cleanup join is
+   not proof of completed teardown; retain external disposable isolation.
 3. The signed module record binds the attestation to carried stored bytes. The
    complete canonical claim is also what a transparency log hashes; a pinned signed
    head authenticates inclusion, not execution, reliable time or pre-compromise order.

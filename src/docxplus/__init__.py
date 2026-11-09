@@ -26,7 +26,7 @@ from .reproduce import (
 from .shamir import combine_weighted, split_weighted
 from .validate import assert_valid, validate_bytes, validate_odt_bytes
 
-__version__ = "2.2.1"
+__version__ = "2.2.2"
 
 __all__ = [
     "DocxPlusBuilder",

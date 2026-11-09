@@ -121,20 +121,22 @@ run code a document carries. Its safety rests on two invariants:
    and a read-only host root. The carried command is private
    PID 1, `--` ends bubblewrap's own options so a command cannot supply
    `--share-net`/`--bind`, and the reported init is pinned with a pidfd. Success,
-   timeout and cleanup all kill that leader, so the kernel destroys every
-   detached descendant; absent pidfd support refuses execution. The launch group
-   is also retained before waiting and killed/reaped. Per-process limits are not
-   aggregate CPU/memory quotas.
+   timeout and cleanup all kill that leader and wait up to five additional seconds
+   for pidfd exit readiness, after kernel namespace teardown. A failed join raises
+   instead of collecting outputs; absent pidfd support refuses execution. The
+   launch group is then killed/reaped. Per-process limits are not aggregate
+   CPU/memory quotas.
+   A cleanup-join error is not proof of completed teardown; external disposable
+   isolation must remain in place when that completion cannot be observed.
 
 The read-only host root is still **readable**. Scrubbing environment variables and
 using `HOME=/nonexistent` does not hide host credential files. These controls are
 not hermetic isolation or a microVM. For untrusted code use a disposable isolated
-environment with no secrets. macOS Seatbelt confines writes and network and denies
-process creation (`process-fork`), so a carried recipe cannot spawn a child at all
-and needs no detached-descendant supervisor; it provides neither Linux's private
-PID/proc view nor pidfd custody, so a recipe that needs subprocesses must run on
-the Linux backend. Capability availability and production Linux custody need fresh
-platform qualification, not inference.
+environment with no secrets. The macOS Seatbelt profile requests write/network
+confinement and process-fork denial; it provides neither Linux's private PID/proc
+view nor pidfd custody, so recipes needing subprocesses require Linux. Native macOS
+enforcement remains unqualified here. Capability availability and production Linux
+custody need fresh platform qualification, not inference.
 Output collection uses deadlines and nofollow regular-file checks; every output
 must be new/content-changed. Signed `output_digest_scheme` must equal
 `docxplus-output-tree-v3-blake2b-256`; missing/old schemes refuse before execution.

@@ -1,7 +1,7 @@
 # Evaluation {#sec:evaluation}
 
-> Tokens are substituted from live constants, source inventories and available reports by
-> `src/docxplus/manuscript_vars.py`; retaining tokens prevents literal drift, not stale evidence.
+> Live constants, source inventories and available reports feed the manuscript variable extractor.
+> Token hydration prevents literal drift, not stale evidence.
 > Report-derived values below are historical unless a source-bound release receipt identifies the exact
 > final inputs and successful run. No fresh full-suite, coverage, native-Office or render result is asserted here.
 
@@ -32,7 +32,7 @@ The generated dossier table specifies the fixture's intended extraction/verifica
 - **Project extraction.** The dossier source slot is extracted but is not reproduction-attested.
   Living/synthetic suites own their recipe claims and separate local execution evidence.
 
-The source inventory comprises 717 test functions under a 90% coverage policy,
+The source inventory comprises 721 test functions under a 90% coverage policy,
 not that many freshly passed cases. Tests use real primitives, files and subprocesses; optional compiled-backend
 and native-application cases require their capabilities and cannot count a skip as an exercised result.
 
@@ -72,7 +72,7 @@ files, execute bits and empty directories.
 
 The available report records a 14-file, 9-directory selected synthetic tree and
 18 of 18 checks, with 12 compared files. Those tokens describe the report,
-not a fresh run. It reports package sizes of 5,392 bytes (DOCX) and 4,549 bytes (ODT),
+not a fresh run. It reports package sizes of 5,389 bytes (DOCX) and 4,552 bytes (ODT),
 plus cross-profile packed-payload parity. Shared packing makes consistent behavior plausible, but does not
 replace independent end-to-end evidence for either profile or imply arbitrary-project fidelity.
 
@@ -99,19 +99,19 @@ nested module *inside* a signed `.odt`, opened through a dispatcher that reads t
 rather than trusting the caller to declare it, with the inner document's provenance and project both
 verifying after extraction.
 
-![The two profiles drawn as shells around a shared core. Every capability in the centre block is one implementation both profiles call, which makes parity a structural property rather than a coincidence that survives until someone patches one side. Divergence is confined to the dashed boxes at the transport edge — two constructs ODF does not define, and one analogue that is plausible but not built — and none of it touches how a payload is sealed, digested, signed, or refused. That is what stops the weaker profile becoming the one an attacker chooses to present.](../../output/figures/profile_parity.png){#fig:parity width=95%}
+![The two profiles drawn as shells around a shared core. Shared sealing and provenance code narrows security drift; each profile still needs consumer-specific evidence. ODT implements package parts, displayed media and metadata user fields. The OOXML custom XML datastore and MCE constructs have no ODF-native counterpart. Transport differences do not require a second sealing or signature implementation.](../../output/figures/profile_parity.png){#fig:parity width=95%}
 
 ## Channel Capacity {#sec:capacity}
 
 Capacity is channel- and backend-specific; no channel-local limit removes package entry/total/count budgets.
 
-![Channel capacity under the selected Python LSB framing and package budgets. Metadata has a fixed short-property ceiling; media scales with carrier area; the other channels have no channel-local ceiling. Regeneration performs boundary round trips before plotting measured points. A committed plate without a source-bound receipt is historical, not fresh capacity evidence.](../../output/figures/capacity.png){#fig:capacity width=85%}
+![Channel capacity under the selected Python LSB framing and package budgets. Metadata has a docxplus-imposed per-payload ceiling; media scales with carrier area only within the decoded-pixel budget; the other channels have no channel-local ceiling. Regeneration performs boundary round trips before plotting measured points. A committed plate without a source-bound receipt is historical, not fresh capacity evidence.](../../output/figures/capacity.png){#fig:capacity width=85%}
 
-[@Fig:capacity] plots the spread on a log scale, distinguishing the channels with a real format ceiling
-from those that simply have none:
+[@Fig:capacity] distinguishes implementation policy, carrier framing/pixel admission and package budgets:
 
-- **`metadata`** is deliberately small, bounded at 8000 bytes in `docProps/custom.xml`
-  (and the ODF `odt_metadata` field in `meta.xml`): routing headers, identifiers, status flags, key shares.
+- **`metadata`** has a conservative implementation limit of 8000 payload bytes in
+  `docProps/custom.xml` (and ODF `odt_metadata` fields in `meta.xml`), not a standards-imposed maximum.
+  It is intended for routing headers, identifiers, status flags and key shares.
 - **`custom_xml`, `package_part`, and `mce`** have no channel-local ceiling, but XML/base64, part, archive
   metadata, count and total-size limits still apply.
 - **`python_lsb` media** uses DXL1 framing: a $256\times 256$ RGB PNG holds 24568 bytes and a

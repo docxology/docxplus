@@ -18,7 +18,7 @@ Concretely:
 3. **Authenticatable reproduction claims.** Carried project archives and signed attestations can be checked
    without execution under a pinned key. Local re-execution is separate, opt-in and requires confinement;
    the living source-hash example is not full-project scientific reproduction.
-4. **5 documented transport channels**, spanning custom XML, package parts, document
+4. **5 documented OOXML transport channels**, spanning custom XML, package parts, document
    properties, MCE choice blocks and LSB steganography, with an uncalibrated in-tree inspection heuristic
    [@westfeld2000] rather than a statistical presence/absence guarantee.
 5. **Standards parity** across Office Open XML [@iso29500] and OASIS OpenDocument Text [@oasis_odf]: the

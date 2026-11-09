@@ -133,7 +133,7 @@ def build_cover_art(out_path: Path, v: dict) -> None:
                     fontweight="bold", zorder=6)
             ax.text(x + 0.42, y - 0.11, detail, color="#CBD5E1", fontsize=7.4, zorder=6)
 
-    card(0.5, "#38BDF8", "#0284C7", "Surface Contract (ISO/IEC 29500)", [
+    card(0.5, "#38BDF8", "#0284C7", "OOXML Surface (ISO/IEC 29500)", [
         ("Structural index", "[Content_Types].xml, _rels/.rels"),
         ("Visible narrative", "word/document.xml and story parts"),
         ("Document metadata", "docProps/core.xml, docProps/app.xml"),
@@ -142,15 +142,15 @@ def build_cover_art(out_path: Path, v: dict) -> None:
     ])
     card(6.5, "#34D399", "#059669", "Intelligence Contract (modular payloads)", [
         ("Authoritative manifest", "intelligence/manifest.json"),
-        ("Sealing lineages", f"Argon2id / Scrypt + AES-{v['KEY_BITS']}-GCM / X25519"),
-        ("Threshold quorums", f"(k, n) Shamir, signed shares, n \u2264 {v['SHAMIR_MAX_SHARES']}"),
+        ("Sealing lineages", v["SEALING_LINEAGES"]),
+        ("Threshold quorums", f"Shamir; signed share digests; n \u2264 {v['SHAMIR_MAX_SHARES']}"),
         ("Narrative provenance", "signed Merkle root + surface digest"),
         ("Recipe claims", "pinned verification; opt-in local comparison"),
     ])
 
     ax.add_patch(patches.FancyBboxPatch((4.78, 2.25), 1.44, 1.15, boxstyle="round,pad=0.09",
                                         ec="#F59E0B", fc="#1E293B", lw=2, zorder=8))
-    ax.text(5.5, 3.05, "Ed25519", color="#FBBF24", fontsize=10, fontweight="bold",
+    ax.text(5.5, 3.05, "classical\nor hybrid", color="#FBBF24", fontsize=9, fontweight="bold",
             ha="center", va="center", zorder=9)
     ax.text(5.5, 2.72, "SIGNED", color="#FBBF24", fontsize=8.5, fontweight="bold",
             ha="center", va="center", zorder=9)
@@ -162,8 +162,8 @@ def build_cover_art(out_path: Path, v: dict) -> None:
                 arrowprops={"arrowstyle": "->", "color": "#F59E0B", "lw": 2}, zorder=8)
 
     ax.text(5.5, 0.62,
-            f"v{v['VERSION']}  ·  {v['CHANNEL_COUNT']} transport channels  ·  "
-            f"{v['TEST_COUNT']} mock-free test functions at a {v['COVERAGE_GATE']}% gate  ·  dual OOXML/ODF profile",
+            f"v{v['VERSION']}  ·  OOXML/ODF profiles  ·  "
+            f"{v['TEST_COUNT']} source test functions  ·  {v['COVERAGE_GATE']}% coverage policy",
             color="#94A3B8", fontsize=9, ha="center", va="center", zorder=10)
 
     fig.savefig(out_path, dpi=300, facecolor="#090D16", edgecolor="none")
@@ -178,11 +178,10 @@ def build_architecture_diagram(out_path: Path, v: dict) -> None:
     They used to be two side-by-side panels: a tree on the left, a channel table on
     the right, and nothing connecting them. A reader had to match path strings by eye
     to learn which part a channel actually writes into. Placing each channel on the
-    row of the part it occupies makes that mapping positional, and it exposes the
-    architectural point the two-panel version buried — three of the five channels
-    write into parts the surface contract *already requires*, so carrying a payload
-    adds no part a conforming reader would find surprising. The rows with no badge
-    are the parts that stay pure surface.
+    row of the part it occupies makes that mapping positional. Split markers identify
+    document-feature parts that also carry payloads, not parts every package must
+    already contain. Metadata creates custom properties when absent; media adds a
+    displayed image part. Rows with no channel badge carry no payload.
     """
     fig, ax = _canvas(11.6, 7.6)
     _titles(ax, 5.8, "One archive, two contracts",
@@ -203,9 +202,9 @@ def build_architecture_diagram(out_path: Path, v: dict) -> None:
         (0, "report.docx", None, "ZIP / OPC package", None),
         (1, "[Content_Types].xml", "surface", "mandatory type index", None),
         (1, "_rels/.rels", "surface", "package relationships", None),
-        (1, "docProps/custom.xml", "both", "document properties", "metadata"),
+        (1, "docProps/custom.xml", "both", "optional; created if absent", "metadata"),
         (1, "word/document.xml", "both", "the main story part", "mce"),
-        (2, "media/imageN.png", "both", "a figure the document displays", "stego_media"),
+        (2, "media/imageN.png", "both", "a new, displayed carrier image", "stego_media"),
         (1, "customXml/itemN.xml", "intel", "custom XML datastore", "custom_xml"),
         (1, "intelligence/manifest.json", "intel", "the signed root of the second contract", None),
         (1, "intelligence/payloadN.dxp", "intel", "additional package parts", "package_part"),
@@ -227,8 +226,8 @@ def build_architecture_diagram(out_path: Path, v: dict) -> None:
             ax.text(x, y, name, color=INK, fontsize=9.4, fontweight="bold",
                     fontfamily="monospace", va="center")
         else:
-            # A "both" part gets a split bar: it is mandated by the surface contract
-            # and reused as intelligence transport. That reuse is the whole design.
+            # A split bar marks a document feature that also carries a payload;
+            # it does not assert that the part existed before embedding.
             segs = BAR[contract]
             for k, col in enumerate(segs):
                 ax.add_patch(patches.Rectangle(
@@ -257,7 +256,7 @@ def build_architecture_diagram(out_path: Path, v: dict) -> None:
     legend = [
         ([SURFACE], "surface contract"),
         ([INTEL], "intelligence contract"),
-        ([SURFACE, INTEL], "a surface part reused as transport"),
+        ([SURFACE, INTEL], "document feature + payload"),
     ]
     lx = 0.50
     for segs, text in legend:
@@ -290,11 +289,11 @@ def _arrow(ax, x0, y0, x1, y1, color=None, lw=1.6, style="->"):
 def _node(ax, x, y, w, h, label, sub=None, ec=INK, fc="#FFFFFF", fs=8.6, lw=1.5):
     ax.add_patch(patches.FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.055",
                                         ec=ec, fc=fc, lw=lw))
-    cy = y + h / 2 + (0.10 if sub else 0)
+    cy = y + h * (0.74 if sub else 0.5)
     ax.text(x + w / 2, cy, label, color=INK, fontsize=fs, fontweight="bold",
             ha="center", va="center")
     if sub:
-        ax.text(x + w / 2, y + h / 2 - 0.16, sub, color=MUTED, fontsize=6.9,
+        ax.text(x + w / 2, y + h * 0.30, sub, color=MUTED, fontsize=6.9,
                 ha="center", va="center", linespacing=1.35)
 
 
@@ -325,8 +324,8 @@ def build_crypto_diagram(out_path: Path, v: dict) -> None:
 
     lanes = [
         ("plain", "no envelope", "#64748B", "#F8FAFC"),
-        ("recipients", "DXE2 · X25519\none wrapped key per recipient", "#0891B2", "#ECFEFF"),
-        ("threshold", f"content key split k-of-n\nsigned shares, n \u2264 {v['SHAMIR_MAX_SHARES']}", SEAL, "#F5F3FF"),
+        ("recipients", "X25519 or hybrid recipients\none wrap per recipient", "#0891B2", "#ECFEFF"),
+        ("threshold", f"content key split k-of-n\nsigned share digests, n \u2264 {v['SHAMIR_MAX_SHARES']}", SEAL, "#F5F3FF"),
         ("password", f"DXE1 · AES-{v['KEY_BITS']}-GCM\n+ same-layout chaff frame", INTEL, "#ECFDF5"),
     ]
     lane_x, lane_w, lane_h = 4.30, 2.55, 0.76
@@ -338,9 +337,9 @@ def build_crypto_diagram(out_path: Path, v: dict) -> None:
 
     # Key derivation hangs below the one lane that uses it.
     _node(ax, 4.30, 2.12, lane_w, 0.80, "key derivation",
-          f"Argon2id {v['ARGON2_MEMORY_MIB']} MiB · Scrypt 2^{v['SCRYPT_N_LOG2']} · "
-          f"PBKDF2 {int(v['PBKDF2_ITERATIONS']):,}\n"
-          f"attacker-declared work factors capped at {v['MAX_SCRYPT_MEMORY_MIB']} MiB",
+          f"Argon2id {v['ARGON2_MEMORY_MIB']} MiB · Scrypt 2^{v['SCRYPT_N_LOG2']}\n"
+          f"PBKDF2 {int(v['PBKDF2_ITERATIONS']):,} iterations\n"
+          f"scrypt memory cap {v['MAX_SCRYPT_MEMORY_MIB']} MiB",
           ec=WARN, fc="#FFFBEB", fs=8.2)
     _arrow(ax, 5.58, 2.94, 5.58, 3.23, WARN, lw=1.4)
 
@@ -361,7 +360,7 @@ def build_crypto_diagram(out_path: Path, v: dict) -> None:
 
     ax.add_patch(patches.FancyBboxPatch((0.30, 0.62), 10.95, 0.86, boxstyle="round,pad=0.06",
                                         ec=RISK, fc="#FEF2F2", lw=1.8))
-    ax.text(5.775, 1.24, "Ed25519 signature over the canonical body",
+    ax.text(5.775, 1.24, "Classical or hybrid signature over the canonical body",
             color=RISK, fontsize=10, fontweight="bold", ha="center", va="center")
     ax.text(5.775, 0.94,
             "covers every module record, the Merkle root, and the surface digest — and still proves "
@@ -399,7 +398,7 @@ def build_reproduction_diagram(out_path: Path, v: dict) -> None:
     _node(ax, 2.70, AUTHOR_Y - 0.40, 2.15, 0.80, "attest",
           "run the recipe once, pin\nthe toolchain and outputs", ec=INTEL, fc="#ECFDF5")
     _node(ax, 5.30, AUTHOR_Y - 0.40, 2.15, 0.80, "sign + log",
-          "Ed25519 over the manifest,\nappend to the transparency log", ec=INTEL, fc="#ECFDF5")
+          "sign the manifest, append\nto the transparency log", ec=INTEL, fc="#ECFDF5")
     _arrow(ax, 2.27, AUTHOR_Y, 2.68, AUTHOR_Y, INK)
     _arrow(ax, 4.87, AUTHOR_Y, 5.28, AUTHOR_Y, INK)
 
@@ -742,15 +741,11 @@ def build_parity_figure(out_path: Path, v: dict) -> None:
     at the transport edge, where the two standards genuinely differ, and never in the
     layer that carries the guarantee.
     """
-    #: The OOXML-only channels and why the ODF profile has no equivalent.
-    #: "standard" — ODF defines no such construct, so the gap is the specification's.
-    #: "unbuilt"  — an analogue is plausible and tracked, but is not shipped.
-    #: Both the ODF panel's counts and the manuscript caption's counts are checked
-    #: against this list, so neither can drift away from the figure.
+    # These OOXML constructs have no ODF-native counterpart. Metadata does:
+    # ODT authors it through meta.xml user-defined fields.
     ooxml_only = [
-        ("custom_xml", "a custom XML datastore part", "standard"),
-        ("mce", "an ignorable-namespace Choice", "standard"),
-        ("metadata", "a custom document property", "unbuilt"),
+        ("custom_xml", "a custom XML datastore part"),
+        ("mce", "an ignorable-namespace Choice"),
     ]
 
     fig, ax = _canvas(11.8, 7.0)
@@ -806,7 +801,7 @@ def build_parity_figure(out_path: Path, v: dict) -> None:
                                         lw=1.4, linestyle=(0, (4, 3))))
     ax.text(1.69, 3.78, "OOXML-only transport", color=SURFACE, fontsize=8.6,
             fontweight="bold", ha="center", va="center")
-    for i, (cid, note, _reason) in enumerate(ooxml_only):
+    for i, (cid, note) in enumerate(ooxml_only):
         y = 3.36 - i * 0.56
         ax.text(0.52, y, cid, color=CHANNEL_COLOR[cid], fontsize=8.0, fontweight="bold",
                 va="center", fontfamily="monospace")
@@ -817,23 +812,19 @@ def build_parity_figure(out_path: Path, v: dict) -> None:
                                         lw=1.4, linestyle=(0, (4, 3))))
     ax.text(10.11, 3.78, "ODF transport", color=INTEL, fontsize=8.6,
             fontweight="bold", ha="center", va="center")
-    ax.text(8.94, 3.40, "odt_package_part", color=INTEL, fontsize=8.0, fontweight="bold",
-            va="center", fontfamily="monospace")
-    ax.text(8.94, 3.18, "module bytes in package entries",
-            color=MUTED, fontsize=6.9, va="center")
-    ax.text(8.94, 2.88, "stego_media", color=CHANNEL_COLOR["stego_media"], fontsize=8.0,
-            fontweight="bold", va="center", fontfamily="monospace")
-    ax.text(8.94, 2.66, "payloads in displayed PNG pixels",
-            color=MUTED, fontsize=6.9, va="center")
-    by_standard = [c for c, _, r in ooxml_only if r == "standard"]
-    unbuilt = [c for c, _, r in ooxml_only if r == "unbuilt"]
-    ax.text(8.94, 2.30, f"no analogue by the standard ({len(by_standard)})", color=RISK,
+    odf_transports = [
+        ("odt_package_part", "module bytes in package entries", INTEL),
+        ("stego_media", "payloads in displayed PNG pixels", CHANNEL_COLOR["stego_media"]),
+        ("odt_metadata", "meta.xml user-defined fields", CHANNEL_COLOR["metadata"]),
+    ]
+    for i, (cid, note, col) in enumerate(odf_transports):
+        y = 3.40 - i * 0.52
+        ax.text(8.94, y, cid, color=col, fontsize=8.0, fontweight="bold",
+                va="center", fontfamily="monospace")
+        ax.text(8.94, y - 0.22, note, color=MUTED, fontsize=6.9, va="center")
+    ax.text(8.94, 1.78, f"no ODF construct ({len(ooxml_only)})", color=RISK,
             fontsize=7.6, fontweight="bold", va="center")
-    ax.text(8.94, 2.08, "custom XML datastore · MCE",
-            color=MUTED, fontsize=6.9, va="center")
-    ax.text(8.94, 1.74, f"no analogue yet built ({len(unbuilt)})", color=WARN, fontsize=7.6,
-            fontweight="bold", va="center")
-    ax.text(8.94, 1.52, "meta.xml user fields: not shipped",
+    ax.text(8.94, 1.56, "custom XML datastore · MCE",
             color=MUTED, fontsize=6.9, va="center")
 
     _arrow(ax, 1.69, 4.08, 1.69, 4.30, SURFACE, lw=1.4)

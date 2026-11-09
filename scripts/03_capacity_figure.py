@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Plot per-channel payload capacity (optional; needs matplotlib).
 
-The point of the figure is that the five channels do not have *comparable* limits,
-so putting them side by side as bars was the wrong shape. Three are bounded only by
-what a ZIP will hold; one has a hard, carrier-independent ceiling in the format; one
-scales with carrier area. A bar chart forced the unbounded three to stand at an
+The five OOXML channels do not have *comparable* limits. Three have no channel-local
+ceiling but remain subject to package/resource budgets; metadata has a conservative
+implementation ceiling; media scales with carrier area within its decoded-pixel budget.
+Putting them side by side as bars was the wrong shape. A bar chart forced the unbounded three to stand at an
 invented height — a 1 MiB stand-in that a reader had no way to distinguish from a
 measurement, and that put the visual emphasis on the one number in the plot that
 meant nothing.
@@ -14,7 +14,7 @@ media channel becomes a line with slope 2 in log-log (capacity goes with area), 
 metadata ceiling a flat rule that the line crosses at a computable point, and the
 unbounded channels a band with no upper edge drawn, because there is none to draw.
 
-Every stego point is **measured, not asserted**: a payload of exactly the stated
+Every marked stego point is **measured, not asserted**: a payload of exactly the stated
 capacity is embedded into a real carrier and extracted again, and the point is only
 plotted filled if the bytes came back identical. Writes ``output/figures/capacity.png``.
 """
@@ -22,6 +22,7 @@ plotted filled if the bytes came back identical. Writes ``output/figures/capacit
 from __future__ import annotations
 
 import hashlib
+import math
 import sys
 import tempfile
 from pathlib import Path
@@ -106,11 +107,12 @@ def main() -> int:
 
     # -- metadata: a hard ceiling, flat in carrier size -----------------------
     ax.axhline(MAX_PAYLOAD, color=SEAL, lw=2.0, zorder=3)
-    ax.text(3400, MAX_PAYLOAD * 1.35, f"metadata — {MAX_PAYLOAD:,} B, fixed by the format",
+    ax.text(3400, MAX_PAYLOAD * 1.35, f"metadata — {MAX_PAYLOAD:,} B, docxplus policy",
             fontsize=8.4, color=SEAL, fontweight="bold", ha="right", va="bottom")
 
     # -- stego_media: the scaling law, drawn continuous and marked where measured
-    edges = np.logspace(np.log10(32), np.log10(4096), 240)
+    max_edge = math.isqrt(lsb.MAX_CARRIER_PIXELS)
+    edges = np.logspace(np.log10(32), np.log10(max_edge), 240)
     ax.plot(edges, [lsb.capacity_bytes(int(e), int(e)) for e in edges],
             color=WARN, lw=2.2, zorder=4)
     ax.scatter([e for e, _, _ in measured], [c for _, c, _ in measured],
@@ -119,12 +121,12 @@ def main() -> int:
         ax.annotate(f"{edge}×{edge}\n{_fmt(capacity)}", (edge, capacity),
                     textcoords="offset points", xytext=(0, 15), ha="center",
                     fontsize=7.4, color=INK, fontweight="bold", linespacing=1.35)
-    ax.text(4000, 2.2e3, "stego_media — 3 bits per pixel,\nless an 8-byte frame",
+    ax.text(max_edge, 2.2e3, f"stego_media — 3 bits per pixel,\n8-byte frame; edge limit {max_edge:,}",
             fontsize=8.4, color=WARN, fontweight="bold", ha="right", va="center",
             linespacing=1.5)
 
     # -- where the scaling line overtakes the fixed ceiling -------------------
-    crossover = next(e for e in range(16, 4096) if lsb.capacity_bytes(e, e) >= MAX_PAYLOAD)
+    crossover = next(e for e in range(16, max_edge + 1) if lsb.capacity_bytes(e, e) > MAX_PAYLOAD)
     ax.plot([crossover, crossover], [1e2, MAX_PAYLOAD], color=MUTED, lw=1.0,
             ls=(0, (2, 2.5)), zorder=2)
     ax.annotate(f"a {crossover}×{crossover} carrier holds\nmore than the metadata channel ever can",
@@ -134,10 +136,13 @@ def main() -> int:
 
     ax.set_xscale("log")
     ax.set_yscale("log")
-    ax.set_xlim(32, 4096)
+    ax.set_xlim(32, max_edge)
     ax.set_ylim(1e2, top)
-    ax.set_xticks([32, 64, 128, 256, 512, 1024, 2048, 4096])
-    ax.set_xticklabels(["32", "64", "128", "256", "512", "1024", "2048", "4096"], fontsize=8.5)
+    ticks = [1 << power for power in range(5, max_edge.bit_length())]
+    if ticks[-1] != max_edge:
+        ticks.append(max_edge)
+    ax.set_xticks(ticks)
+    ax.set_xticklabels([str(edge) for edge in ticks], fontsize=8.5)
     ax.set_xlabel("carrier edge (pixels, square)", fontsize=9)
     ax.set_ylabel("payload capacity (bytes)", fontsize=9)
     ax.set_title("What bounds each channel", fontsize=12.5, fontweight="bold",

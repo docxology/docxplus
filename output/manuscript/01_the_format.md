@@ -58,11 +58,11 @@ not preserve validity, layout, or signatures.
 [@thm:dual-contract-independence] is a construction argument under stated assumptions, not a proof about
 every consumer. [@Fig:architecture] locates the parts each channel changes so those obligations can be inspected.
 
-![The package tree with every transport channel drawn on the row of the part it writes into. A blue marker is a part the surface contract requires, a green one a part only docxplus reads, and a split marker a required part reused as transport — which is how three of the 5 channels carry a payload without adding any part a conforming reader would find surprising. Rows with no badge carry nothing. Capacities are read from the live code constants.](../../output/figures/architecture.png){#fig:architecture width=95%}
+![The OOXML package tree with every transport channel drawn on the row of the part it writes into. Blue identifies document-surface features, green the intelligence layer, and split markers document features that also carry payloads. Custom properties are optional and created when absent; the media channel adds a displayed image part. These markers do not imply required or pre-existing parts. Capacities are read from live code constants.](../../output/figures/architecture.png){#fig:architecture width=95%}
 
 ## Transport Channels {#sec:channels}
 
-docxplus defines 5 spec-sanctioned transport channels, each implementing a uniform
+The OOXML profile defines 5 spec-sanctioned transport channels, each implementing a uniform
 `embed`/`extract`/`capacity` lifecycle:
 
 ::: {.definition #def:transport-channel title="Transport Channel"}

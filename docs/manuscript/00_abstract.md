@@ -33,15 +33,16 @@ nothing, or re-runs by explicit opt-in under available confinement. Missing conf
 readable host files remain exposed. A pinned signed transparency head authenticates inclusion of the complete
 claim, not independent execution, trustworthy time, or pre-compromise ordering.
 The output-tree-v3 digest scheme is a clean cutover: missing/old schemes refuse before execution,
-and local `match` requires both `source_match` and selected-output equality. Linux private PID/proc/session
-custody is stronger than macOS process-group cleanup of detached descendants; both require actual platform evidence.
+and local `match` requires both `source_match` and selected-output equality. Linux supplies private
+PID/proc/session custody. macOS requests fork denial rather than private PID/proc isolation;
+recipes needing subprocesses require Linux, and macOS enforcement still needs platform evidence.
 
-We implement and evaluate {{CHANNEL_COUNT}} spec-sanctioned transport channels: custom XML parts, auxiliary
+The OOXML profile provides {{CHANNEL_COUNT}} spec-sanctioned transport channels: custom XML parts, auxiliary
 package parts, custom document properties, Markup Compatibility and Extensibility (MCE) choice blocks, and
 least-significant-bit steganography in a carrier image the document visibly displays. A chi-squared heuristic
 [@westfeld2000] and prefix sweep inspect selected carriers; neither calibrated detection probabilities nor
 general false-positive/sensitivity claims are established. The source inventory contains {{TEST_COUNT}}
-mock-free test functions under a {{COVERAGE_GATE}}% coverage policy; these are not executed-pass counts.
+test functions under a {{COVERAGE_GATE}}% coverage policy; these are not executed-pass counts.
 Historical reports and {{REDTEAM_AUDIT_COUNT}} recorded review cycles with {{REDTEAM_FINDING_COUNT}}
 confirmed findings describe selected fixtures and past evidence, not fresh software-release qualification.
 The living manuscript demonstrates a dependency-free source hash, not whole-project scientific reproduction.

@@ -1,10 +1,14 @@
 """Release admission and archive parsing reject unsafe serialized input."""
 
 import hashlib
+import importlib.util
 import io
 import json
 import stat
+import subprocess
+import sys
 import tarfile
+from pathlib import Path
 
 import pytest
 
@@ -267,3 +271,123 @@ def test_admitted_proc_kernel_exception_rejects_effective_host_mount(control_can
     ]
     with pytest.raises(release.Refusal):
         _check_candidate(control_candidate, profile)
+
+
+def _refresh_release_source(subject, source):
+    files, directories = subject.inventory(Path(source["root"]))
+    source.update(files=files, dirs=directories, sha256=subject.digest(subject.canonical(files)))
+
+
+@pytest.fixture
+def versioned_release_sources(tmp_path):
+    """Independent real supervisor/source copies; no Docker or execution stand-in."""
+    original = Path(release.__file__).resolve().parents[1]
+    deployment = tmp_path / "supervisor"
+    for relative in ("scripts/validate_release.py", "src/docxplus/archive_limits.py"):
+        target = deployment / relative
+        target.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+        target.write_bytes((original / relative).read_bytes())
+    script = deployment / "scripts/validate_release.py"
+    spec = importlib.util.spec_from_file_location("private_release_supervisor", script)
+    subject = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(subject)
+    metadata = {
+        "pyproject.toml": '[project]\nname = "docxplus"\nversion = "4.5.6"\n',
+        "uv.lock": '[[package]]\nname = "docxplus"\nversion = "4.5.6"\n',
+        "src/docxplus/__init__.py": '__version__ = "4.5.6"\n',
+        "CITATION.cff": 'cff-version: 1.2.0\nversion: "4.5.6"\n',
+        "codemeta.json": '{"version": "4.5.6"}\n',
+        ".zenodo.json": '{"version": "4.5.6"}\n',
+        ".agents/skills/docxplus/SKILL.md": "---\nname: docxplus\nversion: 4.5.6\n---\nPointer.\n",
+    }
+    sources = {}
+    for name in sorted(subject.SOURCE_NAMES):
+        root = tmp_path / "sources" / name
+        root.mkdir(parents=True, mode=0o700)
+        contents = metadata if name == "docxplus" else {"README.md": "Independent test input.\n"}
+        for relative, text in contents.items():
+            target = root / relative
+            target.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+            target.write_text(text)
+        source = {"root": str(root), "identity": name, "dirty": False}
+        _refresh_release_source(subject, source)
+        sources[name] = source
+    return subject, {"schema": subject.INPUT_SCHEMA, "sources": sources}
+
+
+@pytest.mark.parametrize("relative", [
+    "uv.lock", "src/docxplus/__init__.py", "CITATION.cff", "codemeta.json", ".zenodo.json",
+    ".agents/skills/docxplus/SKILL.md",
+])
+def test_release_metadata_conflict_refuses_even_with_valid_inventory(versioned_release_sources, relative):
+    """A perfectly hash-bound snapshot must not release conflicting software identities."""
+    subject, manifest = versioned_release_sources
+    subject.verify_inputs(manifest)
+    source = manifest["sources"]["docxplus"]
+    target = Path(source["root"]) / relative
+    target.write_text(target.read_text().replace("4.5.6", "4.5.5"))
+    _refresh_release_source(subject, source)
+    with pytest.raises(subject.Refusal):
+        subject.verify_inputs(manifest)
+
+
+def test_release_metadata_duplicate_citation_version_refuses(versioned_release_sources):
+    """The preflight must not choose one of two conflicting citation identities."""
+    subject, manifest = versioned_release_sources
+    subject.verify_inputs(manifest)
+    source = manifest["sources"]["docxplus"]
+    target = Path(source["root"]) / "CITATION.cff"
+    target.write_text(target.read_text() + 'version: "4.5.5"\n')
+    _refresh_release_source(subject, source)
+    with pytest.raises(subject.Refusal):
+        subject.verify_inputs(manifest)
+
+
+def test_release_metadata_inspection_executes_no_package_code(versioned_release_sources, tmp_path):
+    """Version inspection must parse source, not execute a snapshot on the host."""
+    subject, manifest = versioned_release_sources
+    source = manifest["sources"]["docxplus"]
+    canary = tmp_path / "package-code-executed"
+    target = Path(source["root"]) / "src/docxplus/__init__.py"
+    target.write_text(target.read_text() + f"open({str(canary)!r}, 'w').write('executed')\n")
+    _refresh_release_source(subject, source)
+    subject.verify_inputs(manifest)
+    assert not canary.exists()
+
+
+def test_release_metadata_cli_refuses_before_creating_provision_output(
+    versioned_release_sources, tmp_path,
+):
+    """Conflicting identities refuse at the real CLI before any provisioning side effect."""
+    subject, manifest = versioned_release_sources
+    subject.verify_inputs(manifest)
+    source = manifest["sources"]["docxplus"]
+    target = Path(source["root"]) / "codemeta.json"
+    target.write_text('{"version": "4.5.5"}\n')
+    _refresh_release_source(subject, source)
+    inputs = tmp_path / "inputs.json"
+    inputs.write_text(json.dumps(manifest))
+    output = tmp_path / "refused-provision"
+    result = subprocess.run(
+        [sys.executable, subject.__file__, "provision", "--inputs", str(inputs),
+         "--output", str(output), "--docker-context", "release-metadata-do-not-contact"],
+        check=False, stdin=subprocess.DEVNULL, capture_output=True, timeout=30,
+    )
+    assert result.returncode != 0
+    assert not output.exists()
+
+
+def test_release_metadata_crlf_preserves_conflict_detection(versioned_release_sources):
+    """CRLF is not malformed metadata; a conflicting version must still refuse."""
+    subject, manifest = versioned_release_sources
+    source = manifest["sources"]["docxplus"]
+    for relative in source["files"]:
+        target = Path(source["root"]) / relative
+        target.write_bytes(target.read_bytes().replace(b"\n", b"\r\n"))
+    _refresh_release_source(subject, source)
+    subject.verify_inputs(manifest)
+    target = Path(source["root"]) / "codemeta.json"
+    target.write_bytes(target.read_bytes().replace(b"4.5.6", b"4.5.5"))
+    _refresh_release_source(subject, source)
+    with pytest.raises(subject.Refusal):
+        subject.verify_inputs(manifest)

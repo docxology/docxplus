@@ -326,55 +326,6 @@ def test_portable_python_recipe_uses_the_recipient_interpreter(tmp_path):
     assert (project / "output/value").read_bytes() == b"computed"
 
 
-@pytest.mark.skipif(sys.platform != "linux", reason="private reproduction PID namespace is Linux-only")
-@pytest.mark.parametrize("new_session", [False, True])
-def test_successful_reproduction_does_not_leave_a_writing_descendant(tmp_path, new_session):
-    """Both ordinary and setsid descendants are dead before output collection returns.
-
-    The leader records its private PID namespace. After ``run_and_digest`` returns
-    that namespace must contain no live member (a killed descendant may linger as a
-    zombie until reaped), and the 30-second child's delayed write never lands. The
-    child's *inner* PID is meaningless on the outer host, so liveness is observed
-    through the namespace the sandbox actually owns.
-    """
-    import time
-
-    child = (
-        "from pathlib import Path; import time; "
-        "Path('ready').write_text('ready'); time.sleep(30); Path('late').write_text('escaped')"
-    )
-    command = (
-        "import os,subprocess,sys,time; from pathlib import Path\n"
-        "Path('custody.json').write_text(os.readlink('/proc/self/ns/pid'))\n"
-        f"subprocess.Popen([sys.executable,'-c',{child!r}],start_new_session={new_session!r})\n"
-        "deadline=time.monotonic()+3\n"
-        "while not Path('ready').exists() and time.monotonic()<deadline: time.sleep(0.01)\n"
-        "assert Path('ready').read_text()=='ready'\n"
-        "Path('result').write_text('computed')\n"
-    )
-    reproduce.run_and_digest(tmp_path, ReproSpec([PY, "-c", command], ["result"], timeout=10))
-    assert (tmp_path / "result").read_text() == "computed"
-    identity = (tmp_path / "custody.json").read_text()
-    assert identity != str(Path("/proc/self/ns/pid").readlink())
-    live = []
-    for entry in Path("/proc").iterdir():
-        if not entry.name.isdecimal():
-            continue
-        try:
-            if str(Path(entry / "ns/pid").readlink()) != identity:
-                continue
-            status = (entry / "status").read_text()
-            state = next(line.split()[1] for line in status.splitlines()
-                         if line.startswith("State:"))
-        except (FileNotFoundError, ProcessLookupError, PermissionError, StopIteration):
-            continue
-        if state not in {"Z", "X"}:
-            live.append((int(entry.name), state))
-    assert not live, f"live descendants remain in the private namespace: {live}"
-    time.sleep(0.2)
-    assert not (tmp_path / "late").exists()
-
-
 @pytest.mark.parametrize("scheme", [None, "docxplus-output-tree-v2-blake2b-256", "unknown"])
 def test_unknown_output_digest_scheme_refuses_before_execution(tmp_path, scheme):
     """Old signed digests cannot silently acquire new semantics or execute a recipe."""
