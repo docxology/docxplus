@@ -27,6 +27,13 @@ stops being correct.
 the diagnostic gate below, and leaving it out meant a broken cross-reference could
 reach the committed PDF with every other stage green.
 
+The renderer has two explicitly named modes. The default (and `./run.sh render`)
+requires `pandoc`, `pandoc-crossref` and the configured PDF engine, and exits
+nonzero when one is missing: a green run that silently omitted the PDF is not a
+render. CI runs `render_manuscript.py --text-only` to gate tokens and figures
+without claiming a PDF; release validation runs the default mode with the pinned
+toolchain from `Dockerfile.release-validation`.
+
 ---
 
 ## Values: `{{TOKEN}}` substitution

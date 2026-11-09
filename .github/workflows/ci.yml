@@ -50,7 +50,10 @@ jobs:
         run: |
           .venv/bin/python -m pytest --cov=src -q
 
-      - name: Verify Manuscript Variables & Rendering
+      # The PDF needs pandoc, pandoc-crossref and XeLaTeX. This job gates the
+      # token and figure stages honestly; release validation compiles the PDF
+      # with the pinned toolchain, and PDF mode fails closed if it is absent.
+      - name: Verify Manuscript Variables & Text Synthesis
         run: |
           .venv/bin/python scripts/z_generate_manuscript_variables.py
-          .venv/bin/python scripts/render_manuscript.py
+          .venv/bin/python scripts/render_manuscript.py --text-only

@@ -31,6 +31,10 @@ from .reproduce import ReproError
 from .secure_io import SecretExistsError, write_secret
 from .validate import validate_bytes
 
+#: ODF channel ids the CLI may select with ``SLOT:CHANNEL:FILE``. This tuple only
+#: disambiguates the older ``SLOT:FILE`` form; the builder still validates the id.
+ODT_CLI_CHANNELS = ("odt_package_part", "odt_metadata", "stego_media")
+
 
 def _read_key(filename: str, label: str) -> bytes:
     path = Path(filename)
@@ -165,12 +169,25 @@ def _build(args: argparse.Namespace, *, odt: bool = False) -> int:
     slots = []
     modules = []
     for spec in args.module or []:
-        parts = spec.split(":", 1 if odt else 2)
-        if len(parts) != (2 if odt else 3):
-            expected = "SLOT:FILE" if odt else "SLOT:CHANNEL:FILE"
-            raise ValueError(f"invalid --module format {spec!r}; expected {expected}")
-        slot, src = parts[0], parts[-1]
-        channel = "odt_package_part" if odt else parts[1]
+        parts = spec.split(":", 2)
+        if odt:
+            # Historical SLOT:FILE stays valid, including a colon in the path.
+            # SLOT:CHANNEL:FILE is recognised only when the middle field is a
+            # known ODF transport, so `slot:dir/file` cannot be misparsed.
+            if len(parts) == 3 and parts[1] in ODT_CLI_CHANNELS:
+                slot, channel, src = parts
+            elif len(parts) >= 2:
+                slot, channel, src = parts[0], "odt_package_part", spec.split(":", 1)[1]
+            else:
+                raise ValueError(
+                    f"invalid --module format {spec!r}; expected SLOT[:CHANNEL]:FILE"
+                )
+        else:
+            if len(parts) != 3:
+                raise ValueError(
+                    f"invalid --module format {spec!r}; expected SLOT:CHANNEL:FILE"
+                )
+            slot, channel, src = parts
         path = Path(src)
         if not path.is_file():
             raise ValueError(f"module file not found: {src!r}")
@@ -765,7 +782,11 @@ def main(argv: list[str] | None = None) -> int:
     ob.add_argument("output")
     ob.add_argument("--text", default="This is an ordinary document.")
     ob.add_argument("--title", default="Document")
-    ob.add_argument("--module", action="append", metavar="SLOT:FILE")
+    ob.add_argument(
+        "--module", action="append", metavar="SLOT[:CHANNEL]:FILE",
+        help="module payload; CHANNEL defaults to odt_package_part and may be "
+             "odt_package_part, odt_metadata or stego_media",
+    )
     ob.add_argument("--project", action="append", metavar="SLOT:DIR", help="carry a whole directory")
     ob.add_argument("--attest", action="store_true",
                     help="run each project's reproduction recipe and seal the attestation")

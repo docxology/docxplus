@@ -5,6 +5,32 @@ versioning is [semantic](https://semver.org/).
 
 Findings referenced by number are recorded in full in [`docs/redteam-audit.md`](docs/redteam-audit.md).
 
+## [2.2.0] — 2026-11-09
+
+### Added
+
+- ODT CLI channel selection: `odt-build --module SLOT[:CHANNEL]:FILE` now accepts
+  `odt_package_part` (the default), `odt_metadata` and `stego_media`. Only a known
+  channel id in the middle field reinterprets the older `SLOT:FILE` form, so
+  colon-bearing legacy paths keep working.
+
+### Changed
+
+- Reproduction output matching tokenises each pattern once per collection and each
+  relative path once, instead of splitting both for every entry/pattern pair.
+
+### Fixed
+
+- The ODF metadata channel now authors into a valid metadata-free base by creating
+  the optional `office:document-meta/office:meta` tree; malformed existing
+  `meta.xml` is still refused.
+- The manuscript PDF gate fails closed when `pandoc`, `pandoc-crossref` or the
+  configured engine is missing. CI runs the explicitly named `--text-only` mode,
+  and release validation compiles the PDF with the pinned toolchain.
+- The Linux descendant-custody regression test compared `str` namespace identities
+  with `pathlib.Path` objects, making its liveness observation vacuous; both sides
+  are now strings.
+
 ## [2.1.0] — 2026-11-08
 
 ### Security

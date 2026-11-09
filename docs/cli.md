@@ -80,11 +80,14 @@ channel; see [`channels.md`](channels.md).
 
 ### `odt-build`
 
-As `build`, with `--module SLOT:FILE` selecting the ODF package-entry transport.
-Supports typed file codecs, `--project`, `--attest`, `--max-uncompressed`,
-`--password`, `--kdf`, homogeneous classical/hybrid `--recipient`,
-`--pad-recipients`, `--threshold`, `--shares-dir`, `--signing-key` and `--cosign`.
-The Python ODF builder additionally offers the displayed-image transport.
+As `build`, with `--module SLOT[:CHANNEL]:FILE`. The channel defaults to
+`odt_package_part`; `odt_metadata` selects the `meta.xml` user-defined-field
+transport and `stego_media` the displayed-image carrier. A middle field that is
+not a known ODF channel id stays part of the file path, preserving the older
+`SLOT:FILE` form. Supports typed file codecs, `--project`, `--attest`,
+`--max-uncompressed`, `--password`, `--kdf`, homogeneous classical/hybrid
+`--recipient`, `--pad-recipients`, `--threshold`, `--shares-dir`,
+`--signing-key` and `--cosign`.
 
 ### `odt-inspect`, `odt-extract`
 

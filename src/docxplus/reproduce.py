@@ -203,9 +203,13 @@ def _remaining(deadline: float) -> float:
     return left
 
 
-def _matches_output(name: str, pattern: str) -> bool:
-    """Match POSIX path segments, with ** recursive but * confined to one segment."""
-    names, patterns = name.split("/"), pattern.split("/")
+def _matches_tokens(names: tuple[str, ...], patterns: tuple[str, ...]) -> bool:
+    """Match pre-tokenised POSIX segments; ** recursive, * confined to one segment.
+
+    Callers tokenise each pattern once per collection and each relative path once,
+    so a tree of N entries and P patterns costs N×P DP evaluations instead of
+    2×N×P string splits plus a fresh cache construction per pair.
+    """
 
     @functools.cache
     def match(i: int, j: int) -> bool:
@@ -232,6 +236,7 @@ def _output_hashes(project_dir: Path, outputs: list[str], deadline: float,
                 or Path(pattern).is_absolute()
                 or any(part in {"", ".", ".."} for part in pattern.split("/"))):
             raise ReproError(f"unsafe reproduction output pattern: {pattern!r}")
+    tokenised = {pattern: tuple(pattern.split("/")) for pattern in outputs}
     root = Path(project_dir).resolve()
     stack, files, matched = [root], {}, set()
     entries = total = 0
@@ -249,7 +254,8 @@ def _output_hashes(project_dir: Path, outputs: list[str], deadline: float,
                 if entry.is_dir(follow_symlinks=False):
                     stack.append(path)
                     continue
-                hits = [p for p in outputs if _matches_output(rel, p)]
+                name_tokens = tuple(rel.split("/"))
+                hits = [p for p in outputs if _matches_tokens(name_tokens, tokenised[p])]
                 if not hits:
                     continue
                 if not entry.is_file(follow_symlinks=False):

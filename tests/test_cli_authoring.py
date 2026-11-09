@@ -557,3 +557,113 @@ def test_reproduction_cli_preserves_full_attestation_and_pinned_trust(tmp_path, 
             assert report["match"] is True
             assert report["source_match"] is True
             assert (destination / "result.txt").read_bytes() == b"reproduced bytes"
+
+
+# -- ODT CLI channel selection ------------------------------------------------
+
+
+def test_odt_cli_default_channel_remains_package_part(tmp_path):
+    """The historical SLOT:FILE form still selects the ODF package-entry transport."""
+    source = tmp_path / "input"
+    source.write_bytes(b"default transport")
+    document = tmp_path / "default.odt"
+    built = _run("odt-build", document, "--module", f"m:{source}")
+    assert built.returncode == 0, built.stderr
+    reader = open_document(document.read_bytes())
+    assert reader.manifest.slot("m").channel == "odt_package_part"
+    assert reader.extract("m") == b"default transport"
+
+
+@pytest.mark.parametrize("channel", ["odt_package_part", "odt_metadata"])
+def test_odt_cli_selects_a_transport_explicitly(tmp_path, channel):
+    """SLOT:CHANNEL:FILE reaches the ODF metadata and package-entry transports."""
+    source = tmp_path / "input"
+    source.write_bytes(b"channel-selected payload")
+    document = tmp_path / f"{channel}.odt"
+    built = _run("odt-build", document, "--module", f"m:{channel}:{source}")
+    assert built.returncode == 0, built.stderr
+    reader = open_document(document.read_bytes())
+    assert reader.manifest.slot("m").channel == channel
+    assert reader.extract("m") == b"channel-selected payload"
+
+
+def test_odt_cli_selects_the_stego_media_transport(tmp_path):
+    pytest.importorskip("PIL")
+    source = tmp_path / "input"
+    source.write_bytes(b"concealed by the CLI")
+    document = tmp_path / "stego.odt"
+    built = _run("odt-build", document, "--module", f"m:stego_media:{source}")
+    assert built.returncode == 0, built.stderr
+    reader = open_document(document.read_bytes())
+    assert reader.manifest.slot("m").channel == "stego_media"
+    assert reader.extract("m") == b"concealed by the CLI"
+
+
+def test_odt_cli_unrecognised_middle_field_stays_part_of_the_path(tmp_path):
+    """Backward compatibility: only a known ODF channel id is a channel field."""
+    source = tmp_path / "input"
+    source.write_bytes(b"x")
+    built = _run("odt-build", tmp_path / "x.odt", "--module", f"m:nonsense:{source}")
+    assert built.returncode != 0
+    assert "not found" in built.stderr or "unknown channel" in built.stderr
+
+
+def test_odt_cli_metadata_transport_roundtrip(tmp_path):
+    """Metadata selection reaches meta.xml and CLI extraction restores the payload."""
+    source = tmp_path / "input"
+    source.write_text("métadonnée 雪", encoding="utf-8")
+    document = tmp_path / "meta.odt"
+    built = _run(
+        "odt-build", document, "--module", f"tag:odt_metadata:{source}",
+        "--payload-type", "text",
+    )
+    assert built.returncode == 0, built.stderr
+    from docxplus.odt import OdtPackage
+
+    package = OdtPackage.from_bytes(document.read_bytes())
+    assert b"dxplus_tag" in package.parts["meta.xml"]
+    out = tmp_path / "out"
+    extracted = _run("odt-extract", document, "tag", "--out", out)
+    assert extracted.returncode == 0, extracted.stderr
+    assert out.read_text(encoding="utf-8") == "métadonnée 雪"
+
+
+def test_odt_cli_mixed_transports_in_one_build(tmp_path):
+    """Channel selection is per module, not per command."""
+    payloads = {}
+    modules = []
+    for slot, channel, data in (
+        ("legacy", None, b"legacy package"),
+        ("explicit", "odt_package_part", b"explicit package"),
+        ("meta", "odt_metadata", b"metadata"),
+    ):
+        source = tmp_path / slot
+        source.write_bytes(data)
+        payloads[slot] = data
+        modules += ["--module", f"{slot}:{source}" if channel is None
+                    else f"{slot}:{channel}:{source}"]
+    document = tmp_path / "mixed.odt"
+    built = _run("odt-build", document, *modules)
+    assert built.returncode == 0, built.stderr
+    reader = open_document(document.read_bytes())
+    channels = {
+        "legacy": "odt_package_part",
+        "explicit": "odt_package_part",
+        "meta": "odt_metadata",
+    }
+    for slot, channel in channels.items():
+        assert reader.manifest.slot(slot).channel == channel
+        assert reader.extract(slot) == payloads[slot]
+
+
+@pytest.mark.parametrize("name", ["notes:2026.bin", "odt_metadata:payload.bin"])
+def test_odt_cli_colon_path_stays_a_package_part(tmp_path, name):
+    """Only a known channel in the middle field reinterprets a colon path."""
+    source = tmp_path / name
+    source.write_bytes(b"colon path")
+    document = tmp_path / "colon.odt"
+    built = _run("odt-build", document, "--module", f"m:{source}")
+    assert built.returncode == 0, built.stderr
+    reader = open_document(document.read_bytes())
+    assert reader.manifest.slot("m").channel == "odt_package_part"
+    assert reader.extract("m") == b"colon path"

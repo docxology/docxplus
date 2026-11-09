@@ -355,13 +355,13 @@ def test_successful_reproduction_does_not_leave_a_writing_descendant(tmp_path, n
     reproduce.run_and_digest(tmp_path, ReproSpec([PY, "-c", command], ["result"], timeout=10))
     assert (tmp_path / "result").read_text() == "computed"
     identity = (tmp_path / "custody.json").read_text()
-    assert identity != Path("/proc/self/ns/pid").readlink()
+    assert identity != str(Path("/proc/self/ns/pid").readlink())
     live = []
     for entry in Path("/proc").iterdir():
         if not entry.name.isdecimal():
             continue
         try:
-            if Path(entry / "ns/pid").readlink() != identity:
+            if str(Path(entry / "ns/pid").readlink()) != identity:
                 continue
             status = (entry / "status").read_text()
             state = next(line.split()[1] for line in status.splitlines()

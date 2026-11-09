@@ -19,6 +19,7 @@ happened to be found first.
 
 from __future__ import annotations
 
+import argparse
 import os
 import re
 import shutil
@@ -81,7 +82,24 @@ def diagnose(stderr: str, settings: dict) -> list[str]:
     return hits
 
 
-def main() -> int:
+def missing_pdf_tools(settings: dict) -> list[str]:
+    """Required PDF toolchain executables absent from PATH, in check order.
+
+    A missing tool is a build failure, not a skip: pandoc-crossref is required for
+    every ``[@fig:x]``/``[@sec:x]`` reference, and the engine is how the PDF is
+    produced. ``--text-only`` is the explicitly named lightweight mode.
+    """
+    required = ["pandoc", "pandoc-crossref", str(settings.get("pdf_engine", "xelatex"))]
+    return [tool for tool in required if shutil.which(tool) is None]
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--text-only", action="store_true",
+        help="substitute tokens and build figures without compiling the PDF",
+    )
+    args = parser.parse_args(argv)
     values = variables()
     root = project_root()
     src_dir = source_manuscript_dir()
@@ -126,13 +144,20 @@ def main() -> int:
         sys.stderr.write(f"unresolved manuscript tokens: {sorted(unresolved)}\n")
         return 1
 
-    # PDF Compilation via Pandoc
-    pandoc = shutil.which("pandoc")
-    if not pandoc:
-        sys.stderr.write("pandoc not found on PATH; skipping PDF compilation\n")
+    if args.text_only:
+        print("text-only render: PDF compilation skipped")
         return 0
 
+    # PDF Compilation via Pandoc
     settings = render_settings(config_out)
+    missing = missing_pdf_tools(settings)
+    if missing:
+        sys.stderr.write(
+            "required PDF tools not found on PATH: " + ", ".join(missing)
+            + "; install them or pass --text-only\n"
+        )
+        return 1
+    pandoc = shutil.which("pandoc")
     pdf_out = doc_dir / "manuscript.pdf"
     cmd = [
         pandoc,

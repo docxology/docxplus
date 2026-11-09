@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "docxplus"
-version = "2.1.0"
+version = "2.2.0"
 license = { text = "MIT" }
 description = "docxplus — DOCX and ODT containers with modular, signed and payload-encrypted intelligence layers through standards-defined package extension points."
 authors = [

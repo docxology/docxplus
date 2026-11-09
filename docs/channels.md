@@ -61,7 +61,10 @@ Base64 into a named custom document property (`dxplus_<slot>`) in
 `docProps/custom.xml`. The ODF profile records the same contract as `odt_metadata`:
 base64 in a `meta:user-defined` field named `dxplus_<slot>` in `meta.xml`, preserving
 every pre-existing user-defined field. The ceiling, collision refusal and sealing
-composition are shared; only the container location differs.
+composition are shared; only the container location differs. Author it with
+`odt-build --module SLOT:odt_metadata:FILE`; the same base's package-entry
+transport is `SLOT:odt_package_part:FILE` and the displayed image is
+`SLOT:stego_media:FILE`.
 
 **Capacity** bounded — see `channels.metadata.MAX_PAYLOAD`, cited in the manuscript as
 a token rather than repeated here. **Visibility** the property name is listed in

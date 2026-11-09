@@ -717,3 +717,32 @@ def test_odf_metadata_channel_is_registered_but_not_offered_to_ooxml():
     assert "odt_metadata" not in channels.available_channels()
     with pytest.raises(ContainerError, match="unknown channel"):
         DocxPlusBuilder().add_module("m", "odt_metadata", b"x")
+
+
+def test_odt_metadata_creates_the_optional_metadata_part():
+    """meta.xml is optional in ODF; authoring must create it, not refuse."""
+    from docxplus.odt import OdtPackage, new_base_odt
+
+    base = new_base_odt()
+    del base.parts["meta.xml"], base.media_types["meta.xml"]
+    data = (
+        OdtPlusBuilder(base_package=base)
+        .add_module("tag", b"metadata-free base", channel_id="odt_metadata")
+        .build()
+    )
+    package = OdtPackage.from_bytes(data)
+    assert "meta.xml" in package.parts
+    assert validate_odt_bytes(data).ok
+    assert OdtPlusReader.from_bytes(data).extract("tag") == b"metadata-free base"
+
+
+def test_odt_metadata_refuses_malformed_existing_metadata():
+    """An existing meta.xml without office:meta is malformed, not absent."""
+    from docxplus.odt import new_base_odt
+
+    base = new_base_odt()
+    base.parts["meta.xml"] = b'<office:document-meta xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"/>'
+    with pytest.raises(ValueError, match="office:meta"):
+        OdtPlusBuilder(base_package=base).add_module(
+            "tag", b"x", channel_id="odt_metadata"
+        ).build()

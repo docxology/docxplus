@@ -106,7 +106,7 @@ class OdtMetadataChannel:
             raise ValueError(
                 f"metadata channel holds at most {MAX_PAYLOAD} bytes; got {len(payload)}"
             )
-        root = _load_odt_meta(pkg)
+        root = _load_odt_meta(pkg, create=True)
         meta = root.find(f"{{{NS_ODF_OFFICE}}}meta")
         if meta is None:
             raise ValueError("meta.xml has no office:meta element")
@@ -141,10 +141,21 @@ class OdtMetadataChannel:
         return MAX_PAYLOAD
 
 
-def _load_odt_meta(pkg) -> Element:
+def _load_odt_meta(pkg, *, create: bool = False) -> Element:
+    """Load meta.xml; authoring may create it, extraction must not.
+
+    ``meta.xml`` is optional in ODF (Office 1.3 Part 3 §2.2.1 requirements apply
+    only when the part is present), so authoring into a conforming metadata-free
+    base must build the root rather than refuse. An existing but malformed part is
+    still refused by the caller.
+    """
     raw = pkg.parts.get(ODT_META_PART)
     if raw is None:
-        raise ValueError("ODT package has no meta.xml part")
+        if not create:
+            raise ValueError("ODT package has no meta.xml part")
+        root = Element(f"{{{NS_ODF_OFFICE}}}document-meta")
+        SubElement(root, f"{{{NS_ODF_OFFICE}}}meta")
+        return root
     return _safe_fromstring(raw)
 
 
