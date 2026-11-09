@@ -5,6 +5,14 @@ versioning is [semantic](https://semver.org/).
 
 Findings referenced by number are recorded in full in [`docs/redteam-audit.md`](docs/redteam-audit.md).
 
+## [2.2.1] — 2026-11-09
+
+### Fixed
+
+- Citation and Zenodo metadata now report 2.2.1, and the duplicate `2.0.0`
+  changelog headings are merged without dropping content. The 2.2.0 code is
+  unchanged; this patch restores release metadata coherence.
+
 ## [2.2.0] — 2026-11-09
 
 ### Added
@@ -82,8 +90,6 @@ Findings referenced by number are recorded in full in [`docs/redteam-audit.md`](
   ENOENT where the interface is absent) alongside namespace, ancestor PID/proc
   invisibility and signal, positive scratch and detached-child probes. Fresh
   source-bound receipts remain required; this is not a new qualification claim.
-
-## [2.0.0] — 2026-11-08
 
 - Clean cutover to authenticated manifest **format 3.0**: profile-separated typed,
   counted, length-framed part/hash/type/authority/relationship transcripts include

@@ -6,7 +6,7 @@
 > intelligence layer through documented package extension points. Structural
 > validation is not a universal Office-application interoperability guarantee.
 
-**v2.2.0** · MIT · Python >= 3.11 · [CHANGELOG](CHANGELOG.md) ·
+**v2.2.1** · MIT · Python >= 3.11 · [CHANGELOG](CHANGELOG.md) ·
 [docs index](docs/README.md) · [CLI reference](docs/cli.md)
 
 docxplus is a standards-first reference implementation. Every channel it uses is
