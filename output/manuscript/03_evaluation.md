@@ -72,7 +72,7 @@ files, execute bits and empty directories.
 
 The available report records a 14-file, 9-directory selected synthetic tree and
 18 of 18 checks, with 12 compared files. Those tokens describe the report,
-not a fresh run. It reports package sizes of 5,390 bytes (DOCX) and 4,552 bytes (ODT),
+not a fresh run. It reports package sizes of 5,392 bytes (DOCX) and 4,549 bytes (ODT),
 plus cross-profile packed-payload parity. Shared packing makes consistent behavior plausible, but does not
 replace independent end-to-end evidence for either profile or imply arbitrary-project fidelity.
 
