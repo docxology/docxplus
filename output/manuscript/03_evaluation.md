@@ -32,7 +32,7 @@ The generated dossier table specifies the fixture's intended extraction/verifica
 - **Project extraction.** The dossier source slot is extracted but is not reproduction-attested.
   Living/synthetic suites own their recipe claims and separate local execution evidence.
 
-The source inventory comprises 705 test functions under a 90% coverage policy,
+The source inventory comprises 717 test functions under a 90% coverage policy,
 not that many freshly passed cases. Tests use real primitives, files and subprocesses; optional compiled-backend
 and native-application cases require their capabilities and cannot count a skip as an exercised result.
 
@@ -72,7 +72,7 @@ files, execute bits and empty directories.
 
 The available report records a 14-file, 9-directory selected synthetic tree and
 18 of 18 checks, with 12 compared files. Those tokens describe the report,
-not a fresh run. It reports package sizes of 5,393 bytes (DOCX) and 4,549 bytes (ODT),
+not a fresh run. It reports package sizes of 5,390 bytes (DOCX) and 4,552 bytes (ODT),
 plus cross-profile packed-payload parity. Shared packing makes consistent behavior plausible, but does not
 replace independent end-to-end evidence for either profile or imply arbitrary-project fidelity.
 
