@@ -41,7 +41,7 @@ The OOXML profile provides 5 spec-sanctioned transport channels: custom XML part
 package parts, custom document properties, Markup Compatibility and Extensibility (MCE) choice blocks, and
 least-significant-bit steganography in a carrier image the document visibly displays. A chi-squared heuristic
 [@westfeld2000] and prefix sweep inspect selected carriers; neither calibrated detection probabilities nor
-general false-positive/sensitivity claims are established. The source inventory contains 750
+general false-positive/sensitivity claims are established. The source inventory contains 826
 test functions under a 90% coverage policy; these are not executed-pass counts.
 Historical reports and 14 recorded review cycles with 88
 confirmed findings describe selected fixtures and past evidence, not fresh software-release qualification.

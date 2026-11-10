@@ -186,6 +186,15 @@ ISO/XSD/RNG validator or an Office implementation proof. Signature self-consiste
 pinned authenticity; an unsigned document can pass structural checks without provenance. Intake reports
 XML parse failures as non-clean rather than silently treating unscannable parts as safe.
 
+The shared non-decoding inspection path retains original manifest evidence, including the serialized
+Merkle declaration, rather than rebuilding away a discrepancy. Batch audit preserves each input's
+structural, threat and identity findings independently. Manifest-aware comparison reports logical package,
+module and signer-policy differences without inferring plaintext or rendered equivalence. Bulk export
+recovers exact packed bytes to a fresh private directory with atomic no-replace publication; project and
+nested-document payloads remain inert. These workflows reuse complete key pins and shared reader
+unsealing, and do not turn successful decryption or unpinned self-consistency into authenticity.
+
+
 One validator rule exists for a feature that does not: a package carrying whole-package OPC signatures is
 rejected unless their combined reference set covers the intelligence manifest and every part it names. A
 signature enumerating only the conventional Word parts would render as valid in a desktop office suite over a
@@ -196,4 +205,4 @@ that keeps the feature from becoming a way to launder missing payloads ([@sec:fu
 `intake.py` is the hardened gateway for files of unknown origin, reporting external relationship targets,
 macro parts, and foreign `altChunk` imports statically, executing nothing. The `docxplus` CLI is a thin
 orchestration layer over these modules and implements no logic of its own; it currently exposes
-19 commands: analyze-carrier, build, extract, graph, inspect, keygen, odt-build, odt-extract, odt-inspect, odt-scan, odt-validate, reproduce, scan, transparency-append, unpack-project, validate, verify, verify-reproduction, verify-transparency.
+22 commands: analyze-carrier, audit, build, compare, export, extract, graph, inspect, keygen, odt-build, odt-extract, odt-inspect, odt-scan, odt-validate, reproduce, scan, transparency-append, unpack-project, validate, verify, verify-reproduction, verify-transparency.

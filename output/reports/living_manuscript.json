@@ -4,7 +4,7 @@
     "/source/docxplus/output/documents/living_manuscript.docx",
     "/source/docxplus/output/documents/living_manuscript.docxplus"
   ],
-  "size_bytes": 2100649,
+  "size_bytes": 2100654,
   "opc_valid": true,
   "verify_reproduction": {
     "attested": true,
@@ -18,12 +18,12 @@
         "-c",
         "import hashlib,pathlib,os\nroot=pathlib.Path('.')\nh=hashlib.blake2b(digest_size=16)\nfor p in sorted(root.rglob('*.py')):\n    h.update(p.relative_to(root).as_posix().encode()); h.update(b'\\0'); h.update(p.read_bytes())\nos.makedirs('output',exist_ok=True)\nopen('output/repro.txt','w').write(h.hexdigest())\n"
       ],
-      "output_digest": "b651aa475a383f2c66879e9dcccbb2bb9a7eadac302e840a569ade669f5ca184",
+      "output_digest": "dbec919c81fe425a48f3894ee76218a38ddb60848ae12973f1597bd6e87a39ef",
       "output_digest_scheme": "docxplus-output-tree-v3-blake2b-256",
       "outputs": [
         "output/repro.txt"
       ],
-      "source_digest": "a6283dab20706e81c05400276100c98971353b0007470904ef150a672e9e510d",
+      "source_digest": "f8f1062b442de574d5fea59b7168b9123aba4a83dd0018ddcd4f5c83aa007fa6",
       "timeout": 300,
       "toolchain": {
         "implementation": "CPython",
@@ -37,12 +37,12 @@
     "-c",
     "import hashlib,pathlib,os\nroot=pathlib.Path('.')\nh=hashlib.blake2b(digest_size=16)\nfor p in sorted(root.rglob('*.py')):\n    h.update(p.relative_to(root).as_posix().encode()); h.update(b'\\0'); h.update(p.read_bytes())\nos.makedirs('output',exist_ok=True)\nopen('output/repro.txt','w').write(h.hexdigest())\n"
   ],
-  "attested_output_digest": "b651aa475a383f2c\u2026",
+  "attested_output_digest": "dbec919c81fe425a\u2026",
   "reproduced_match": true,
   "reproduction": {
     "output_digest_scheme": "docxplus-output-tree-v3-blake2b-256",
-    "expected": "b651aa475a383f2c66879e9dcccbb2bb9a7eadac302e840a569ade669f5ca184",
-    "actual": "b651aa475a383f2c66879e9dcccbb2bb9a7eadac302e840a569ade669f5ca184",
+    "expected": "dbec919c81fe425a48f3894ee76218a38ddb60848ae12973f1597bd6e87a39ef",
+    "actual": "dbec919c81fe425a48f3894ee76218a38ddb60848ae12973f1597bd6e87a39ef",
     "match": true,
     "source_match": true,
     "toolchain_match": true,
