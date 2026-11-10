@@ -19,6 +19,9 @@ Active engineering and research backlog.
       `OdtMetadataChannel` (`odt_metadata`): base64 in a named `meta:user-defined`
       field, preserving existing fields and refusing collisions. Round-trip,
       capacity, sealing, signature and tamper tests; docs and format spec updated.
+- [x] Cross-profile non-decoding batch audit and logical manifest-aware comparison;
+      bounded, private, atomic raw payload export with inert project/nested bytes,
+      complete key policies and independent threshold-share bundles.
 
 ## Major Improvements
 - [x] Shamir k-of-n confidentiality and issued-share integrity:

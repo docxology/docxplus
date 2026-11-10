@@ -167,6 +167,85 @@ nor a clean result proves payload presence/absence or its size. See
 
 ---
 
+## Cross-profile review and recovery
+
+These commands detect the profile from admitted container bytes, not the filename.
+They never execute carried recipes. File reads are bounded and refuse symlinked
+inputs/ancestors or unavailable descriptor-relative no-follow capabilities.
+
+### `audit`
+
+Audit several documents independently and emit `docxplus.audit-batch.v1` JSON:
+
+```bash
+docxplus audit report.docx packet.odt --expected-key author.pub \
+    --require-cosigner institution.pub
+```
+
+Batches exceeding `--max-documents` refuse before input reads, never truncate.
+Each input retains its own inspection, threat findings and errors; a missing or
+malformed file does not discard successful peers. Exit 0 requires every selected
+check to pass; any failed row exits 1. Invalid caller policy exits 2. Ordinary office
+documents can pass structural/triage checks without an intelligence manifest.
+
+Inspection separates selected package structure, original manifest declarations,
+current package-surface binding, every declared co-signature and optional complete
+key pins. Without `--expected-key`, `signature.authentic` is `null`, not a claim of
+identity. Required co-signers need a primary pin. `payloads_verified: false` means
+no payload transport was decoded; audit is not full `validate`, antivirus,
+ISO/schema certification or proof of scientific/reproduction claims.
+
+### `compare`
+
+```bash
+docxplus compare earlier.docx later.odt --expected-key author.pub
+```
+
+Emit `docxplus.comparison.v1`: selected inspection results, byte/profile/logical
+package comparisons, signer-policy equality, and sorted added/removed/changed
+module records. All record fields matter, not just the Merkle root. Different
+valid profiles are comparable but unequal. ZIP timestamps, compression and member
+ordering do not define logical equality. Re-sealing equal plaintext can produce
+different stored bytes; neither plaintext nor rendered equivalence is inferred.
+
+Exit 0 means selected checks passed and the compared dimensions match; exit 1
+means valid differences; exit 2 means invalid input/required identity policy.
+Invalid declarations produce `equal: null`, even when both inputs contain the
+same tampering. No payload is decrypted, media-decoded or opened recursively.
+
+### `export`
+
+```bash
+docxplus export packet.odt recovered --slot brief --password s3cret \
+    --expected-key author.pub
+```
+
+Export selected slots (all by default) as exact packed plaintext bytes, with an
+`index.json` mapping original slot/type to deterministic ordinal `.bin` files and
+actual byte sizes/hashes. JSON/text retain their packed bytes; projects and nested
+documents stay inert archives/documents. Registered object codecs are not called.
+Credentials use `--password`, `--private-key` or repeated `--share` as for extraction.
+Share bundles are routed by complete manifest commitments. Shares committed to
+unselected modules may remain in a bundle; globally unrecognized shares refuse.
+
+The destination must be absent: files, empty/nonempty directories and symlinks
+refuse unchanged. All content is staged in a private tree, then published with a
+native atomic no-replace rename; unsupported platforms refuse. Destination/stage
+permissions are 0700 and recovered files/index 0600. An extraction, budget or index
+failure publishes no partial tree. Created parent directories may remain; cleanup
+I/O failures can retain a private stage. The destination parent must be owned by
+the calling UID and not group/other-writable. Its ACLs and same-UID actors must be
+trusted: Unix mode bits are enforced, not ACL sanitization or hostile-filesystem
+protection. Publication and plaintext cleanup use a retained private holder
+descriptor rather than re-opening a mutable staging name.
+
+`--max-input-bytes` bounds each read before ZIP parsing. Export additionally uses
+`--max-modules` and `--max-bytes` for recovered payload plus index bytes. These are
+not whole-process memory quotas; package inflation and media decoding retain their
+separate limits. Requested extraction may run the explicitly configured trusted
+carrier decoder, never a carried recipe. Successful extraction/decryption alone
+does not authenticate a signer; only a supplied complete trusted pin does.
+
 ## Execution (opt-in)
 
 ### `reproduce`

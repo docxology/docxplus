@@ -40,6 +40,7 @@ if TYPE_CHECKING:
 from .container import DocxPlusReader as DocxPlusReaderDepth
 from .manifest import Manifest
 from .odt import MIMETYPE_ODT, OdtPackage, new_base_odt
+from .opc import OpcPackage
 
 #: Where the intelligence manifest lives inside an ODT package.
 ODT_MANIFEST_PART = "intelligence/manifest.json"
@@ -276,8 +277,18 @@ class OdtPlusReader:
             pkg = OdtPackage.from_bytes(data)
         except OpcError as exc:
             raise ContainerError(f"unreadable ODT package: {exc}") from exc
+        return cls.from_package(pkg)
+
+    @classmethod
+    def from_package(cls, pkg: OdtPackage) -> OdtPlusReader:
+        """Read an admitted package without reparsing ZIP bytes or asserting trust."""
         blob = pkg.parts.get(ODT_MANIFEST_PART)
-        manifest = Manifest.from_bytes(blob) if blob else Manifest()
+        if blob is None:
+            if ODT_MANIFEST_PART in pkg.media_types:
+                raise ContainerError("intelligence manifest authority names a missing part")
+            manifest = Manifest()
+        else:
+            manifest = Manifest.from_bytes(blob)
         for record in manifest.records:
             if record.channel not in ("odt_package_part", "stego_media", "odt_metadata"):
                 raise ContainerError(f"unknown ODT channel: {record.channel}")
@@ -432,7 +443,7 @@ class OdtPlusReader:
         return DocxPlusReader.inclusion_proof(self, slot)
 
 
-def open_document(data: bytes):
+def open_document(data: bytes) -> DocxPlusReader | OdtPlusReader:
     """Open a docxplus document of either profile, dispatching on the container.
 
     Callers that accept documents from elsewhere should not have to know in advance
@@ -443,15 +454,24 @@ def open_document(data: bytes):
     ZIP and package-admission failures raise ``ContainerError``, matching the
     direct profile readers. Manifest-schema failures remain ``ValueError``.
     """
+    from .container import DocxPlusReader
+
+    package = read_document_package(data)
+    if isinstance(package, OdtPackage):
+        return OdtPlusReader.from_package(package)
+    return DocxPlusReader.from_package(package)
+
+
+def read_document_package(data: bytes) -> OpcPackage | OdtPackage:
+    """Admit either profile without requiring or normalizing its intelligence manifest.
+
+    No payload is decoded. This is package admission, not structural certification
+    or authenticity; callers can retain a malformed manifest for diagnostic checks.
+    """
     import io
     import zipfile
 
-    from .container import DocxPlusReader
-    from .opc import (
-        OpcError,
-        _guard_zip_bomb,
-        _preflight_zip,
-    )
+    from .opc import OpcError, _guard_zip_bomb, _preflight_zip, read_package
 
     try:
         expected_entries = _preflight_zip(data)
@@ -466,9 +486,9 @@ def open_document(data: bytes):
             is_odf = "mimetype" in names
             if is_odf:
                 _guard_mimetype(zf)
+        return OdtPackage.from_bytes(data) if is_odf else read_package(data)
     except (zipfile.BadZipFile, OpcError) as exc:
         raise ContainerError(f"not a readable document package: {exc}") from None
-    return OdtPlusReader.from_bytes(data) if is_odf else DocxPlusReader.from_bytes(data)
 
 
 __all__ = [
@@ -479,5 +499,6 @@ __all__ = [
     "OdtPlusReader",
     "compute_odt_surface_digest",
     "open_document",
+    "read_document_package",
 ]
 

@@ -342,7 +342,11 @@ class DocxPlusReader:
 
     @classmethod
     def from_bytes(cls, data: bytes) -> DocxPlusReader:
-        pkg = read_package(data)
+        return cls.from_package(read_package(data))
+
+    @classmethod
+    def from_package(cls, pkg: OpcPackage) -> DocxPlusReader:
+        """Read an admitted package without reparsing ZIP bytes or asserting trust."""
         manifest = read_manifest(pkg)
         if manifest is None:
             raise ContainerError("package carries no intelligence manifest")
@@ -603,10 +607,10 @@ class DocxPlusReader:
         """
         if not expected_public_keys:
             raise ContainerError("verify_cosigners requires at least one expected key")
-        valid = set(self.cosigners())  # surface-bound
+        valid = {bytes.fromhex(key) for key in self.cosigners()}  # surface-bound
         if self.verify_provenance():  # primary signature valid AND surface/merkle bound
-            valid.add(self.manifest.public_key)
-        return all(k.hex() in valid for k in expected_public_keys)
+            valid.add(bytes.fromhex(self.manifest.public_key))
+        return all(key in valid for key in expected_public_keys)
 
     def inclusion_proof(self, slot: str) -> dict:
         """A Merkle inclusion proof that ``slot`` belongs to this document's signed

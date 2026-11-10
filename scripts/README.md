@@ -183,6 +183,10 @@ source-drift checks and a new native source-integration lease.
 Installed-wheel checks use the wheel's real console script and fresh venv Python.
 The script is interpreted explicitly because writable `/work` remains `noexec`;
 the workflow never grants executable scratch storage to make a smoke test pass.
+The installed console also audits and logically compares each original profile,
+then bulk-exports every module and checks exact recovered bytes. Its
+`installed-wheel/review-workflows.json` records the actual JSON reports; unpinned
+fixtures must not acquire invented authenticity.
 
 ### Office render-save-render receipt
 

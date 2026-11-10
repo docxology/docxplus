@@ -681,6 +681,58 @@ def _cmd_keygen(args: argparse.Namespace) -> int:
     return 0
 
 
+def _workflow_pins(args: argparse.Namespace) -> tuple[bytes | None, list[bytes]]:
+    expected = _read_key(args.expected_key, "expected key") if args.expected_key else None
+    cosigners = [_read_key(path, "co-signer key") for path in args.require_cosigner or []]
+    return expected, cosigners
+
+
+def _cmd_audit(args: argparse.Namespace) -> int:
+    from .audit import audit_files
+
+    expected, cosigners = _workflow_pins(args)
+    report = audit_files(args.documents, expected_public_key=expected,
+                        require_cosigners=cosigners, max_bytes=args.max_input_bytes,
+                        max_documents=args.max_documents)
+    print(json.dumps(report, indent=2))
+    return 0 if report["ok"] else 1
+
+
+def _cmd_compare(args: argparse.Namespace) -> int:
+    from .comparison import compare_documents
+    from .inspection import read_document_file
+
+    expected, cosigners = _workflow_pins(args)
+    report = compare_documents(
+        read_document_file(args.left, max_bytes=args.max_input_bytes),
+        read_document_file(args.right, max_bytes=args.max_input_bytes),
+        expected_public_key=expected, require_cosigners=cosigners,
+    )
+    print(json.dumps(report, indent=2))
+    if not report["ok"]:
+        return 2
+    return 0 if report["equal"] else 1
+
+
+def _cmd_export(args: argparse.Namespace) -> int:
+    from .export import export_modules
+    from .inspection import read_document_file
+
+    expected, cosigners = _workflow_pins(args)
+    inputs = [Path(args.document), *(Path(path) for path in args.share or [])]
+    inputs.extend(Path(path) for path in [args.private_key, args.expected_key] if path)
+    inputs.extend(Path(path) for path in args.require_cosigner or [])
+    _distinct_outputs([Path(args.destination)], inputs)
+    report = export_modules(
+        read_document_file(args.document, max_bytes=args.max_input_bytes), args.destination,
+        slots=args.slot, expected_public_key=expected, require_cosigners=cosigners,
+        max_bytes=args.max_bytes, max_modules=args.max_modules,
+        **_extraction_credentials(args),
+    )
+    print(json.dumps(report, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="docxplus", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -870,13 +922,47 @@ def main(argv: list[str] | None = None) -> int:
     )
     k.set_defaults(func=_cmd_keygen)
 
+    from .audit import MAX_AUDIT_DOCUMENTS
+    from .export import MAX_EXPORT_BYTES, MAX_EXPORT_MODULES
+    from .inspection import MAX_DOCUMENT_BYTES
+
+    au = sub.add_parser("audit", help="batch structural/threat/pinned-identity audit; no payload decoding")
+    au.add_argument("documents", nargs="+", help="document files, detected by container bytes")
+    au.add_argument("--max-documents", type=int, default=MAX_AUDIT_DOCUMENTS,
+                    help="maximum admitted batch size; excess inputs refuse, never truncate")
+    au.set_defaults(func=_cmd_audit)
+
+    cp = sub.add_parser("compare", help="compare manifest/package declarations, not plaintext or rendering")
+    cp.add_argument("left")
+    cp.add_argument("right")
+    cp.set_defaults(func=_cmd_compare)
+
+    ex = sub.add_parser("export", help="privately export selected raw payloads into a new directory")
+    ex.add_argument("document")
+    ex.add_argument("destination")
+    ex.add_argument("--slot", action="append", help="selected slot; repeatable, defaults to all")
+    ex.add_argument("--password")
+    ex.add_argument("--private-key", help="hex recipient private key file")
+    ex.add_argument("--share", action="append", metavar="FILE")
+    ex.add_argument("--max-bytes", type=int, default=MAX_EXPORT_BYTES,
+                    help="maximum combined recovered payload and index bytes")
+    ex.add_argument("--max-modules", type=int, default=MAX_EXPORT_MODULES)
+    ex.set_defaults(func=_cmd_export)
+
+    for workflow_parser in (au, cp, ex):
+        workflow_parser.add_argument("--expected-key", help="complete primary signing public key file")
+        workflow_parser.add_argument("--require-cosigner", action="append", metavar="KEYFILE",
+                                     help="required complete co-signer identity; needs --expected-key")
+        workflow_parser.add_argument("--max-input-bytes", type=int, default=MAX_DOCUMENT_BYTES,
+                                     help="bounded regular no-follow file read before ZIP parsing")
+
     args = parser.parse_args(argv)
     try:
         return args.func(args)
     except SecretExistsError as exc:
         sys.stderr.write(f"error: {exc}\n")
         return 1
-    except (ValueError, TypeError, OSError, ContainerError, ReproError, KeyError) as exc:
+    except (ValueError, TypeError, OSError, ContainerError, ReproError, KeyError, NotImplementedError) as exc:
         sys.stderr.write(f"error: {exc}\n")
         return 2
 

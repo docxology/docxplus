@@ -1,6 +1,6 @@
 # docxplus — the Intelligent Document Container
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21983948.svg)](https://doi.org/10.5281/zenodo.21983948)
+[Historical archive (v1.0.1)](https://doi.org/10.5281/zenodo.21983948) · Current citation metadata: [CITATION.cff](CITATION.cff).
 
 > An OOXML `.docx` or ODF `.odt` carrying a modular, signed, encrypted
 > intelligence layer through documented package extension points. Structural
@@ -84,9 +84,27 @@ custom XML datastore part) and `mce` (no Markup Compatibility element). ODT payl
 ride as ODF package entries, bounded by archive intake limits, or as `odt_metadata`
 user-defined fields in `meta.xml` for short strings.
 
+## Review and recover existing documents
+
+The cross-profile workflows detect container bytes rather than filename extensions:
+
+```bash
+docxplus audit report.docx packet.odt --expected-key author.pub
+docxplus compare previous.docx current.docx --expected-key author.pub
+docxplus export packet.odt recovered --slot brief --password s3cret
+```
+
+Audit preserves independent batch findings and separates structural/triage checks
+from pinned identity. Comparison covers logical package and manifest differences,
+not plaintext or rendered equivalence. Neither decodes payloads. Bulk export writes
+exact raw payload bytes and an index into a new private, atomically published
+no-clobber directory; nested/project payloads remain inert. See the
+[CLI contracts](docs/cli.md#cross-profile-review-and-recovery) for limits and exits.
+
+
 ## Two names, one file
 
-Every export writes the document twice under two names, byte for byte identical:
+Document building writes the package twice under two names, byte for byte identical:
 
 | | |
 | --- | --- |

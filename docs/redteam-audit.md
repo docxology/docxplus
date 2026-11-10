@@ -387,3 +387,30 @@ real repository-lease viewer observations succeeded as `docxology`; their separa
 source-bound development record is
 `build/wfz-release/publisher-identity-qualification-83093ca5.json`. No live mutation
 or full-candidate qualification is inferred from those read-only observations.
+
+## 2.3.0 review/recovery integration — 2026-11-10
+
+Independent implementation, trust/credential, filesystem/resource and completeness
+lenses were followed by a separate CogSecSkills adversarial refutation pool. The
+integration owner exercised the proposed counterexamples with the actual bounded
+native test runner before correcting their roots. The adversary can supply office
+packages and credentials; filesystem substitution additionally assumes control of
+an export parent's entries, not possession of the user's signing/decryption keys.
+
+| Boundary | Observed behavior and correction |
+| --- | --- |
+| ODT declaration authority | Retaining the ODF declaration while removing the intelligence JSON was accepted unpinned and compared equal to itself. The shared validator and direct reader now reject the missing declared part; present empty JSON is parsed and rejected, not synthesized. This was not a complete-key authenticity bypass. |
+| Signer identity | Uppercase primary-key hex remained authentic but failed a required-primary policy in both profiles. Inspection and existing reader policies now compare complete decoded key bytes without rewriting signed descriptors. |
+| Threshold bundles | Two independent valid 2-of-3 module quorums failed bulk recovery. Shares now route by the existing full-share BLAKE2b commitments; selected readers retain checksum, distinct-coordinate and AEAD refusals. Globally unknown shares refuse; known unselected-module shares may remain in a bundle. |
+| Publication namespace | The genuine native primitive published a substituted source name while the original tree remained displaced. Publication now uses a retained protected holder as its source parent; plaintext cleanup stays relative to that descriptor. Caller-owned, non-peer-writable destination parents are required. Native retained-holder and refusal probes passed; the source-substitution probe did not independently establish different-UID kernel permissions. |
+| Index work amplification | Profiling the same 16-module, 1,024-character-suffix workload observed 18 full-index encodings before and 2 after correction. Incremental exact size accounting retains the final encoded-byte guard. These counts are not timing, memory-quota or broad performance claims. |
+| Rejected-file resources | With a 64-descriptor child limit, 256 directory refusals exhausted descriptors and prevented a following regular-file read. Admission now checks type before constructing the buffered reader and always closes its descriptor. The bounded child regression proves the following read remains usable. |
+
+The integrated native focused suite passed 241 behavioral cases. Actual before/
+after observations are local under `build/wfz-release/feature-baseline-3cf58cde/`
+and `build/wfz-release/feature-after-27b3bee3/`; the complete suite, installed wheel,
+real Rust backends, Office and rendered manuscript require separate fresh
+source-bound qualification. Test presence, static closure, Unix mode bits and a
+matching self-asserted signer are not substitutes for those results. Parent ACLs,
+same-UID actors, hostile filesystems, crash durability and stable textual paths
+under ancestor movement remain outside the raw export guarantee.

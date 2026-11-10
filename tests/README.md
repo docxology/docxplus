@@ -38,6 +38,12 @@ on real files, plus the optional real tool).
 as a real subprocess (`python -m docxplus.cli`), so argument parsing, exit codes, and
 the entry point itself are proved rather than bypassed by an in-process `main()` call.
 
+**Review and recovery workflows** — `test_inspection`, `test_audit`,
+`test_comparison`, `test_export` and `test_cli_workflows`. Original declaration
+tampering, batch peer preservation, complete key pins, logical comparison
+boundaries, inert raw recovery, private byte/count budgets and atomic no-clobber
+filesystem publication across both profiles.
+
 **Adversarial regressions** — `test_hardening`, `test_redteam_round12`,
 `test_redteam_round13`, `test_redteam_round14`, `test_v5_features`, `test_fuzz_suite`. Every confirmed
 finding in [`../docs/redteam-audit.md`](../docs/redteam-audit.md) is pinned here so it

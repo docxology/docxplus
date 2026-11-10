@@ -17,7 +17,7 @@ L2  format        manifest • reproduce • intake
 L3  composition   container  (DocxPlusBuilder / DocxPlusReader)
                   odt_container (OdtPlusBuilder / OdtPlusReader)
 L4  validation    validate
-L5  reference     reference_docs • manuscript_vars
+L5  consumers     reference_docs • manuscript_vars • inspection • audit • comparison • export
 L6  orchestration src/docxplus/cli.py • scripts/*
 ```
 
@@ -49,6 +49,10 @@ L6  orchestration src/docxplus/cli.py • scripts/*
 | `project_paths.py` | L0 | repository-root and output-directory resolution, so nothing hardcodes a path |
 | `manuscript_vars.py` | L5 | derive every docs/manuscript value from live constants (no hard-coding) |
 | `manuscript_figures.py` | L5 | the manuscript plates: every figure drawn from `manuscript_vars` values with one shared visual language (matplotlib optional) |
+| `inspection.py` | L5 | non-decoding package/declaration/signature inspection, original-root evidence and bounded no-follow file reads |
+| `audit.py` | L5 | independent per-document inspection and threat triage with preserved batch peers |
+| `comparison.py` | L5 | deterministic logical package/module/signer-policy comparison without plaintext or rendering inference |
+| `export.py` | L5 | bounded exact raw payload recovery to a private atomic no-replace tree; no typed-codec or recipe execution |
 
 ## Data flow — build
 

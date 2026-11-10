@@ -106,6 +106,40 @@ an integrator must handle.
   never a sibling checkout or automatic Cargo build. An explicitly invalid backend
   fails; absent optional capability is not a pass. Wheel use needs no source sibling.
 
+## Review and bulk-recovery boundaries
+
+`inspection` and `audit` retain the original manifest declarations and distinguish
+selected structural validity, threat findings, signature/surface self-consistency
+and caller-pinned authenticity. A malformed manifest does not erase an obtainable
+threat report or successful batch peers. Inspection checks no payload transport;
+`payloads_verified: false` is deliberate, and is not full `validate` coverage or
+proof that a decoder would recover the declared stored bytes. Every declared
+co-signature is checked without decrypting payloads. Ordinary office files need
+not carry an intelligence manifest; without a trusted complete key pin they are
+never reported authentic.
+
+`compare` is a deterministic comparison of selected package, module and signer
+policy dimensions. Invalid declarations cannot become equal by normalizing their
+serialized root. Logical equality is neither byte identity, rendered equivalence,
+plaintext equality nor signer trust. Encryption can change stored bytes while
+preserving plaintext; comparison never decrypts to guess that relation.
+
+`export_modules` verifies selected declarations and requested identity policy,
+then uses existing stored-digest and credential checks to recover exact packed
+bytes. It does not invoke registered object codecs, recursively open nested
+documents, unpack projects or run recipes. A requested trusted carrier decoder
+can run for media extraction. Payload files and index are private; slot names
+remain index data rather than filesystem components. The final directory must be
+absent, and publication uses a native atomic no-replace operation. Missing safe
+filesystem capabilities refuse, never fall back to a clobbering rename. Input,
+module-count and combined payload/index byte budgets are independent of package
+inflation limits and are not whole-process memory quotas.
+The destination parent must belong to the calling UID and deny group/other
+writes. Stage and destination modes are 0700; files are 0600. The parent ACL and
+same-UID processes remain trusted, not sanitized. A protected holder descriptor
+anchors publication and plaintext cleanup. Atomic publication does not promise
+stable textual paths under hostile ancestor movement or crash durability.
+
 ## Executing carried code (reproduction)
 
 The reproduction feature (`docs/reproduction-design.md`) is the one place docxplus can

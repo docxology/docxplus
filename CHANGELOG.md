@@ -5,6 +5,50 @@ versioning is [semantic](https://semver.org/).
 
 Findings referenced by number are recorded in full in [`docs/redteam-audit.md`](docs/redteam-audit.md).
 
+## [2.3.0] — 2026-11-10
+
+### Added
+
+- Cross-profile `audit` and `audit_files`/`audit_document`: independent structural,
+  declaration, threat and complete-key trust reports, preserving failed and
+  successful batch peers with explicit file/count admission bounds.
+- Cross-profile `compare` and `compare_documents`: complete module-record,
+  current logical package and signer-policy differences without decoding,
+  decrypting or claiming rendered/plaintext equivalence. Invalid input produces
+  indeterminate equality, never equality by normalization.
+- Cross-profile `export` and `export_modules`: exact packed plaintext and a
+  deterministic ordinal-file index, private modes and native atomic no-replace
+  publication. Nested documents, projects, custom codecs and recipes stay inert.
+- Shared non-decoding `inspect_document` and bounded, no-follow file admission.
+- The isolated release guest exercises installed-console audit, comparison and
+  complete bulk recovery for both profiles, retaining real reports and checking
+  recovered bytes independently of the source-tree imports.
+
+### Fixed
+
+- Reject retained ODT intelligence authority naming a missing JSON part; direct
+  readers also reject a present empty manifest instead of synthesizing one.
+- Required-signature policies compare complete decoded key identities, not hex
+  spelling, in both existing readers and the new inspection consumers.
+- Route bulk threshold credentials by each module's existing complete share
+  commitments without weakening checksum, distinct-share or AEAD checks.
+- Close admitted file descriptors on every refusal, including nonregular files,
+  preventing repeated failed intake from exhausting subsequent regular reads.
+- Keep export index accounting linear in encoded index size instead of encoding
+  the complete index after every module. Payload-plus-index limits remain exact.
+
+### Security
+
+- Publish from a descriptor-pinned private holder and clean plaintext relative to
+  that holder. Refuse peer-writable or other-owned destination parents; never
+  recursively clean a holder by re-opening its externally visible name. Parent
+  ACLs, same-UID processes and the filesystem remain trusted boundaries.
+
+### Changed
+
+- Label the README DOI as the historical 1.0.1 archive; current citation/version
+  authority remains CITATION.cff. No new archival DOI is claimed.
+
 ## [2.2.2] — 2026-11-10
 
 ### Added

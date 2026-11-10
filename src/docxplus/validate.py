@@ -163,7 +163,9 @@ def _all_parts_reachable(pkg: OpcPackage) -> bool:
     return True
 
 
-def _check_intelligence(pkg: OpcPackage, report: ValidationReport) -> None:
+def _check_intelligence(
+    pkg: OpcPackage, report: ValidationReport, *, verify_payloads: bool = True,
+) -> None:
     from .manifest import CT_MANIFEST, MANIFEST_PART, REL_MANIFEST
 
     edges = [r for r in pkg.relationships.get("", []) if r.type == REL_MANIFEST]
@@ -190,6 +192,8 @@ def _check_intelligence(pkg: OpcPackage, report: ValidationReport) -> None:
             channel = channel_registry.get_channel(record.channel)
         except ValueError as exc:
             report.fail(report.intelligence_errors, f"{record.slot}: {exc}")
+            continue
+        if not verify_payloads:
             continue
         try:
             raw = channel.extract(pkg, record)
@@ -310,7 +314,7 @@ def _check_odf(data: bytes, pkg, report: ValidationReport) -> None:
             report.fail(report.opc_errors, f"part not declared in META-INF/manifest.xml: {part}")
 
 
-def _check_odt_intelligence(pkg, report: ValidationReport) -> None:
+def _check_odt_intelligence(pkg, report: ValidationReport, *, verify_payloads: bool = True) -> None:
     import json as _json
 
     from .crypto import digest as _digest
@@ -319,6 +323,9 @@ def _check_odt_intelligence(pkg, report: ValidationReport) -> None:
 
     blob = pkg.parts.get(ODT_MANIFEST_PART)
     if blob is None:
+        if ODT_MANIFEST_PART in pkg.media_types:
+            report.fail(report.intelligence_errors, "intelligence manifest authority names a missing part")
+            return
         report.notes.append("no intelligence manifest (plain ODT document)")
         return
     if pkg.media_types.get(ODT_MANIFEST_PART) != CT_MANIFEST:
@@ -332,6 +339,8 @@ def _check_odt_intelligence(pkg, report: ValidationReport) -> None:
     for record in manifest.records:
         if record.channel not in ("odt_package_part", "stego_media", "odt_metadata"):
             report.fail(report.intelligence_errors, f"{record.slot}: unsupported ODT channel: {record.channel}")
+            continue
+        if not verify_payloads:
             continue
         if record.channel == "stego_media":
             # A concealed module travels inside its carrier's pixels, not as a

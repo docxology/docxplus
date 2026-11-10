@@ -96,7 +96,7 @@ DOCX over an ODF 1.3-targeted surface. Structural checks are not complete schema
 certification or proof about all applications. Use `OdtPlusBuilder`; `odt.py` alone
 builds a surface package without an intelligence manifest or signature.
 ```python
-from odt_container import OdtPlusBuilder, OdtPlusReader
+from docxplus.odt_container import OdtPlusBuilder, OdtPlusReader
 
 builder = OdtPlusBuilder(paragraphs=["ODF surface text"])
 builder.add_module("brief", payload_bytes, password="s3cret").sign(priv)
@@ -118,9 +118,9 @@ A report can carry selected source in either profile; a source-bound round-trip
 report provides empirical fixture evidence, not a general project-fidelity proof.
 
 ```python
-from container import DocxPlusBuilder, DocxPlusReader
-from odt_container import OdtPlusBuilder, OdtPlusReader
-import crypto
+from docxplus.container import DocxPlusBuilder, DocxPlusReader
+from docxplus.odt_container import OdtPlusBuilder, OdtPlusReader
+from docxplus import crypto
 
 priv, pub = crypto.generate_signing_key()
 
@@ -158,7 +158,7 @@ those links point at. `docs/format-spec.md` §8.1 is the full contract.
 Matryoshka nesting does not care which container the inner document uses.
 
 ```python
-from odt_container import OdtPlusBuilder, OdtPlusReader, open_document
+from docxplus.odt_container import OdtPlusBuilder, OdtPlusReader, open_document
 
 outer = OdtPlusBuilder(paragraphs=["An ODF wrapper."])
 outer.add_nested("inner", signed_docx_bytes, password="matryoshka").sign(priv)
@@ -169,3 +169,33 @@ assert inner.verify_provenance(expected_public_key=pub)
 
 open_document(some_bytes)   # dispatches on the container's own magic, not a caller flag
 ```
+
+## 13. Review, compare and recover a signed packet
+
+The same consumer APIs accept either profile. Audit is non-decoding; comparison
+reports logical package/module differences, not plaintext or rendering equality.
+The destination below must be absent; recovered project/nested payloads stay inert.
+
+```python
+from docxplus import crypto
+from docxplus.audit import audit_document
+from docxplus.comparison import compare_documents
+from docxplus.container import DocxPlusBuilder
+from docxplus.export import export_modules
+from docxplus.odt_container import OdtPlusBuilder
+
+private, public = crypto.generate_signing_key()
+first = DocxPlusBuilder().add_module("brief", "package_part", b"review v1").sign(private).build()
+second = OdtPlusBuilder().add_module("brief", b"review v2").sign(private).build()
+assert audit_document(first, expected_public_key=public)["ok"]
+changes = compare_documents(first, second, expected_public_key=public)
+assert changes["ok"] and not changes["equal"]
+result = export_modules(second, "build/recovered-review", expected_public_key=public)
+assert result["index"]["modules"][0]["slot"] == "brief"
+```
+
+An audit can pass selected checks without a pin, but its authenticity field remains
+unestablished. A changed or malformed serialized root is invalid input, not an
+equality result. Export hashes identify the actual recovered bytes; they do not
+independently authenticate an unpinned signer or execute any carried recipe.
+

@@ -3,7 +3,7 @@
   "@type": "SoftwareSourceCode",
   "name": "docxplus \u2014 the Intelligent Document Container",
   "description": "DOCX and ODT containers with modular, signed and payload-encrypted intelligence layers through standards-defined package extension points, with an optional steganographer media backend. Structural validation is not full standards certification; authenticity requires a pinned key.",
-  "version": "2.2.2",
+  "version": "2.3.0",
   "programmingLanguage": "Python",
   "runtimePlatform": "Python 3.11+",
   "license": "https://spdx.org/licenses/MIT",

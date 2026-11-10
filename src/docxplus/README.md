@@ -58,6 +58,10 @@ Where bytes become a docxplus package rather than a zip with extras.
 | `reference_docs.py` | L5 | serialized `ReferenceDossier` with ephemeral credentials; one exported specimen shared by scripts/manuscript |
 | `manuscript_vars.py` | L5 | derives every documented value from live constants and the repository, so nothing drift-prone is typed by hand |
 | `manuscript_figures.py` | L5 | draws every manuscript plate from `manuscript_vars` values with one shared visual language; matplotlib optional |
+| `inspection.py` | L5 | non-decoding selected structure/declarations and complete signer pins; bounded no-follow input |
+| `audit.py` | L5 | independent batch inspection/triage with explicit failures and preserved peers |
+| `comparison.py` | L5 | logical package/module/signer-policy differences, distinct from plaintext/rendered equality |
+| `export.py` | L5 | exact raw payloads and index, private staged no-replace publication with explicit limits |
 | `cli.py` | L6 | typed file/project/threshold/hybrid commands and staged I/O orchestration |
 
 ## Where to look first

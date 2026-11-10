@@ -619,6 +619,7 @@ def installed_smoke(runner: Runner, wheel: Path) -> dict:
                                       "or invalidate signatures; only visible rendering is qualified."}
     dump(OUTPUTS / "office/evidence.json", office)
     profile_modules = {}
+    workflows = {}
     for profile in ("docx", "odt"):
         document = artifacts / f"installed.{profile}"
         channels = [("probe", "custom_xml"), ("package", "package_part"),
@@ -640,10 +641,37 @@ def installed_smoke(runner: Runner, wheel: Path) -> dict:
                        "--out", str(recovered), "--password", "release-smoke"], cwd=root, env=env)
             require(recovered.read_bytes() == payload.read_bytes(),
                     f"installed {profile}/{slot} roundtrip failed")
+        audited = json.loads(runner.run(
+            f"wheel-{profile}-audit", [*command, "audit", str(document)], cwd=root, env=env,
+        ))
+        compared = json.loads(runner.run(
+            f"wheel-{profile}-compare", [*command, "compare", str(document), str(document)],
+            cwd=root, env=env,
+        ))
+        recovered_tree = artifacts / f"recovered-{profile}"
+        exported = json.loads(runner.run(
+            f"wheel-{profile}-export", [*command, "export", str(document), str(recovered_tree),
+                                      "--password", "release-smoke"], cwd=root, env=env,
+        ))
+        require(audited["ok"] is True and
+                audited["results"][0]["inspection"]["signature"]["authentic"] is None,
+                f"installed {profile} audit failed or invented authenticity")
+        require(compared["ok"] is True and compared["equal"] is True,
+                f"installed {profile} self-comparison failed")
+        entries = exported["index"]["modules"]
+        require({entry["slot"] for entry in entries} == set(slots),
+                f"installed {profile} bulk export omitted modules")
+        for entry in entries:
+            require((recovered_tree / entry["file"]).read_bytes() == payload.read_bytes(),
+                    f"installed {profile}/{entry['slot']} bulk export changed bytes")
+        workflows[profile] = {"audit": audited, "comparison": compared, "export": exported}
         office["profiles"][profile] = office_roundtrip(runner, document, root, env, visible, hidden)
         dump(OUTPUTS / "office/evidence.json", office)
     office["ok"] = True
     dump(OUTPUTS / "office/evidence.json", office)
+    dump(artifacts / "review-workflows.json", {
+        "schema": "docxplus.release-workflows.v1", "profiles": workflows, "ok": True,
+    })
     return {"origin": json.loads(origin), "payload_sha256": digest(payload),
             "profiles": ["docx", "odt"], "modules": profile_modules, "office": office, "ok": True}
 
