@@ -11,7 +11,7 @@ is self-contained. It is also integrated into the template pipeline as optional 
 Modules form a strict dependency stack — lower layers never import higher ones:
 
 ```
-L0  foundations   opc • crypto • shamir • lsb • secure_io • provenance • project_paths • transparency • archive_limits
+L0  foundations   opc • crypto • shamir • lsb • secure_io • provenance • project_paths • transparency • archive_limits • release_publication
 L1  vocabulary    wordml • odt • payloads • steg_bridge • fileext • channels/(base,*)
 L2  format        manifest • reproduce • intake
 L3  composition   container  (DocxPlusBuilder / DocxPlusReader)
@@ -32,6 +32,7 @@ L6  orchestration src/docxplus/cli.py • scripts/*
 | `secure_io.py` | L0 | private exclusive secrets and sibling-temporary atomic replacement without inode truncation |
 | `archive_limits.py` | L0 | stdlib ZIP-directory allocation and single-gzip/TAR physical-header/local-metadata preflight shared by package/project/evidence intake; no total-memory guarantee |
 | `transparency.py` | L0 | append-only attestation log: hash chain, Merkle inclusion proofs, and the signed tree head that anchors them |
+| `release_publication.py` | L0 | explicit-time release-asset plans, bounded descriptor-pinned files/receipts/checksums and exact remote identity/asset reconciliation; no ambient environment, network or publication authority |
 | `wordml.py` | L1 | minimal conforming WordprocessingML surface document |
 | `odt.py` | L1 | conforming OASIS OpenDocument Text (ODT) sibling container |
 | `payloads.py` | L1 | typed registry and project fidelity; descriptor-pinned bounded capture, physical TAR preflight and fresh private extraction; capability refusal |
@@ -110,6 +111,27 @@ own claims and separate execution evidence.
 Values derive from live constants and actual artifacts; token hydration alone is
 not a fresh run receipt. Keep meaningful rendered-output, reference and diagnostic
 checks rather than freezing incidental prose or inventory counts.
+
+## Release-asset publication boundary
+
+`release_publication` binds an expiring canonical plan to the selected draft's
+metadata, actor, main commit/tree and exact staged asset bytes. It refuses
+unexpected files, unsafe file identities, inconsistent source/validation receipts,
+payloads differing from their native qualification inventory and checksum drift.
+Metadata has smaller pre-parser budgets than distribution binaries. Receipt syntax
+and matching hashes do not authenticate a producer or establish fresh Linux,
+Office or installed-wheel qualification.
+
+The thin `scripts/publish_release_assets.py` adapter owns native manager admission,
+pinned identity, release-class controls, transport and explicit confirmation; it
+uploads only missing matching assets and publishes the same draft. Existing
+matching assets remain untouched, including when reconciling an already published
+release with an unexpired plan and no mutation budget. Changed metadata, identities
+or remote bytes refuse rather than overwrite. Selected configuration/SDK revisions
+remain bound; supervised binary readers cannot retain a host slot indefinitely.
+Publication observations remain distinct from complete verification in receipts.
+See [`../scripts/README.md`](../scripts/README.md#release-asset-publication) for
+the operational contract. This is not a `run.sh all` stage or a Zenodo/DOI operation.
 
 ## Boundary rules
 

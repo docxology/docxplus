@@ -22,6 +22,7 @@ Byte-level and mathematical primitives. No knowledge of documents.
 | `lsb.py` | pure-Python LSB stego codec over PNG carriers (Pillow) |
 | `secure_io.py` | exclusive private secrets and sibling-temporary atomic replacement, never existing-inode truncation |
 | `archive_limits.py` | stdlib ZIP-directory allocation and single-gzip/TAR physical preflight; byte/header/metadata budgets shared by packages, projects and release evidence |
+| `release_publication.py` | deterministic release-asset plans, descriptor-pinned local byte/receipt binding and refusal-only remote reconciliation; no network or publication authority |
 | `project_paths.py` | repository-root and output-directory resolution, so nothing hardcodes a path |
 
 ## L1 — vocabulary

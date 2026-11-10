@@ -348,3 +348,33 @@ and LibreOffice. Microsoft Word, Google Docs and native macOS confinement remain
 unqualified without separate evidence. Historical generated reports are not fresh
 proof. A signed attestation/log inclusion authenticates a claim; the living
 source-hash demonstration is not full-project scientific reproduction.
+
+## 2.2.2 publisher pre-publication review — 2026-11-10
+
+A separate CogSecSkills Red-Team Review used three static lenses: staged-file and
+plan boundaries, native transport/admission, and adversarial completeness. The
+bounded staging adversary could replace candidate payloads/checksums, not alter
+trusted native evidence, obtain credentials or approve publication. Matching
+self-authored receipts were never treated as producer authentication.
+
+The integration owner reproduced and corrected these findings before any live
+publication mutation:
+
+| Boundary | Observed counterexample and correction |
+| --- | --- |
+| Qualified artifact custody | Replacing a staged wheel and regenerating checksums passed with genuine native receipts unchanged. Staged wheel/sdist/PDF hashes and sizes now have to match the native collected inventory and its source/input/visual links. |
+| Checksum interoperability | VT record separators passed the domain but actual `sha256sum --check` refused. Only LF/CRLF records are accepted, with explicit coverage and duplicate checks. |
+| Metadata allocation | A bounded 2 MiB newline checksum input caused 28,448,233 peak traced Python bytes before rejection. Metadata now has smaller limits checked before opening/reading or parsing; this observation is not a performance benchmark. |
+| Native SDK and source admission | Actual SDK execution exposed a wrong `git_environment` signature; after correction it reaches the intended dirty-source refusal. Ignored operational paths prevent the publisher's own plan/receipt from dirtying main. |
+| Bounded binary transport | The real pinned-credential reader downloaded the existing 2.2.1 wheel byte-identically; its subprocess-supervised 250 ms bounded PDF request terminated in 255 ms. This is not a simulated GitHub or sandbox result. |
+| Recovery truth | Static reviewers identified unused mutation-budget admission for published reconciliation and falsely unpublished failure receipts. Published reconciliation is read-only; observed publication, unknown mutation outcome and complete verification are separate states. Final live lifecycle proof remains required. |
+
+Development evidence is recorded in
+`build/wfz-release/publisher-qualification-87539d93.json`, including exact native
+gate receipt identifiers and the three changed source/test file hashes. The native
+offline gate passed Ruff, 287 real-file publication cases and actual CLI help and
+wrong-confirmation refusal. These observations do not replace a fresh complete
+Linux/Office/PDF/installed-wheel qualification of the integrated release candidate,
+nor do they claim that a tag or release has been published. Producer authenticity
+requires separately trusted custody; the publisher checks consistency and actual
+remote bytes, not the truth of an arbitrary supplied qualification claim.

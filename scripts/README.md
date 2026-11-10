@@ -208,6 +208,70 @@ saving can strip modules or invalidate signatures. A current-source successful
 receipt is still required before claiming qualification. No fresh Office or Linux
 custody pass is implied by these instructions.
 
+## Release-asset publication
+
+`publish_release_assets.py` is an explicit native publication operation, never an
+automatic `run.sh all` stage. The native manager's `github-release` operation owns
+annotated-tag and draft creation; this adapter uploads reviewed assets and
+publishes that same draft. It does not create or replace tags, publish to a package
+registry, reserve a DOI or publish Zenodo.
+
+Authentic configured credentials, the pinned native manager identity and its
+release-class admission are required. Separately admitted, daemon-bound Linux
+qualification remains a prerequisite; this workflow does not run or replace it.
+Use staged assets, plan and receipt paths beneath the real, Git-ignored
+`build/wfz-release/` directory. Ordinary tracked/unignored output locations refuse
+before creation; operational records must not dirty the source they certify:
+
+```bash
+.venv/bin/python scripts/publish_release_assets.py plan --vault-config <vault>/vault.toml --assets build/wfz-release/<assets-dir> --release-id ID --out build/wfz-release/<plan.json>
+.venv/bin/python scripts/publish_release_assets.py apply --vault-config <vault>/vault.toml --assets build/wfz-release/<assets-dir> --plan build/wfz-release/<plan.json> --confirmation '<exact phrase>' --receipt build/wfz-release/<receipt.json>
+```
+
+Replace the angle-bracket placeholders before execution. Review the saved plan
+and use its exact `publish docxology/docxplus vVERSION PLAN_ID` confirmation phrase,
+with the full plan ID. Plans bind the actor, main commit/tree, release ID and
+selected release metadata, plus each asset's size and SHA-256. CLI plans expire
+after one hour; stale/future-created or modified plans refuse. Changed source,
+tag target, metadata or local bytes require a new review, not a forced retry.
+
+For stable `VERSION`, the staged directory contains exactly:
+
+- `docxplus-VERSION-py3-none-any.whl`
+- `docxplus-VERSION.tar.gz`
+- `manuscript.pdf`
+- `SOURCE-VERSION.json`
+- `VALIDATION-VERSION.json`
+- `SHA256SUMS`, naming exactly the other five files with their matching SHA-256 values.
+
+Files must be nonempty, regular and single-link, reached without symlink directory
+components. The aggregate limit is 128 MiB; each receipt is limited to 4 MiB and
+`SHA256SUMS` to 4096 bytes before reading/parsing. Checksum records use LF or CRLF,
+not the broader Unicode line-separator grammar. Descriptor-pinned reads recheck
+file identities, sizes and hashes; unexpected files and duplicate entries refuse.
+SOURCE binds version, main commit/tree, pushed state and validated-input digest.
+VALIDATION's host, lifecycle and distribution evidence must bind the same inputs;
+its native collected inventory must match the staged wheel, sdist and PDF bytes.
+Source/distribution/visual-review PDF hashes must agree. SOURCE may still report
+untagged and unpublished. These checks establish consistency, not producer
+authenticity or fresh runtime proof: separately retain and authenticate the actual
+native source, qualification and installed-artifact evidence before approval.
+
+Apply retains byte-identical remote assets and uploads only missing names. Remote
+digests come from bounded downloaded bytes, not trusted server claims. Binary
+readers are supervised subprocesses with an absolute parent timeout, fixed HTTPS
+GitHub hosts, stripped redirect authorization and pinned credentials on stdin,
+never argv. The adapter uses a 300-second operation deadline and 45-second lease
+budgets; native shared slots, reserves and write-window admission remain required.
+Both the selected configuration revision and actual SDK sources stay bound.
+Unexpected, duplicated or changed remote assets refuse; nothing is overwritten or
+deleted. A matching published release can be reconciled with an unexpired saved
+plan without consuming mutation admission or write capacity. Changed frozen
+metadata still refuses. Receipts distinguish observed publication from completed
+verification; an ambiguous publish attempt remains unknown, not falsely unpublished.
+Claim publication only after actual remote readback and retain its receipt. These
+instructions make no publication or fresh qualification claim.
+
 ## Outputs
 
 Pipeline stages write under [`../output/`](../output/README.md): documents in

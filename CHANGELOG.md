@@ -7,6 +7,17 @@ Findings referenced by number are recorded in full in [`docs/redteam-audit.md`](
 
 ## [2.2.2] — Unreleased
 
+### Added
+
+- Explicit native release-asset planning and publication adapter with expiring,
+  byte-bound confirmation, qualified artifact/source/validation/checksum binding
+  and refusal-only remote reconciliation. Matching assets are retained on explicit
+  resumed runs; publication still requires authentic native admission and separate
+  runtime qualification. Metadata has pre-parser bounds, checksums use LF/CRLF,
+  binary readback has a supervised deadline, and ambiguous publication stays unknown.
+- Real-file publication regressions for plan corruption/time bounds, unsafe local
+  files, receipt/checksum drift, remote identity conflicts and idempotent retention.
+
 ### Fixed
 
 - Release admission rejects conflicting package, lock, citation, CodeMeta, Zenodo
