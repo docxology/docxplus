@@ -235,6 +235,15 @@ def test_plan_corruption_and_internal_bindings_refuse(plan, change):
         publication.validate_plan(plan, now=NOW)
 
 
+@pytest.mark.parametrize("size", [0, -1, True, LIMIT + 1])
+def test_rehashed_plan_refuses_unsafe_asset_sizes(plan, size):
+    """Rehashed metadata cannot bypass byte bounds; no over-budget file is constructed."""
+    plan["assets"][f"docxplus-{VERSION}-py3-none-any.whl"]["bytes"] = size
+    resign(plan)
+    with pytest.raises(publication.PublicationError):
+        publication.validate_plan(plan, now=NOW)
+
+
 @pytest.mark.parametrize(("receipt", "keys", "value"), [
     ("SOURCE", ("version",), "0.0.1"), ("SOURCE", ("commit",), "d" * 40),
     ("SOURCE", ("tree",), "d" * 40), ("SOURCE", ("branch",), "topic"),
@@ -347,7 +356,7 @@ def test_reviewed_plan_rejects_any_later_byte_or_inventory_change(staged, plan, 
 
 
 @pytest.mark.parametrize("operation", ["plan", "read"])
-@pytest.mark.parametrize("kind", ["symlink", "hardlink", "directory", "fifo", "empty", "oversize", "aggregate"])
+@pytest.mark.parametrize("kind", ["symlink", "hardlink", "directory", "fifo", "empty", "aggregate"])
 def test_local_file_custody_and_byte_bounds(staged, release, plan, tmp_path, operation, kind):
     """Actual unsafe inodes and sparse byte-limit violations refuse at both entrypoints."""
     target = staged / "manuscript.pdf"
@@ -357,9 +366,6 @@ def test_local_file_custody_and_byte_bounds(staged, release, plan, tmp_path, ope
         for name in names:
             with (staged / name).open("r+b") as stream:
                 stream.truncate(45 * 1024 * 1024)
-    elif kind == "oversize":
-        with target.open("r+b") as stream:
-            stream.truncate(LIMIT + 1)
     elif kind == "empty":
         target.write_bytes(b"")
     else:
@@ -376,7 +382,7 @@ def test_local_file_custody_and_byte_bounds(staged, release, plan, tmp_path, ope
             target.mkdir()
         else:
             os.mkfifo(target)
-    if kind in {"empty", "oversize", "aggregate"}:
+    if kind in {"empty", "aggregate"}:
         checksums(staged)
     with pytest.raises(publication.PublicationError):
         if operation == "plan":

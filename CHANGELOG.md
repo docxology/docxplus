@@ -5,7 +5,7 @@ versioning is [semantic](https://semver.org/).
 
 Findings referenced by number are recorded in full in [`docs/redteam-audit.md`](docs/redteam-audit.md).
 
-## [2.2.2] — Unreleased
+## [2.2.2] — 2026-11-10
 
 ### Added
 

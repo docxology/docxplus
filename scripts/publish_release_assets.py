@@ -159,9 +159,9 @@ class Native:
         self.deadline = time.monotonic() + 300
         self.lease_deadline = self.deadline
         self.actor = self.identities.write_identity(self.cfg, "docxology")
-        self.identity = self.identities.require(self.cfg, self.actor, self.actor,
-                                                write=True, refresh=True)
+        self.identity = self.identities.resolve(self.cfg, self.actor, write=True)
         require(self.identity.mechanism == "token", "publication requires a mapped pinned token")
+        self.observe_identity()
 
     def timeout(self, bound: float = 15) -> float:
         remaining = min(self.deadline, self.lease_deadline) - time.monotonic()
@@ -177,6 +177,23 @@ class Native:
         rate = self.github.rate_from_headers({key.lower(): value for key, value in headers.items()})
         if rate:
             self.budget.record_resources(self.cfg, self.actor, {"core": rate})
+
+    def observe_identity(self) -> None:
+        """Observe the pinned token's actual viewer within native admission/deadlines."""
+        self.check_bindings()
+        allowed, _ = self.budget.plan_cost(self.cfg, self.actor, 1, resource="graphql")
+        require(allowed, "native GraphQL identity budget refused the request")
+        with self.budget.slot(self.cfg, wait=0):
+            response = self.github.gh_graphql(
+                self.identities.VIEWER_QUERY, identity=self.identity,
+                timeout=self.timeout(), attempts=1,
+            )
+        if response.rate:
+            self.budget.record_resources(self.cfg, self.actor, {"graphql": response.rate})
+        body = response.data if isinstance(response.data, dict) else {}
+        data = body.get("data") if isinstance(body.get("data"), dict) else {}
+        viewer = data.get("viewer") if isinstance(data.get("viewer"), dict) else {}
+        require(viewer.get("login") == self.actor, "pinned token's answering identity changed")
 
     def get(self, path: str, *, params: dict | None = None):
         self.check_bindings()
@@ -224,9 +241,10 @@ class Native:
                     self.plans.require_enabled(cfg, "release")
                     require(self.identities.write_identity(cfg, "docxology") == self.actor,
                             "native owner mapping changed")
-                    self.identity = self.identities.require(cfg, self.actor, self.actor,
-                                                            write=True, refresh=True)
+                    self.timeout()
+                    self.identity = self.identities.resolve(cfg, self.actor, write=True)
                     require(self.identity.mechanism == "token", "mapped pinned token unavailable")
+                    self.observe_identity()
                 yield
             finally:
                 self.lease_deadline = self.deadline

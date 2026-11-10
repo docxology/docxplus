@@ -378,3 +378,12 @@ Linux/Office/PDF/installed-wheel qualification of the integrated release candida
 nor do they claim that a tag or release has been published. Producer authenticity
 requires separately trusted custody; the publisher checks consistency and actual
 remote bytes, not the truth of an arbitrary supplied qualification claim.
+
+A subsequent independent closure review found the SDK's default viewer refresh
+outside shared-slot/reserve and remaining-deadline controls. The adapter now uses
+token-only resolution followed by the native GraphQL viewer query under an
+admitted, single-attempt, remaining-time-bounded transport. Actual constructor and
+real repository-lease viewer observations succeeded as `docxology`; their separate
+source-bound development record is
+`build/wfz-release/publisher-identity-qualification-83093ca5.json`. No live mutation
+or full-candidate qualification is inferred from those read-only observations.
