@@ -405,6 +405,7 @@ an export parent's entries, not possession of the user's signing/decryption keys
 | Publication namespace | The genuine native primitive published a substituted source name while the original tree remained displaced. Publication now uses a retained protected holder as its source parent; plaintext cleanup stays relative to that descriptor. Caller-owned, non-peer-writable destination parents are required. Native retained-holder and refusal probes passed; the source-substitution probe did not independently establish different-UID kernel permissions. |
 | Index work amplification | Profiling the same 16-module, 1,024-character-suffix workload observed 18 full-index encodings before and 2 after correction. Incremental exact size accounting retains the final encoded-byte guard. These counts are not timing, memory-quota or broad performance claims. |
 | Rejected-file resources | With a 64-descriptor child limit, 256 directory refusals exhausted descriptors and prevented a following regular-file read. Admission now checks type before constructing the buffered reader and always closes its descriptor. The bounded child regression proves the following read remains usable. |
+| Generic parser error contract | The first full Linux suite caught a new dispatch wrapper turning an existing malformed-DOCX `OpcError` into `ContainerError`. Only ZIP dispatch preflight is wrapped generically now; profile parsing preserves each direct reader's exception contract. The existing signed-projection rejection test is retained unchanged. |
 
 The integrated native focused suite passed 241 behavioral cases. Actual before/
 after observations are local under `build/wfz-release/feature-baseline-3cf58cde/`
@@ -414,3 +415,10 @@ source-bound qualification. Test presence, static closure, Unix mode bits and a
 matching self-asserted signer are not substitutes for those results. Parent ACLs,
 same-UID actors, hostile filesystems, crash durability and stable textual paths
 under ancestor movement remain outside the raw export guarantee.
+
+The first full candidate Linux run failed that existing dispatch case (1,864
+passed, one failed, one expected platform skip; 92.73% measured coverage). This
+failed run is not release qualification. Its namespace was reaped and controls/
+sources revalidated; failure evidence remains under
+`build/wfz-release/release-2.3.0-candidate-77f38600/validation/`. A replacement
+source-bound full run, not a narrowed suite or weaker assertion, is required.

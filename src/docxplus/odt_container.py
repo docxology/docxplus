@@ -451,8 +451,9 @@ def open_document(data: bytes) -> DocxPlusReader | OdtPlusReader:
     uncompressed ``mimetype`` first entry, which is exactly the property the format
     guarantees for this purpose; anything else is treated as OPC.
 
-    ZIP and package-admission failures raise ``ContainerError``, matching the
-    direct profile readers. Manifest-schema failures remain ``ValueError``.
+    ZIP dispatch-preflight failures raise ``ContainerError``. Profile parsing
+    preserves the direct readers' contracts: ``OpcError`` for DOCX package errors,
+    ``ContainerError`` for ODT package errors. Manifest-schema errors propagate.
     """
     from .container import DocxPlusReader
 
@@ -486,9 +487,14 @@ def read_document_package(data: bytes) -> OpcPackage | OdtPackage:
             is_odf = "mimetype" in names
             if is_odf:
                 _guard_mimetype(zf)
-        return OdtPackage.from_bytes(data) if is_odf else read_package(data)
     except (zipfile.BadZipFile, OpcError) as exc:
         raise ContainerError(f"not a readable document package: {exc}") from None
+    if is_odf:
+        try:
+            return OdtPackage.from_bytes(data)
+        except OpcError as exc:
+            raise ContainerError(f"unreadable ODT package: {exc}") from exc
+    return read_package(data)
 
 
 __all__ = [

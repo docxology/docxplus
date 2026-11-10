@@ -28,6 +28,8 @@ Findings referenced by number are recorded in full in [`docs/redteam-audit.md`](
 
 - Reject retained ODT intelligence authority naming a missing JSON part; direct
   readers also reject a present empty manifest instead of synthesizing one.
+- Preserve the direct profile parsers' error contracts in generic dispatch;
+  malformed DOCX relationship indexes still raise `OpcError`.
 - Required-signature policies compare complete decoded key identities, not hex
   spelling, in both existing readers and the new inspection consumers.
 - Route bulk threshold credentials by each module's existing complete share
