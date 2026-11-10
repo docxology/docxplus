@@ -76,8 +76,9 @@ every channel's test asserts against real packages rather than mocks, so the def
 obligation rather than a description. The supported channels comprise:
 
 - **`custom_xml`** — Base64 payloads in `customXml/itemN.xml` parts registered via
-  `customXml/itemPropsN.xml`. Layout engines ignore these parts while they remain fully compliant with the
-  OOXML custom XML mapping schemas [@iso29500].
+  `customXml/itemPropsN.xml`. The writer registers datastore metadata through the
+  documented OOXML extension [@iso29500]. Checks cover selected structural invariants;
+  neither complete schema conformance nor identical consumer handling is established.
 - **`package_part`** — Raw binary payloads in `intelligence/payloadN.dxp` under a declared content type. The
   high-throughput channel: large datasets, code archives, and ciphertext envelopes.
 - **`metadata`** — String-encoded payloads in custom document properties within `docProps/custom.xml`;

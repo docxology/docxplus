@@ -52,6 +52,8 @@ Findings referenced by number are recorded in full in [`docs/redteam-audit.md`](
 
 - Label the README DOI as the historical 1.0.1 archive; current citation/version
   authority remains CITATION.cff. No new archival DOI is claimed.
+- Narrow the manuscript's custom-XML claim to implemented registration and selected
+  structural checks; no complete schema or universal consumer conformance is claimed.
 
 ## [2.2.2] — 2026-11-10
 

@@ -430,3 +430,10 @@ generation. Direct inspection then found the cover still dated 2026-11-07: the
 image fixed `SOURCE_DATE_EPOCH` to that historical day. The guest now derives a
 stable UTC epoch from the snapshot's citation release date; the obsolete image
 constant is removed. Final qualification must use that corrected source too.
+
+The source-date correction passed both complete 1,875-case Linux suites (1,874
+passed, one macOS-only skip each), with 92.74% coverage. The regenerated cover
+shows version 2.3.0 and citation date 2026-11-10. A remaining custom-XML sentence
+claimed full schema compliance beyond those checks; it now distinguishes
+implemented registration from unestablished complete schema/consumer conformance.
+Final publication still requires qualification bound to the final source/artifacts.
