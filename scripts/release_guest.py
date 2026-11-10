@@ -84,6 +84,24 @@ def source_file(key: str, name: str) -> Path:
     return ROOTS[key] / rel
 
 
+def source_date_epoch(citation: Path) -> str:
+    """Bind reproducible build dates to the copied release's UTC citation date."""
+    import datetime
+    import re
+
+    values = re.findall(r"(?m)^date-released:[ \t]*(.*)$", citation.read_text())
+    if len(values) != 1:
+        raise ValueError("CITATION.cff requires one literal release date")
+    match = re.fullmatch(r"(?P<quote>[\"']?)(?P<date>\d{4}-\d{2}-\d{2})(?P=quote)", values[0].strip())
+    if match is None:
+        raise ValueError("CITATION.cff release date must be a literal ISO date")
+    released = datetime.date.fromisoformat(match['date'])
+    epoch = int(datetime.datetime.combine(released, datetime.time(), datetime.UTC).timestamp())
+    if epoch < 0:
+        raise ValueError("release date precedes the reproducible-build epoch")
+    return str(epoch)
+
+
 def verify_sources(manifest: dict) -> dict:
     require(manifest["schema"] == "docxplus.release-inputs.v1", "wrong input schema")
     require(set(manifest["sources"]) == set(ROOTS), "wrong source set")
@@ -867,6 +885,7 @@ def export_outputs(ok: bool) -> None:
 
 def main() -> int:
     manifest = json.loads(MANIFEST.read_text())
+    os.environ["SOURCE_DATE_EPOCH"] = source_date_epoch(source_file("docxplus", "CITATION.cff"))
     if sys.argv[1:] == ["--record-runtime"]:
         bindings = verify_sources(manifest)
         dump(Path("/opt/release-runtime.json"), runtime_metadata())

@@ -95,7 +95,7 @@ ENV PATH=/opt/venv/bin:/opt/steganographer/bin:/opt/crossref/bin:/usr/local/bin:
     UV_CACHE_DIR=/cache/uv RUFF_CACHE_DIR=/cache/ruff \
     COVERAGE_FILE=/outputs/coverage/.coverage \
     STEGANOGRAPHER_BIN=/opt/steganographer/bin/steganographer \
-    DOCXPLUS_TEMPLATE_PROJECT=/inputs/template SOURCE_DATE_EPOCH=1794009600 \
+    DOCXPLUS_TEMPLATE_PROJECT=/inputs/template \
     TZ=UTC LANG=C.UTF-8 LC_ALL=C.UTF-8
 # Measure tool identity under the same actual environment used by offline compute.
 RUN /opt/venv/bin/python /opt/release_guest.py --record-runtime

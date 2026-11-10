@@ -422,3 +422,11 @@ failed run is not release qualification. Its namespace was reaped and controls/
 sources revalidated; failure evidence remains under
 `build/wfz-release/release-2.3.0-candidate-77f38600/validation/`. A replacement
 source-bound full run, not a narrowed suite or weaker assertion, is required.
+
+The corrected candidate's full native workflow subsequently passed both complete
+1,866-case suites (1,865 passed, one macOS-only skip each), with 92.74% coverage,
+real bubblewrap/Rust/Office, installed-console audit/compare/export and manuscript
+generation. Direct inspection then found the cover still dated 2026-11-07: the
+image fixed `SOURCE_DATE_EPOCH` to that historical day. The guest now derives a
+stable UTC epoch from the snapshot's citation release date; the obsolete image
+constant is removed. Final qualification must use that corrected source too.

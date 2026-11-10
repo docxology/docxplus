@@ -391,3 +391,35 @@ def test_release_metadata_crlf_preserves_conflict_detection(versioned_release_so
     _refresh_release_source(subject, source)
     with pytest.raises(subject.Refusal):
         subject.verify_inputs(manifest)
+
+
+@pytest.mark.parametrize('literal,epoch', [
+    ('1970-01-01', '0'),
+    ("'2024-02-29'", '1709164800'),
+    ('"2025-01-01"', '1735689600'),
+])
+def test_guest_reproducible_epoch_uses_release_calendar_utc(tmp_path, literal, epoch):
+    """Copied release dates preserve UTC/leap-day boundaries instead of an image constant."""
+    from scripts import release_guest
+
+    citation = tmp_path / 'CITATION.cff'
+    citation.write_text(f'version: "2.3.0"\ndate-released: {literal}\n')
+    assert release_guest.source_date_epoch(citation) == epoch
+
+
+@pytest.mark.parametrize('fields', [
+    'version: "2.3.0"\n',
+    'date-released: 2024-02-29\ndate-released: 2024-03-01\n',
+    'date-released: 2023-02-29\n',
+    'date-released: 2024-02-29T12:00:00Z\n',
+    'date-released: "2024-02-29\n',
+    'date-released: 1969-12-31\n',
+])
+def test_guest_reproducible_epoch_refuses_missing_ambiguous_or_invalid_date(tmp_path, fields):
+    """A malformed date cannot silently become a plausible current build date."""
+    from scripts import release_guest
+
+    citation = tmp_path / 'CITATION.cff'
+    citation.write_text(fields)
+    with pytest.raises(ValueError):
+        release_guest.source_date_epoch(citation)

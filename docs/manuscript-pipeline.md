@@ -43,6 +43,10 @@ and module counts — is a token resolved from `src/docxplus/manuscript_vars.var
 It reads constants/inventories and available reports. Changing a constant updates its
 token, but a retained report can remain historical: hydration proves neither fresh
 execution nor report success/source binding.
+The isolated release guest supplies `SOURCE_DATE_EPOCH` from the copied
+`CITATION.cff` release date, not a fixed image date. A snapshot without Git history
+therefore retains a source-bound reproducible manuscript date. Ordinary working
+copies still derive `DOC_DATE` from their last commit when Git is available.
 
 **Gate.** `render_manuscript.py` exits nonzero on any unresolved token, and
 `tests/test_manuscript_vars.py` fails the build if a source hard-codes a value that

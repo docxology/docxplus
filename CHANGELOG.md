@@ -38,6 +38,8 @@ Findings referenced by number are recorded in full in [`docs/redteam-audit.md`](
   preventing repeated failed intake from exhausting subsequent regular reads.
 - Keep export index accounting linear in encoded index size instead of encoding
   the complete index after every module. Payload-plus-index limits remain exact.
+- Derive isolated build epochs from the snapshot's UTC citation release date,
+  rather than retaining an image's historical date in later manuscripts.
 
 ### Security
 

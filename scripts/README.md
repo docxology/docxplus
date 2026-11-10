@@ -91,6 +91,10 @@ the package version must be a single literal assignment. Inspection never import
 snapshot package code. Hash-valid snapshots with conflicting identities still
 refuse. Re-capture the inventory after synchronizing metadata; do not rewrite an
 old qualification receipt to advertise a new version.
+The guest derives `SOURCE_DATE_EPOCH` from the snapshot's unique literal
+`CITATION.cff` release date at UTC midnight, before runtime recording and compute.
+Invalid, ambiguous or pre-epoch dates refuse. No image-level historical epoch is
+reused for a different release's manuscript or distributions.
 
 The release image uses Setuptools 84.1.0 for wheel/sdist building; no standalone
 `wheel` CLI is needed. A successful distribution build is not full Linux,
