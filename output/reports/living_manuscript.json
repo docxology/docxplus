@@ -4,7 +4,7 @@
     "/source/docxplus/output/documents/living_manuscript.docx",
     "/source/docxplus/output/documents/living_manuscript.docxplus"
   ],
-  "size_bytes": 2100654,
+  "size_bytes": 2100649,
   "opc_valid": true,
   "verify_reproduction": {
     "attested": true,
@@ -23,11 +23,11 @@
       "outputs": [
         "output/repro.txt"
       ],
-      "source_digest": "f8f1062b442de574d5fea59b7168b9123aba4a83dd0018ddcd4f5c83aa007fa6",
+      "source_digest": "1f474bbecce1e5bb5787f3cbcca677ffc57d39f6d363dcf6c4eef8ca311f8ba1",
       "timeout": 300,
       "toolchain": {
         "implementation": "CPython",
-        "platform": "Linux-6.12.115+deb13.1-cloud-arm64-aarch64-with-glibc2.36",
+        "platform": "Linux-6.12.116+deb13-cloud-arm64-aarch64-with-glibc2.36",
         "python": "3.15.2"
       }
     }
@@ -48,18 +48,18 @@
     "toolchain_match": true,
     "toolchain_expected": {
       "implementation": "CPython",
-      "platform": "Linux-6.12.115+deb13.1-cloud-arm64-aarch64-with-glibc2.36",
+      "platform": "Linux-6.12.116+deb13-cloud-arm64-aarch64-with-glibc2.36",
       "python": "3.15.2"
     },
     "toolchain_actual": {
       "python": "3.15.2",
       "implementation": "CPython",
-      "platform": "Linux-6.12.115+deb13.1-cloud-arm64-aarch64-with-glibc2.36"
+      "platform": "Linux-6.12.116+deb13-cloud-arm64-aarch64-with-glibc2.36"
     }
   },
   "toolchain": {
     "python": "3.15.2",
     "implementation": "CPython",
-    "platform": "Linux-6.12.115+deb13.1-cloud-arm64-aarch64-with-glibc2.36"
+    "platform": "Linux-6.12.116+deb13-cloud-arm64-aarch64-with-glibc2.36"
   }
 }
