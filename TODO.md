@@ -70,3 +70,7 @@ Active engineering and research backlog.
       hosted endpoint) runs on a local stage; (b) CI job added only after the
       endpoint is owner-approved (CI configs are outside agent scope); (c) failures
       are blocking, and a service outage skips loudly — never reported as a pass.
+
+## Workflowz review — 2026-11-10
+
+Coverage note: no concrete, packet-grounded improvement survived review. The bounded packet covered project guidance, README, existing TODO, runtime/dependency configuration, the pipeline driver, and 22 source files (including 18 marker-focused excerpts), out of 174 files and 110 source candidates; it did not include full source, tests, lockfile, CI configuration, or every line of the excerpted modules. Re-review on a concrete failure or source change.
