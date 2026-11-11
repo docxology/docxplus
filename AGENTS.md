@@ -39,11 +39,11 @@ Install **all three** extras. `dev` is pytest, `media` is Pillow for the LSB cha
 so a render without `figures` reuses the committed plates instead of regenerating them
 — green, and not what you measured. CI uses the same locked all-extras sync.
 
-The optional steganographer backend needs a built Rust binary. On this machine:
-`rustup run stable cargo build --release -p steganographer-cli` inside
-`../steganographer`, with `/opt/homebrew/bin` on PATH and
-`DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib` (GStreamer). Integration tests are
-marked `requires_steganographer` and skip gracefully when absent.
+The optional steganographer backend needs an already-built Rust CLI, selected by
+`STEGANOGRAPHER_BIN` or `PATH`. Do not build or mutate a sibling checkout. The
+isolated validation workflow builds its private, frozen backend input instead.
+Integration tests marked `requires_steganographer` skip when the tool is absent;
+an explicitly selected unavailable backend or a failed response must raise.
 
 Release validation additionally uses
 [`scripts/validate_release.py`](scripts/validate_release.py) and

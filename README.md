@@ -37,7 +37,7 @@ serialization is a project policy, not an OPC conformance requirement.
 | `stego_media` | LSBs of `word/media/imageN.png` | embedded image parts (§2.1) + LSB stego | payload hidden in a visible figure |
 | `mce` | `<mc:Choice>` in `word/document.xml` | MCE AlternateContent (§4.1) | payload in an ignorable extension namespace |
 
-Every module is described by a signed **manifest** (`intelligence/manifest.json`)
+Every module is described by a **manifest** (`intelligence/manifest.json`)
 — the authoritative list of what the package carries, playing the role ODF
 assigns to `META-INF/manifest.xml`.
 

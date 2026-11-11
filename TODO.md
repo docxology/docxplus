@@ -71,6 +71,21 @@ Active engineering and research backlog.
       endpoint is owner-approved (CI configs are outside agent scope); (c) failures
       are blocking, and a service outage skips loudly — never reported as a pass.
 
+## Verification and release acceptance
+
+Checked items describe implemented contracts, not a fresh passing-gate receipt.
+Use the [project gates](AGENTS.md#commands), [CLI contracts](docs/cli.md), and
+[source-bound validation workflow](scripts/README.md#release-validation) to exercise
+the current source. A bounded review or a historical artifact does not close a
+behavioral acceptance criterion.
+
+The unchecked format items remain owner-decision backlog: neither XML-DSig
+production nor external validator hosting is implemented by a review or an outage.
+Keep them open until their stated real-consumer probes and prerequisites are met.
+Local checks are separate from the [explicit tag/release-asset publication
+admission](scripts/README.md#release-asset-publication); passing checks do not grant
+that admission or replace an exact reviewed plan confirmation.
+
 ## Workflowz review — 2026-11-10
 
 Coverage note: no concrete, packet-grounded improvement survived review. The bounded packet covered project guidance, README, existing TODO, runtime/dependency configuration, the pipeline driver, and 22 source files (including 18 marker-focused excerpts), out of 174 files and 110 source candidates; it did not include full source, tests, lockfile, CI configuration, or every line of the excerpted modules. Re-review on a concrete failure or source change.

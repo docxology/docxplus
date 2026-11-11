@@ -5,6 +5,17 @@ versioning is [semantic](https://semver.org/).
 
 Findings referenced by number are recorded in full in [`docs/redteam-audit.md`](docs/redteam-audit.md).
 
+## [Unreleased]
+
+### Documentation
+
+- Use existing or privately built steganographer binaries without directing agents
+  to modify sibling checkouts; align the Ruff guidance with the pinned venv gate.
+- Describe the authoritative manifest without implying every document is signed;
+  preserve the separate pinned-key authenticity contract.
+- Clarify Workflowz TODO closure: implemented items, bounded reviews, fresh gate
+  evidence, owner-decision backlog and publication admission are distinct.
+
 ## [2.3.0] — 2026-11-10
 
 ### Added
