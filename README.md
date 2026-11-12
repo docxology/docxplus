@@ -325,7 +325,7 @@ the authenticity verb, which is the worst possible command to leave out of a sum
 Generated on 2026-11-12 from the `import` statements under `src/docxplus/`. An arrow from A to B means code in A imports B; arrows already implied by a longer path are left out, so the picture shows layering rather than every edge. It shows 13 of the package's 30 top-level parts: the largest ones that import or are imported by others.
 
 ```mermaid
-flowchart LR
+flowchart TB
     accTitle: Internal dependency map of the docxplus package
     accDescr: Generated from import statements in src/docxplus. Each box is a subpackage or module of the package; an arrow from A to B means code in A imports B; arrows already implied by a longer path are omitted. Most-imported: crypto, opc, payloads.
     n_cli["cli.py"]
