@@ -1,5 +1,15 @@
 # docxplus — the Intelligent Document Container
 
+<p align="center">
+  <a href="https://github.com/docxology/docxplus/actions/workflows/ci.yml"><img alt="ci.yml workflow status on main" src="https://github.com/docxology/docxplus/actions/workflows/ci.yml/badge.svg?branch=main"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue"></a>
+  <img alt="Requires Python 3.11 or newer" src="https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white">
+</p>
+
+<p align="center">
+  <img src="output/figures/cover.png" alt="docx+ cover: an intelligent document container over OOXML and ODF extension points. The left panel, OOXML surface (ISO/IEC 29500), lists the structural index, visible narrative, document metadata, consumer compatibility and public document surface. The right panel, intelligence contract (modular payloads), lists the authoritative manifest, sealing lineages, threshold quorums, narrative provenance and recipe claims. A central classical-or-hybrid signed provenance seal joins the two." width="720">
+</p>
+
 [Historical archive (v1.0.1)](https://doi.org/10.5281/zenodo.21983948) · Current citation metadata: [CITATION.cff](CITATION.cff).
 
 > An OOXML `.docx` or ODF `.odt` carrying a modular, signed, encrypted
@@ -309,6 +319,44 @@ stages), `pyproject.toml`, `CHANGELOG.md`, and the citation metadata
 The CLI's own surface is not restated here — it drifted once by omitting `verify`,
 the authenticity verb, which is the worst possible command to leave out of a summary.
 `docs/cli.md` is the contract; update it alongside actual CLI behavior.
+
+### Package map
+
+Generated on 2026-11-12 from the `import` statements under `src/docxplus/`. An arrow from A to B means code in A imports B; arrows already implied by a longer path are left out, so the picture shows layering rather than every edge. It shows 13 of the package's 30 top-level parts: the largest ones that import or are imported by others.
+
+```mermaid
+flowchart LR
+    accTitle: Internal dependency map of the docxplus package
+    accDescr: Generated from import statements in src/docxplus. Each box is a subpackage or module of the package; an arrow from A to B means code in A imports B; arrows already implied by a longer path are omitted. Most-imported: crypto, opc, payloads.
+    n_cli["cli.py"]
+    n_channels["channels/"]
+    n_crypto["crypto.py"]
+    n_container["container.py"]
+    n_reproduce["reproduce.py"]
+    n_payloads["payloads.py"]
+    n_validate["validate.py"]
+    n_odt_container["odt_container.py"]
+    n_opc["opc.py"]
+    n_steg_bridge["steg_bridge.py"]
+    n_manifest["manifest.py"]
+    n_manuscript_vars["manuscript_vars.py"]
+    n_transparency["transparency.py"]
+    n_odt_container --> n_container
+    n_channels --> n_opc
+    n_channels --> n_crypto
+    n_reproduce --> n_payloads
+    n_cli --> n_validate
+    n_cli --> n_transparency
+    n_container --> n_manifest
+    n_container --> n_odt_container
+    n_container --> n_reproduce
+    n_reproduce --> n_crypto
+    n_validate --> n_odt_container
+    n_channels --> n_steg_bridge
+    n_manifest --> n_channels
+    n_manuscript_vars --> n_container
+    n_transparency --> n_crypto
+```
 
 ## Documentation
 
