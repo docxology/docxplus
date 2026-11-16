@@ -23,17 +23,28 @@ GUIDED_DIRS = (
     ".github",
     ".agents",
 )
+
+
+def _guide_names(directory: str) -> tuple[str, str]:
+    return ("GITHUB.md", "AGENTS.md") if directory == ".github" else ("README.md", "AGENTS.md")
+
+
 DOCUMENTS = sorted(
     {
         *(ROOT / "docs").glob("*.md"),
         *(
             path
             for directory in GUIDED_DIRS
-            for name in ("README.md", "AGENTS.md")
+            for name in _guide_names(directory)
             if (path := ROOT / directory / name).is_file()
         ),
     }
 )
+
+
+def test_github_directory_does_not_shadow_root_readme():
+    assert not (ROOT / ".github" / "README.md").exists()
+    assert (ROOT / ".github" / "GITHUB.md").is_file()
 
 
 @pytest.mark.parametrize("document", DOCUMENTS, ids=lambda path: str(path.relative_to(ROOT)))

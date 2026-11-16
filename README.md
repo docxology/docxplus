@@ -308,7 +308,7 @@ human or agent — editing it.
 | [`docs/manuscript/`](docs/manuscript/README.md) | the token-driven format write-up | [README](docs/manuscript/README.md) · [AGENTS](docs/manuscript/AGENTS.md) |
 | [`output/`](output/README.md) | committed evidence: documents, figures, reports | [README](output/README.md) · [AGENTS](output/AGENTS.md) |
 | [`data/`](data/README.md) | deliberately empty — inputs are generated, not stored | [README](data/README.md) · [AGENTS](data/AGENTS.md) |
-| [`.github/`](.github/README.md) | the CI gates, in the order they fail | [README](.github/README.md) · [AGENTS](.github/AGENTS.md) |
+| [`.github/`](.github/GITHUB.md) | the CI gates, in the order they fail | [GITHUB](.github/GITHUB.md) · [AGENTS](.github/AGENTS.md) |
 | [`.agents/`](.agents/README.md) | the project-scoped agent skill | [README](.agents/README.md) · [AGENTS](.agents/AGENTS.md) |
 
 Top-level files: `src/docxplus/cli.py` (the CLI — see

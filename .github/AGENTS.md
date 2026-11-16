@@ -1,7 +1,7 @@
 # .github/ — changing CI
 
 One workflow: [`workflows/ci.yml`](workflows/ci.yml). The gates and what they do not
-cover are in [`README.md`](README.md).
+cover are in [`GITHUB.md`](GITHUB.md).
 
 ## Rules
 
@@ -9,7 +9,7 @@ cover are in [`README.md`](README.md).
   step, or adding `continue-on-error` to a failing job converts a real signal into a
   green badge. If a gate is wrong, fix the code or delete the gate deliberately with a
   reason in the commit — never soften it in place.
-- **Keep the local and CI commands identical.** The four gates in `README.md` are the
+- **Keep the local and CI commands identical.** The four gates in `GITHUB.md` are the
   same commands a contributor runs by hand. When they diverge, CI stops predicting what
   happens on a machine, and the divergence is discovered at the worst moment.
 - **Install all three extras.** `.[dev,media,figures]`. Without `figures`,
@@ -24,6 +24,6 @@ cover are in [`README.md`](README.md).
 
 ## If you add a job
 
-Add it to the table in [`README.md`](README.md) in failure order, and state plainly in
+Add it to the table in [`GITHUB.md`](GITHUB.md) in failure order, and state plainly in
 the "what CI does not cover" section anything it still leaves unchecked. A gate that
 readers believe covers more than it does is worse than no gate.
