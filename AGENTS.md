@@ -19,7 +19,7 @@ This one holds only what is true everywhere.
 | `docs/manuscript/` | [`docs/manuscript/AGENTS.md`](docs/manuscript/AGENTS.md) | [`docs/manuscript/README.md`](docs/manuscript/README.md) |
 | `output/` | [`output/AGENTS.md`](output/AGENTS.md) | [`output/README.md`](output/README.md) |
 | `data/` | [`data/AGENTS.md`](data/AGENTS.md) | [`data/README.md`](data/README.md) |
-| `.github/` | [`.github/AGENTS.md`](.github/AGENTS.md) | [`.github/README.md`](.github/README.md) |
+| `.github/` | [`.github/AGENTS.md`](.github/AGENTS.md) | [`.github/GITHUB.md`](.github/GITHUB.md) |
 | `.agents/` | [`.agents/AGENTS.md`](.agents/AGENTS.md) | [`.agents/README.md`](.agents/README.md) |
 
 ## Commands
