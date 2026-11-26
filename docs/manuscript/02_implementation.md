@@ -51,7 +51,7 @@ cap them before either password frame invokes a KDF. Scrypt bounds both $128 \cd
 and $N \cdot r \cdot p$ work; chaff uses the selected KDF. These declared-work ceilings are not an
 aggregate process-memory guarantee. [@sec:threat-audit] records why bounding one parameter was insufficient.
 
-[@Fig:crypto-pipeline] traces a payload through the whole path. It branches only at the sealing mode, and
+The sealing diagram ([@fig:crypto-pipeline]) traces a payload through the whole path. It branches only at the sealing mode, and
 every branch reconverges on the same stored bytes — which is what the manifest records a digest of. The
 alternative, digesting the plaintext, would ship an offline oracle against the passphrase inside the file the
 attacker already has. Every parameter in the figure is read from the live constants rather than transcribed.

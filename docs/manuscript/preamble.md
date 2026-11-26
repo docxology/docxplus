@@ -1,3 +1,6 @@
+# LaTeX preamble
+
+```latex
 % Preamble for the docxplus manuscript
 \usepackage{amsmath}
 \usepackage{amssymb}
@@ -51,3 +54,4 @@
   singlelinecheck=false,
   skip=8pt
 }
+```

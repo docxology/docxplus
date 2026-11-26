@@ -53,9 +53,15 @@ formalism_reset_level: 0
 # colour, and above all the diagnostic gate are configurable without editing
 # Python.
 render:
+  formats:
+    pdf: true
+    html: true
+    slides: false
+    docx: false
+    epub: false
   pdf_engine: xelatex
   number_sections: true
-  # Defined in preamble.tex via xcolor and referenced by name.
+  # Defined in preamble.md via xcolor and referenced by name.
   link_color: docxplusred
 
   # A pandoc run that emits a diagnostic and still exits 0 used to ship the

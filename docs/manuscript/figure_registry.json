@@ -1,0 +1,44 @@
+{
+  "figures": [
+    {
+      "label": "fig:architecture",
+      "filename": "architecture.png",
+      "alt_text": "The package diagram places document surfaces and the declared intelligence channels in separate regions."
+    },
+    {
+      "label": "fig:crypto-pipeline",
+      "filename": "cryptographic_pipeline.png",
+      "alt_text": "Branches show the sealing lineages joining at a stored module and its provenance record."
+    },
+    {
+      "label": "fig:reproduction-lifecycle",
+      "filename": "reproduction_lifecycle.png",
+      "alt_text": "The author-side build joins a document at the center. Reader paths branch into verification and separately permitted reproduction."
+    },
+    {
+      "label": "fig:fidelity",
+      "filename": "roundtrip_fidelity.png",
+      "alt_text": "The plate compares properties of the selected source project and the recovered project."
+    },
+    {
+      "label": "fig:parity",
+      "filename": "profile_parity.png",
+      "alt_text": "Two document-profile shells surround a shared sealing and provenance core."
+    },
+    {
+      "label": "fig:capacity",
+      "filename": "capacity.png",
+      "alt_text": "Bars distinguish per-channel capacity budgets. Media capacity also depends on the carrier."
+    },
+    {
+      "label": "fig:redteam-matrix",
+      "filename": "redteam_matrix.png",
+      "alt_text": "A matrix groups historical findings and mitigations by design layer."
+    },
+    {
+      "label": "fig:trust-ladder",
+      "filename": "trust_ladder.png",
+      "alt_text": "Rows compare inspection, validation, verification with a key pin, and reproduction evidence."
+    }
+  ]
+}

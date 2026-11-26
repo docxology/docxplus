@@ -4,14 +4,8 @@ required_packages:
   - cryptography
   - defusedxml
   - pyyaml
-optional_packages:
-  - pillow          # pure-Python LSB media backend
-  - matplotlib      # capacity figure
-external_tools:
-  - name: steganographer
-    repo: https://github.com/docxology/steganographer
-    role: premium media-stego backend (BLAKE3 + Ed25519 signed packets)
-    required: false
+# Optional dependencies and external tools are described in docs/quickstart.md
+# and AGENTS.md.
 validation_gates:
   - opc_conformance
   - intelligence_manifest

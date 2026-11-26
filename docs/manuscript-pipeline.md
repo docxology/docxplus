@@ -151,12 +151,12 @@ Python or Lua.
 | `formalism_reset_level` | header level at which counters restart (`0` = never) |
 | `render.pdf_engine` | the LaTeX engine |
 | `render.number_sections` | automatic section numbering |
-| `render.link_color` | link, citation, URL, and TOC colour, defined in `preamble.tex` |
+| `render.link_color` | link, citation, URL, and TOC colour, defined in `preamble.md` |
 | `render.fatal_diagnostics` | stderr patterns that fail a zero-exit render |
 | `render.benign_diagnostics` | reasoned exemptions from the above |
 
 Page geometry and colour definitions live in
-[`../docs/manuscript/preamble.tex`](../docs/manuscript/preamble.tex). Link colour is the one
+[`../docs/manuscript/preamble.md`](../docs/manuscript/preamble.md). Link colour is the one
 exception that must **not** go there: pandoc emits its own `\hypersetup{...hidelinks}`
 after anything `-H` injects, so a preamble `\hypersetup` is silently overridden and
 every link renders black. It is passed as a pandoc variable instead.
@@ -172,3 +172,42 @@ every link renders black. It is passed as a pandoc variable instead.
 * Prose is timeless present-state, told once — no session logs, no "fixed this pass".
 
 See [`docs/manuscript/README.md`](manuscript/README.md) for the section inventory.
+
+## Verify with the pinned Template
+
+Run the standalone renderer for the publication-style PDF and its diagnostic
+gate. The shared Template check makes a separate PDF, HTML, and provenance
+receipt from the same authored sections and generated figures. Both renderers read the same LaTeX preamble. The native renderer uses the
+project's numbering filter. Template applies its own typesetting and numbering.
+
+Install Git, uv, Pandoc 3.14 and the matching pandoc-crossref 0.3.26b release,
+XeLaTeX, and the [required TeX packages](https://github.com/docxology/template/blob/87704feae0a4490ef7dad9c931d268e8c30273c2/docs/usage/output-formats.md).
+Run from a clean docxplus checkout to keep regenerated files in a disposable copy.
+
+```sh
+project_root="$(pwd -P)"
+work_directory="$(mktemp -d)"
+renderer="$work_directory/template"
+git clone https://github.com/docxology/template.git "$renderer"
+git -C "$renderer" checkout --detach 87704feae0a4490ef7dad9c931d268e8c30273c2
+mkdir -p "$renderer/projects/working"
+project_copy="$renderer/projects/working/docxplus"
+git clone --no-hardlinks "$project_root" "$project_copy"
+git -C "$project_copy" checkout --detach "$(git -C "$project_root" rev-parse HEAD)"
+
+cd "$project_copy"
+uv sync --locked --all-extras --python 3.14
+uv run --no-sync --python 3.14 python scripts/render_manuscript.py --text-only
+cp docs/manuscript/figure_registry.json output/figures/
+cd "$renderer"
+uv sync --locked --no-dev
+uv run --no-sync python scripts/pipeline/stage_03_render.py --project working/docxplus --skip-manuscript-hydration
+uv run --no-sync python scripts/pipeline/stage_04_validate.py --project working/docxplus
+```
+
+The project hydration step resolves both sections and configuration before the
+shared render. Inspect `output/pdf/docxplus_combined.pdf` and `output/web/index.html`
+in `"$project_copy"`. Check the citations, figures, and labeled formalisms
+against the [source index](manuscript/README.md). Stage 04 produces the
+validation report and rendered-provenance receipt in `output/reports/`.
+Historical report tokens retain their original evidence status.

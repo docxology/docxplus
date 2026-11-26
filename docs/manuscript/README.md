@@ -5,21 +5,27 @@ source file with `{{TOKENS}}`; every drift-prone value (channel count, KDF
 parameters, capacities, caps, module/test counts, the evaluation table) is filled at
 render time from the live system.
 
+Maintain the manuscript in this directory. The [standalone pipeline](../manuscript-pipeline.md)
+hydrates it into `output/manuscript/` and can compile the native PDF. The
+tracked output tree records generated snapshots. Edit these authored files
+before regenerating their output.
+
 ## Sections
 
 | File | Content |
 | --- | --- |
-| `00_abstract.md` | one-paragraph statement of the format and its capabilities |
-| `01_the_format.md` | the two-contract model and the channels |
-| `02_implementation.md` | the module layers (package, crypto, payloads/provenance/reproduction, media, composition/intake) |
-| `03_evaluation.md` | round-trip integrity, the living manuscript, capacity, conformance, adversarial verification |
-| `04_conclusion.md` | what the format achieves and its honest boundaries |
-| `00_00_cover.md` | cover plate |
-| `config.yaml` | paper metadata, formalism kinds, and render settings |
-| `formalism.lua` | numbers definitions/theorems/propositions and resolves references to them |
-| `preamble.tex` | page geometry and colour definitions |
-| `references.bib` | bibliography |
-| `MANUSCRIPT_STATUS.md` | publication-readiness status of this manuscript |
+| [`00_abstract.md`](00_abstract.md) | one-paragraph statement of the format and its capabilities |
+| [`01_the_format.md`](01_the_format.md) | the two-contract model and the channels |
+| [`02_implementation.md`](02_implementation.md) | the module layers (package, crypto, payloads/provenance/reproduction, media, composition/intake) |
+| [`03_evaluation.md`](03_evaluation.md) | round-trip integrity, the living manuscript, capacity, conformance, adversarial verification |
+| [`04_conclusion.md`](04_conclusion.md) | what the format achieves and its honest boundaries |
+| [`00_00_cover.md`](00_00_cover.md) | cover plate |
+| [`config.yaml`](config.yaml) | paper metadata, formalism kinds, and render settings |
+| [`formalism.lua`](formalism.lua) | numbers definitions/theorems/propositions and resolves references to them |
+| [Figure registry](figure_registry.json) | Figure labels and accessibility text for the shared renderer |
+| [`preamble.md`](preamble.md) | page geometry and colour definitions |
+| [`references.bib`](references.bib) | bibliography |
+| [`MANUSCRIPT_STATUS.md`](MANUSCRIPT_STATUS.md) | publication-readiness status of this manuscript |
 
 ## Rendering
 
@@ -48,6 +54,9 @@ It also fails on a pandoc diagnostic even when pandoc itself exits 0, which it d
 for an unresolved cross-reference and for a missing figure. The full pipeline,
 including how numbering works and what is configurable, is documented in
 [`../manuscript-pipeline.md`](../manuscript-pipeline.md).
+
+Use the [pinned shared-render workflow](../manuscript-pipeline.md#verify-with-the-pinned-template)
+for a separate PDF, HTML, and provenance check.
 
 ## Editing rules
 

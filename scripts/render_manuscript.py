@@ -26,6 +26,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import yaml
 
@@ -118,9 +119,7 @@ def main(argv: list[str] | None = None) -> int:
     rendered: list[Path] = []
     
     # Process all section markdown files in order
-    for path in sorted(src_dir.glob("*.md")):
-        if path.name in {"AGENTS.md", "README.md"}:  # not manuscript sections
-            continue
+    for path in sorted(src_dir.glob("[0-9]*.md")):
         text, missing = render_text(path.read_text(), values)
         unresolved |= missing
         dest = out_dir / path.name
@@ -178,17 +177,12 @@ def main(argv: list[str] | None = None) -> int:
     # Link colour MUST go through pandoc's variables, not the -H preamble. Pandoc
     # emits its own \hypersetup{...hidelinks...} *after* anything -H injects, so a
     # \hypersetup in the preamble is silently overridden and every link renders
-    # black. The colour itself is defined in preamble.tex via xcolor and referenced
+    # black. The colour itself is defined in preamble.md via xcolor and referenced
     # here by name. Margins stay in the preamble, where nothing competes with them.
     link_color = str(settings["link_color"])
     cmd.extend(["-V", "colorlinks=true"])
     for role in ("linkcolor", "citecolor", "urlcolor", "toccolor"):
         cmd.extend(["-V", f"{role}={link_color}"])
-
-    # Add preamble if present
-    preamble = src_dir / "preamble.tex"
-    if preamble.is_file():
-        cmd.extend(["-H", str(preamble)])
 
     # Filter order is load-bearing and must stay in this sequence:
     #   1. formalism.lua consumes [@def:x]-style references before any citation
@@ -209,11 +203,25 @@ def main(argv: list[str] | None = None) -> int:
     if bib_file.is_file():
         cmd.extend(["--bibliography", str(bib_file), "--citeproc"])
 
-    cmd.extend(["-o", str(pdf_out)])
-    cmd.extend([str(p) for p in rendered])
+    with TemporaryDirectory() as header_directory:
+        preamble = src_dir / "preamble.md"
+        if preamble.is_file():
+            blocks = re.findall(
+                r"^```latex[ \t]*\n(.*?)^```[ \t]*$",
+                preamble.read_text(encoding="utf-8"),
+                re.MULTILINE | re.DOTALL,
+            )
+            if not blocks:
+                sys.stderr.write("preamble.md needs a fenced LaTeX block\n")
+                return 1
+            header = Path(header_directory) / "preamble.tex"
+            header.write_text("\n".join(blocks), encoding="utf-8")
+            cmd.extend(["-H", str(header)])
+        cmd.extend(["-o", str(pdf_out)])
+        cmd.extend(str(path) for path in rendered)
 
-    print(f"Compiling PDF -> {pdf_out}")
-    res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        print(f"Compiling PDF -> {pdf_out}")
+        res = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if res.returncode != 0:
         sys.stderr.write(f"Pandoc error:\n{res.stderr}\n")
         return res.returncode

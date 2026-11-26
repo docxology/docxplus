@@ -27,7 +27,7 @@
 
 ```{=html}
 <section id="cover" class="manuscript-cover">
-  <img src="figures/cover.png" alt="docxplus Cover Art: Dual-Contract Container Architecture" style="width:100%; max-width:900px;" />
+  <img src="../figures/cover.png" alt="docxplus Cover Art: Dual-Contract Container Architecture" style="width:100%; max-width:900px;" />
   <div class="cover-copy">
     <h1>docxplus: An Intelligent Document Container</h1>
     <p class="cover-subtitle">Carrying Signed, Encrypted, Modular Payloads Inside Ordinary DOCX and ODT Files</p>
