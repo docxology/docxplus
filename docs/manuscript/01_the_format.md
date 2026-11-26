@@ -41,7 +41,7 @@ The implementation's structural validator checks a subset of these obligations, 
 
 ::: {.definition #def:intelligence-contract title="Intelligence Contract"}
 A package $\mathcal{P}$ satisfies the **Intelligence Contract** if it contains an authoritative manifest part
-$\mathcal{M} = \texttt{intelligence/manifest.json}$ that maps a finite set of module slots
+$\mathcal{M}$ stored as `intelligence/manifest.json` that maps a finite set of module slots
 $\mathcal{S} = \{s_1, \dots, s_k\}$ to their transport channel, content type, Blake2b ciphertext digest,
 sealing parameters, and optional reproduction claim, signed using Ed25519 [@rfc8032] or genuine dual
 Ed25519 + ML-DSA-65 [@nist_fips204]. Canonical JSON authenticates the primary scheme and declared co-signers.
@@ -56,7 +56,7 @@ not preserve validity, layout, or signatures.
 :::
 
 [@thm:dual-contract-independence] is a construction argument under stated assumptions, not a proof about
-every consumer. [@Fig:architecture] locates the parts each channel changes so those obligations can be inspected.
+every consumer. The architecture diagram ([@fig:architecture]) locates the parts each channel changes so those obligations can be inspected.
 
 ![The OOXML package tree with every transport channel drawn on the row of the part it writes into. Blue identifies document-surface features, green the intelligence layer, and split markers document features that also carry payloads. Custom properties are optional and created when absent; the media channel adds a displayed image part. These markers do not imply required or pre-existing parts. Capacities are read from live code constants.](../../output/figures/architecture.png){#fig:architecture width=95%}
 

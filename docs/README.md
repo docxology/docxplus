@@ -15,9 +15,11 @@ Each document answers one question. Start with the one that matches yours.
 
 | Doc | Answers |
 | --- | --- |
+| [Setup and verification](quickstart.md) | Install the locked environment and inspect a delivered example. |
 | [`cli.md`](cli.md) | **How do I run it?** Every subcommand, grouped by purpose, with what each verification verb does and does not let you conclude. |
 | [`cookbook.md`](cookbook.md) | **What can I build?** Buildable document kinds, each a real recipe. |
 | [`architecture.md`](architecture.md) | **How is the code laid out?** Module map, layering, data flow, and the boundary rules. |
+| [Manuscript sources](manuscript/README.md) | Ordered sections, configuration, bibliography, and artifact roles. |
 | [`manuscript-pipeline.md`](manuscript-pipeline.md) | **How is the paper built?** Token substitution, automatic numbering for figures and formalisms, filter order, the diagnostic gate, and everything configurable without editing code. |
 
 ## Trusting it

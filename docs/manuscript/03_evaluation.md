@@ -72,19 +72,18 @@ replace independent end-to-end evidence for either profile or imply arbitrary-pr
 
 ![A selected project fixture carried into a container and compared with what came back. The preservation contract includes file contents and the executable bit; metadata is normalized, symlinks refused by default and build directories excluded. Counts come from the available harness report at render time, not from a freshness check or a general fidelity proof.](../../output/figures/roundtrip_fidelity.png){#fig:fidelity width=95%}
 
-[@Fig:fidelity] states the contract in full: what is preserved, what is normalised away on purpose, what
+The fidelity diagram ([@fig:fidelity]) states the contract in full: what is preserved, what is normalised away on purpose, what
 is refused outright, and what never travels at all.
 
 Two results are worth separating from the pass count. The first is what the harness found on its way to
 passing: packing previously forced every file to mode `0644`, so a carried `run.sh` came back
 non-executable, and empty directories vanished under a files-only walk. Both are now preserved. The second
-is a security finding rather than a fidelity one. `Path.is_file()` follows symbolic links, so a tree
-containing `creds -> ~/.ssh/id_rsa` had the *key's contents* packed into the document under the link's name,
-with nothing in the manifest to suggest it. The unpack side had always rejected link members; the pack side
-was the open door. Symlinks are now refused unless a caller passes `follow_symlinks=True` and thereby says
-so in a way that survives review.
+concerns the source boundary. A prior archive writer could follow symbolic
+links and introduce bytes from outside the selected project. Archive creation
+now refuses symlinks by default. A deliberate opt-in requires review of the
+selected input tree and the files included in the resulting archive.
 
-[@Fig:parity] sets the two profiles side by side. What matters there is not the count of ticks but the
+The profile diagram ([@fig:parity]) sets the two profiles side by side. What matters there is not the count of ticks but the
 dividing line: above it the profiles execute the *same code*, so parity is structural rather than a
 coincidence that survives until someone patches one side.
 
@@ -101,7 +100,7 @@ Capacity is channel- and backend-specific; no channel-local limit removes packag
 
 ![Channel capacity under the selected Python LSB framing and package budgets. Metadata has a docxplus-imposed per-payload ceiling; media scales with carrier area only within the decoded-pixel budget; the other channels have no channel-local ceiling. Regeneration performs boundary round trips before plotting measured points. A committed plate without a source-bound receipt is historical, not fresh capacity evidence.](../../output/figures/capacity.png){#fig:capacity width=85%}
 
-[@Fig:capacity] distinguishes implementation policy, carrier framing/pixel admission and package budgets:
+The capacity diagram ([@fig:capacity]) distinguishes implementation policy, carrier framing/pixel admission and package budgets:
 
 - **`metadata`** has a conservative implementation limit of {{METADATA_MAX_BYTES}} payload bytes in
   `docProps/custom.xml` (and ODF `odt_metadata` fields in `meta.xml`), not a standards-imposed maximum.
@@ -137,7 +136,7 @@ automatically qualify new format framing, keys, consumers or platform controls.
 
 ![Threat classes grouped by layer and the intended controls that address them. Arrows depict design boundaries, not proof that every adversary or current platform probe is blocked. The audit distinguishes observed failures, source-derived mitigations and unavailable qualification evidence.](../../output/figures/redteam_matrix.png){#fig:redteam-matrix width=95%}
 
-[@Fig:redteam-matrix] maps the classes to their controls. Four findings generalise past this
+The audit diagram ([@fig:redteam-matrix]) maps the classes to their controls. Four findings generalise past this
 implementation, and they are the reason the review is worth reporting at all.
 
 **A naming convention cannot carry a security property.** The manifest signature originally bound a list
@@ -160,9 +159,9 @@ Tests defend against the failure modes they were shaped to anticipate, and neith
 like a failure — the selection problem Goodenough and Gerhart set out at the foundation of testing theory
 [@goodenough1975].
 
-**A guarantee delegated to a neighbour is not a guarantee.** The Merkle construction padded odd levels by
-duplicating the trailing node, which makes the tree over three leaves hash identically to a four-leaf tree
-whose last two leaves are equal — the second-preimage ambiguity found in Bitcoin as CVE-2012-2459. The
+**A guarantee delegated to a neighbour is not a guarantee.** The earlier Merkle
+padding rule allowed distinct leaf sequences to share a root. An analogous
+second-preimage ambiguity was recorded for Bitcoin as CVE-2012-2459. The
 documented promise that adding a module always changes the root was therefore false in that case. It was
 unreachable through a well-formed manifest only because slots are unique, and slots were unique only
 because a *different* module checked them on the write path; the read path did not. In the same round the

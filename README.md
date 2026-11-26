@@ -210,70 +210,10 @@ release/interoperability proof are distinguished there from historical results.
 
 ## Quick start
 
-```bash
-uv sync --locked --all-extras
-./run.sh                      # preflight, tests, example, dossier, round trips, manuscript
-
-# Or use the CLI directly:
-uv run docxplus build report.docx --text "Quarterly summary" \
-    --module brief:custom_xml:brief.json --password s3cret
-uv run docxplus inspect report.docx
-uv run docxplus extract report.docx brief --password s3cret --out brief.json
-uv run docxplus validate report.docx
-```
-
-The extras, and what each one buys: `dev` is pytest and the coverage gate, `media`
-is Pillow for the LSB stego channel, `figures` is matplotlib for the manuscript
-plates. Install all of them. `scripts/build_figures.py` *skips* when matplotlib is
-absent rather than failing, so a render on a `dev,media`-only environment silently
-reuses whatever figures are already committed — green, and not what you measured.
-CI installs all of them for exactly that reason.
-
-### Isolated Linux release validation
-
-`scripts/validate_release.py` separates network-enabled image provisioning from
-offline release computation. Use independently copied, privately captured source
-snapshots, not live vault mounts. The input manifest and capture rules are in
-[`scripts/README.md`](scripts/README.md#release-validation).
-
-```bash
-python3 scripts/validate_release.py provision --inputs "$MANIFEST" \
-    --output "$PRIVATE/provision-new" --docker-context "$DOCKER_CONTEXT"
-python3 scripts/validate_release.py validate --inputs "$MANIFEST" \
-    --provision-record "$PRIVATE/provision-new/provision.json" \
-    --output "$PRIVATE/validation-new" --docker-context "$DOCKER_CONTEXT"
-```
-
-The disposable Linux container must qualify real bubblewrap, network denial and
-read-only source/runtime before running the unchanged coverage floor, full
-pipeline, renderer, real Rust backend, template roundtrips and installed-wheel
-smoke. No host bind/socket mounts, capabilities, inherited credentials or global
-security changes. Container-local `seccomp=unconfined` permits nested user
-namespaces; the other enforced controls and negative probes are mandatory.
-This is a separate qualification workflow, not a way to disable production
-sandboxing or turn capability absence into a passing release.
-
-Docker's default proc/kernel path masks remain required; if they prevent mounting
-private procfs, validation refuses rather than weakening the sandbox. Only within
-an operator-controlled isolated **Linux rootless VM**, validation can explicitly
-select `--allow-unmasked-procfs-for-daemon "$VERIFIED_DAEMON_ID"`. The ID must equal
-the currently verified, provision-bound daemon ID; it is not a context name.
-This container-only exception removes Docker's outer proc **and kernel-path**
-masking/read-only defenses (`systempaths=unconfined`), not production bubblewrap's
-private PID/proc or any other confinement control. There is no automatic fallback
-or host/global policy change. See the operator eligibility and evidence
-requirements in [`scripts/README.md`](scripts/README.md#release-validation);
-fresh actual denial/custody probes are required and do not certify arbitrary
-kernels or macOS detached-process custody.
-
-The Office gate renders actual installed-wheel DOCX/ODT exports, saves each through
-LibreOffice Writer, then renders the saved package again. Its
-`docxplus.release-office.v1` receipt records tool versions/hashes and original/saved
-document, PDF, extracted text and nonblank raster hashes/sizes. Visible sentinels
-must remain and hidden sentinels must not render. **Payload survival or signature
-validity after an Office edit is not asserted**: saving may strip or rewrite them.
-Qualification remains conditional until the release owner imports a successful
-receipt bound to the final sources; these gates are not a current pass claim.
+Use the [setup and verification guide](docs/quickstart.md) to install the
+locked dependencies, inspect a sample, and build the paper. The
+[publication workflow](scripts/README.md#release-validation) documents the
+distinct isolated release qualification process.
 
 ## Security posture
 
@@ -360,21 +300,8 @@ flowchart TB
 
 ## Documentation
 
-| Doc | What it covers |
-| --- | --- |
-| [`docs/README.md`](docs/README.md) | **start here** — which document answers which question |
-| [`docs/cli.md`](docs/cli.md) | every subcommand, grouped by purpose |
-| [`docs/channels.md`](docs/channels.md) | per-channel reference: capacity, visibility, cost, caveats |
-| [`docs/format-spec.md`](docs/format-spec.md) | the container specification (implementable alone) |
-| [`docs/architecture.md`](docs/architecture.md) | module map and data flow |
-| [`docs/design-rationale.md`](docs/design-rationale.md) | first-principles decomposition |
-| [`docs/security-model.md`](docs/security-model.md) | defenses, non-defenses, residual risks |
-| [`docs/reproduction-design.md`](docs/reproduction-design.md) | the four-lens reproduction design |
-| [`docs/cookbook.md`](docs/cookbook.md) | buildable document kinds |
-| [`docs/manuscript-pipeline.md`](docs/manuscript-pipeline.md) | how the paper is built: tokens, automatic numbering, the diagnostic gate |
-| [`docs/redteam-audit.md`](docs/redteam-audit.md) | every adversarial finding and its fix |
-| [`docs/opc-signatures.md`](docs/opc-signatures.md) | whole-package OPC signature integration assessment |
-| [`docs/standards-report.md`](docs/standards-report.md) | the standards-first OOXML/ODT research report |
+The [documentation index](docs/README.md) links to the CLI, format, security,
+and manuscript guides.
 
 ## License
 
