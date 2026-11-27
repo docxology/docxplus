@@ -3,7 +3,7 @@
 > Auto-expanded 2026-08-29 from on-disk inspection (File_Types doc-fleet pass).
 > Facts below are verified listings, not behavioral claims.
 
-- Parent standard: [`../../../AGENTS.md`](../../../AGENTS.md).
+- Parent standard: [`../../AGENTS.md`](../../AGENTS.md).
 
 ## Contents
 

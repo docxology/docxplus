@@ -115,10 +115,8 @@ files to the tested docxplus snapshot; do not remove containment, inventory,
 privacy or runtime checks to accommodate a layout. Never use the live checkout as
 an input snapshot or hold a canonical lease around provisioning/compute.
 
-Given a captured manifest in `$MANIFEST`, a private output parent `$PRIVATE`, and
-explicit `$DOCKER_CONTEXT`, run the commands in
-[`../README.md`](../README.md#isolated-linux-release-validation).
-Provisioning records actual image/runtime/tool/source bindings. Validation
+The release qualification receipts record the image, runtime, tools, and source
+snapshot used for each release. Validation
 requires network-none, read-only root/source/runtime, UID 1000, no capabilities,
 no-new-privileges, private PID namespace, no host mounts/sockets and a hard
 30-minute in-container lifetime. Per-container `seccomp=unconfined` exposes the

@@ -210,6 +210,8 @@ release/interoperability proof are distinguished there from historical results.
 
 ## Quick start
 
+The [documentation index](docs/README.md) separates format and trust references, local checks, and the manuscript. Start with the [reader trust discussion](#trust-what-a-reader-can-check-and-what-it-costs) if you are evaluating an existing document.
+
 Use the [setup and verification guide](docs/quickstart.md) to install the
 locked dependencies, inspect a sample, and build the paper. The
 [publication workflow](scripts/README.md#release-validation) documents the
